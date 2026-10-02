@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.price.NseBhavcopyParserResilienceTest" tests="27" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:27.647Z" hostname="fedora" time="0.124">
+  <properties/>
+  <testcase name="underscores and inner whitespace in a header name are ignored()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="withoutRows drops the raw copy but keeps the candles and health()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.028"/>
+  <testcase name="a short row is skipped rather than read with shifted columns()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a zip that is not a zip fails with a reason()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="garbage text with no recognisable columns fails naming the absent columns()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="empty text fails with a reason and never an empty success()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="an unparseable TradDt is a skip and not a guess()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a zip with two csvs picks the same member regardless of archive order()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.052"/>
+  <testcase name="a quoted instrument name containing a comma does not shift the prices()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a missing optional column parses but the health names what is missing()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="a row with a non-numeric price is skipped counted and flagged()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="a zip with no csv member fails naming what it did find()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="an escaped double quote inside a quoted field survives()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="whitespace only text fails with a reason()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a csv nested in a folder inside the zip is still found()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="an empty byte array fails with a reason()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a zip with two csvs picks the lexicographically smallest name and says so()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.025"/>
+  <testcase name="CRLF line endings and a trailing blank line parse cleanly()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="lowercase whitespace padded and BOM prefixed headers parse identically()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="skipped samples are capped so a broken file cannot flood memory()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="a header with rows but nothing in the series filter fails with counts()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="a missing required column fails loudly instead of returning nothing()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="an unknown extra column is ignored and does not shift any value()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="a comma decimal separator is rejected instead of being silently mis-scaled()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.001"/>
+  <testcase name="header normalisation is stable across casing whitespace and BOM()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="rows after a blank first line are still parsed()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <testcase name="an html error page served instead of the archive names its own bytes()" classname="com.mia.app.data.price.NseBhavcopyParserResilienceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

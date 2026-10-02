@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.symbols.TataMotorsCorporateActionTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:28.505Z" hostname="fedora" time="0.027">
+  <properties/>
+  <testcase name="the measured history numbers are restated for the record()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.0"/>
+  <testcase name="the retired ISIN still resolves to a live company rather than to nothing()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="a disappearance is never turned into a guess about where the ticker went()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="the new leg is detected as SYMBOL_APPEARED and never as a return()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.002"/>
+  <testcase name="the tracker emits SYMBOL_DISAPPEARED on the session after the last row()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.002"/>
+  <testcase name="a short absence is a blip and emits no resume event()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="the retired ticker exists in neither source which is the whole problem()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="the resolver turns the dead ticker into a usable live symbol with a full explanation()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.0"/>
+  <testcase name="a tracker fed the real bhavcopy plus the real master agrees that TMCV and TMPV are unremarkable()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.004"/>
+  <testcase name="the tracker records an ISIN change as a relisting and offers it as an alias()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="both demerger legs trade today with the ISINs quoted in the alias table()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.001"/>
+  <testcase name="the reconciliation of the real pair does not mistake the demerger for a mismatch()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.004"/>
+  <testcase name="a real RESUMED_AFTER_GAP fires when the retired symbol comes back()" classname="com.mia.app.data.symbols.TataMotorsCorporateActionTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

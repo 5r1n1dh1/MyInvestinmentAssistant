@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.price.NseBhavcopySourceTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:27.772Z" hostname="fedora" time="0.25">
+  <properties/>
+  <testcase name="when every host fails the failure is typed and names both attempts()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.004"/>
+  <testcase name="latest on or before asks for strictly earlier dates in order()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.003"/>
+  <testcase name="an empty 200 body is a failure not an empty market()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.003"/>
+  <testcase name="refetching the same session never duplicates candles()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.064"/>
+  <testcase name="both hosts serving the identical archive produce identical candles()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.032"/>
+  <testcase name="url construction pads single digit months and days()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.0"/>
+  <testcase name="a 403 on the primary falls through to the mirror()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.017"/>
+  <testcase name="the primary host is tried first and a healthy response stops the search()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.012"/>
+  <testcase name="a 2xx body that is not a zip falls through to the mirror()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.015"/>
+  <testcase name="a 404 from every host is surfaced as not published rather than an exception()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.002"/>
+  <testcase name="an http error with a body is still treated as an error not as a payload()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.002"/>
+  <testcase name="latest on or before walks back to the last published session()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.013"/>
+  <testcase name="a 404 from one host only is not enough to declare the session unpublished()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.012"/>
+  <testcase name="requests carry a user agent and ask for an unencoded body()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.012"/>
+  <testcase name="url construction follows the verified NSE naming()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.0"/>
+  <testcase name="latest on or before fails after the lookback window with counts()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.002"/>
+  <testcase name="the source is usable through the PriceSource seam()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.013"/>
+  <testcase name="a dead primary host falls through to the mirror()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.013"/>
+  <testcase name="a retry after a host failure still yields exactly one set of candles()" classname="com.mia.app.data.price.NseBhavcopySourceTest" time="0.028"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

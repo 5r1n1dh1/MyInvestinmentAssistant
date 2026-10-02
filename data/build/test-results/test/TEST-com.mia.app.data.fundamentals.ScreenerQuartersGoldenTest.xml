@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:26.790Z" hostname="fedora" time="0.151">
+  <properties/>
+  <testcase name="operating profit equals sales minus expenses wherever the page publishes both()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.03"/>
+  <testcase name="every fixture publishes exactly thirteen quarters()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.026"/>
+  <testcase name="reliance quarters in full()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.006"/>
+  <testcase name="a quarter count other than thirteen is reported rather than assumed()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.012"/>
+  <testcase name="tcs infy and titan quarters()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.018"/>
+  <testcase name="hdfcbank leaves operating profit and margin null instead of borrowing financing profit()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.007"/>
+  <testcase name="quarters are returned newest first and years strictly descend()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.035"/>
+  <testcase name="the oldest-first view reproduces the page's own column order()" classname="com.mia.app.data.fundamentals.ScreenerQuartersGoldenTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:27.085Z" hostname="fedora" time="0.182">
+  <properties/>
+  <testcase name="hdfcbank derived maps leave ebit empty because the page has no operating profit row()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <testcase name="the Raw PDF footer row is dropped because robots disallows its links()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.046"/>
+  <testcase name="a pledge row would be read if the page published one()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.001"/>
+  <testcase name="tcs annual statements()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <testcase name="profit-loss carries a trailing TTM column that the other tables do not()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.02"/>
+  <testcase name="reliance annual statements()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <testcase name="reliance derived maps cover twelve years and hold rupees crore()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <testcase name="infy and titan derived maps()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.008"/>
+  <testcase name="tcs derived maps()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <testcase name="infy and titan annual statements()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.009"/>
+  <testcase name="TTM never leaks into a per-year map()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.023"/>
+  <testcase name="lines the collapsed balance sheet does not publish stay empty and are reported()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.021"/>
+  <testcase name="shareholding headers carry no data-date-key so the printed label must be parsed()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.022"/>
+  <testcase name="hdfcbank annual statements use bank shaped rows()" classname="com.mia.app.data.fundamentals.ScreenerStatementsGoldenTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

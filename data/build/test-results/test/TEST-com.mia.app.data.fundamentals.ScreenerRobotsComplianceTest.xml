@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:27.043Z" hostname="fedora" time="0.042">
+  <properties/>
+  <testcase name="no symbol can inject a path a query string or another host()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.002"/>
+  <testcase name="the builder produces exactly one url shape()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.0"/>
+  <testcase name="a hostile symbol never reaches the network at all()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.002"/>
+  <testcase name="the permitted set is exactly the consolidated company page()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.0"/>
+  <testcase name="search pagination and every other query string are refused()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.001"/>
+  <testcase name="real NSE symbols that need punctuation are accepted()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.0"/>
+  <testcase name="a real fetch only ever sends one permitted url shape()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.028"/>
+  <testcase name="the Raw PDF sub-schedule links are never requested()" classname="com.mia.app.data.fundamentals.ScreenerRobotsComplianceTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

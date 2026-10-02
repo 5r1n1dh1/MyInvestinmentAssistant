@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.fundamentals.ScreenerInSourceTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:26.514Z" hostname="fedora" time="0.275">
+  <properties/>
+  <testcase name="a 404 yields a clear not-ok health result and is not retried()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.098"/>
+  <testcase name="concurrent fetches never overlap on the wire()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.041"/>
+  <testcase name="consecutive fetches are spaced by the minimum interval()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.022"/>
+  <testcase name="a 429 is retried after a backoff and the retry succeeds()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.015"/>
+  <testcase name="the fetch result is complete for all five fixtures()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.042"/>
+  <testcase name="a 200 with zero bytes is reported rather than parsed as an empty page()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.004"/>
+  <testcase name="a 503 is treated as a rate limit not as a hard failure()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.01"/>
+  <testcase name="the request is the permitted url with the Referer the page requires()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.009"/>
+  <testcase name="other non-2xx codes are terminal and reported()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.003"/>
+  <testcase name="a throwing transport is retried and then surfaced as health not as an exception()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.004"/>
+  <testcase name="a transport that throws once then succeeds recovers()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.009"/>
+  <testcase name="Retry-After wins over the computed backoff()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.009"/>
+  <testcase name="the backoff doubles between retries()" classname="com.mia.app.data.fundamentals.ScreenerInSourceTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

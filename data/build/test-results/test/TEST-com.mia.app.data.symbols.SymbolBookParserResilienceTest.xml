@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.symbols.SymbolBookParserResilienceTest" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:28.310Z" hostname="fedora" time="0.027">
+  <properties/>
+  <testcase name="a symbol record refuses to be built without an identity()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="duplicate rows in a snapshot are named()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="an unresolved resolution cannot carry a record()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="the rejected sample list is capped so a broken file cannot exhaust memory()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="the tracker ignores a re-fed or out-of-order session()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="a missing SYMBOL column fails and names the column()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a duplicate ticker is resolved last-wins and reported()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a BOM and CRLF line endings are handled()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="an empty payload fails loudly and says so()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="a null stream is a failure with a message()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a missing asset is a failure with a message and no book()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a snapshot with no symbols still parses and still carries its health()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a header-only file is a failure not an empty symbol book()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="an asset reader that throws is contained not propagated()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a quoted company name containing a comma does not shift the columns()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="blank lines and whitespace-only lines are ignored not counted as rejected()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="missing optional columns degrade the health but still parse()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="the synthetic header used by these tests is byte-identical to the real one()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="a row with no ISIN is rejected and counted with the line kept for diagnosis()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="lowercase headers and lower-case month names are recognised()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="an unreadable date or number becomes null and is counted never guessed()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.001"/>
+  <testcase name="a resolution cannot be built without an explanation()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a missing ISIN column fails and names the column()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <testcase name="a duplicate ISIN across two tickers keeps the first and reports it()" classname="com.mia.app.data.symbols.SymbolBookParserResilienceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

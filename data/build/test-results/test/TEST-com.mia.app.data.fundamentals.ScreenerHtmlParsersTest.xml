@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:26.486Z" hostname="fedora" time="0.027">
+  <properties/>
+  <testcase name="row labels reduce to punctuation free keys()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="yearOf handles every published label shape and rejects TTM()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.0"/>
+  <testcase name="a short row is padded with null and the discrepancy is noted()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.005"/>
+  <testcase name="class matching is by substring so a class rename does not break the parse()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="parseNumber refuses text that is not provably one number()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="parseNumber returns null for every absence marker never zero()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="the populated table is picked over the empty segment placeholder()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="a cell with two number spans keeps both()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="an absent section yields null rather than an empty table()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="a hyphen cell parses to null so it never becomes a zero()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="periodOf prefers the date key and falls back to the printed label()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.0"/>
+  <testcase name="an unrelated class is never mistaken for the value class()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.0"/>
+  <testcase name="the digits are read from the inner number span not the surrounding text()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="parseNumber reads Indian and western formatting()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="a value span that is itself the number span still yields its text()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.0"/>
+  <testcase name="a section with a table but no rows is distinguishable from an absent section()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <testcase name="period keys are strictly increasing with the date()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.002"/>
+  <testcase name="non breaking spaces and ragged whitespace collapse()" classname="com.mia.app.data.fundamentals.ScreenerHtmlParsersTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.symbols.SymbolBookParserFixtureTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:28.273Z" hostname="fedora" time="0.036">
+  <properties/>
+  <testcase name="HDFCBANK parses to its exact real record()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="the odd-lot BZ series is present and tiny()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="leading-space headers are handled so all eight columns land()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="RELIANCE parses to its exact real record()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="every record has a non-blank ISIN because the ISIN is the identity key()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.002"/>
+  <testcase name="every numeric column in the real master parses()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="tickers containing ampersand and dash survive parsing verbatim()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="both demerger legs are in the master with distinct ISINs()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="a healthy master reports ok with every column found()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="TCS parses to its exact real record()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="asset loading produces the same book the parser does()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.017"/>
+  <testcase name="all records are exposed sorted by ticker so iteration is deterministic()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.002"/>
+  <testcase name="a book-entry record round-trips its series and ISIN()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="the master carries no TATAMOTORS row at all which is the documented failure()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="INFY parses to its exact real record()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="every listing date in the real master parses as dd-MMM-yyyy()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="the master series distribution is EQ 2319 BE 248 BZ 26 and holds no SME series()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.0"/>
+  <testcase name="the real master parses 2593 data rows with none rejected()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.001"/>
+  <testcase name="the csv splitter shared with the bhavcopy parser reads the master without quoting()" classname="com.mia.app.data.symbols.SymbolBookParserFixtureTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

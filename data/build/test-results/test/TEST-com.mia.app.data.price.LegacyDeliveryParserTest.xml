@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.mia.app.data.price.LegacyDeliveryParserTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-02T16:02:27.267Z" hostname="fedora" time="0.149">
+  <properties/>
+  <testcase name="a file with no delivery percentage at all fails rather than reporting zero()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.013"/>
+  <testcase name="the dd-MMM-yyyy date is parsed not guessed()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.001"/>
+  <testcase name="a working legacy fetch requests the documented url and parses the fixture()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.016"/>
+  <testcase name="a broken legacy fetch degrades gracefully and never throws()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.003"/>
+  <testcase name="the leading space on every column name is handled()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.009"/>
+  <testcase name="garbage text fails with a reason instead of returning an empty map()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.0"/>
+  <testcase name="a dash delivery percentage leaves the symbol out instead of recording zero()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.002"/>
+  <testcase name="a symbol missing from the delivery file keeps null rather than zero()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.001"/>
+  <testcase name="a legacy 404 degrades gracefully()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.001"/>
+  <testcase name="the legacy symbol space matches the filtered bhavcopy symbol space exactly()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.041"/>
+  <testcase name="empty text fails with a reason()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.001"/>
+  <testcase name="the real file parses 3534 rows with 3262 delivery percentages()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.004"/>
+  <testcase name="an unusable delivery result leaves every candle untouched()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.021"/>
+  <testcase name="an html error page served with 200 degrades gracefully()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.002"/>
+  <testcase name="RELIANCE delivery percentage is 61_24()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.005"/>
+  <testcase name="applying delivery fills only the symbols the file published()" classname="com.mia.app.data.price.LegacyDeliveryParserTest" time="0.024"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
