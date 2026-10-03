@@ -57,6 +57,9 @@ abstract class PatternDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertPivots(pivots: List<PatternPivotEntity>)
 
+    @Query("DELETE FROM pattern_pivots WHERE patternId = :patternRowId")
+    abstract suspend fun deletePivots(patternRowId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertOutcome(outcome: OutcomeEntity)
 

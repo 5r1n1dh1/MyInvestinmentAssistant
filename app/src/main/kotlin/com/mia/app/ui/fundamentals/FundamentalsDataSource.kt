@@ -6,7 +6,7 @@ import com.mia.app.domain.model.Source
 import com.mia.app.domain.ratios.RatioId
 import com.mia.app.domain.ratios.SectorResolution
 import com.mia.app.domain.redflag.RuleSkip
-import dagger.Qualifier
+import javax.inject.Qualifier
 import java.time.LocalDate
 
 /**

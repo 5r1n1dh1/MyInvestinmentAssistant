@@ -277,6 +277,7 @@ data class PatternEntity(
  */
 @Entity(
     tableName = "pattern_pivots",
+    primaryKeys = ["patternId", "pivotIndex"],
     foreignKeys = [
         ForeignKey(
             entity = PatternEntity::class,

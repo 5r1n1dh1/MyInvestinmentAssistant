@@ -16,6 +16,7 @@ import com.mia.app.domain.pattern.PatternScanOptions
 import com.mia.app.domain.pattern.ProjectionBuilder
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -141,7 +142,7 @@ class DefaultPatternRepository @Inject constructor(
             },
             source = Source.DERIVED,
             fetchedOn = todayInMarket(),
-            asOf = rows.firstOrNull()?.detectedOn,
+            asOf = rows.firstOrNull()?.detectedOn?.let { LocalDate.parse(it) },
             notes = listOf("${rows.size} stored detection(s) for $symbol on ${timeframe.name}"),
         )
     }

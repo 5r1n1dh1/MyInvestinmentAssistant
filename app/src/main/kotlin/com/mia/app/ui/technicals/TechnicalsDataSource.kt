@@ -146,7 +146,7 @@ class TechnicalsUnavailableException(
     val reason: String,
     val isTransient: Boolean = true,
     val isNotPublished: Boolean = false,
-) : Exception(reason)
+) : RuntimeException(reason)
 
 /**
  * The whole tab's load, assembled off the main thread.

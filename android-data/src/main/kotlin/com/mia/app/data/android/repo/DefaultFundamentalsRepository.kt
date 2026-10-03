@@ -104,11 +104,11 @@ class DefaultFundamentalsRepository @Inject constructor(
         }
 
     override suspend fun ratios(symbol: String): DataResult<Ratios> = withContext(dispatcher) {
-        val view = read(symbol) ?: return@withContext noCache(symbol)
+        val view = read(symbol)?.valueOrNull() ?: return@withContext noCache(symbol)
         DataResult.ok(
             value = view.ratios,
             source = view.ratios.source,
-            fetchedOn = view.ratios.asOf,
+            fetchedOn = view.ratios.asOf ?: todayInMarket(),
             asOf = view.ratios.asOf,
             health = view.snapshot.health,
             notes = listOf(view.stalenessLine),

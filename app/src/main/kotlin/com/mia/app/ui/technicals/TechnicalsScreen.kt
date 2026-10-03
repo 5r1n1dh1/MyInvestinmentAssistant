@@ -33,6 +33,7 @@ import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.RedFlag
+import com.mia.app.ui.common.RedFlagBanner
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.ratios.Freshness

@@ -47,6 +47,7 @@ class HinglishSpeechRecognizer(
 ) {
 
     private var recognizer: SpeechRecognizer? = null
+    private var listening: Boolean = false
 
     /**
      * Whether this device can recognise speech at all.
@@ -106,13 +107,16 @@ class HinglishSpeechRecognizer(
         )
         try {
             created.startListening(buildIntent(context, language))
+            listening = true
         } catch (throwable: Throwable) {
+            listening = false
             onFailure(SpeechFailure.COULD_NOT_START)
         }
     }
 
     /** Asks the recogniser to finish now. A no-op when nothing is listening. */
     fun stopListening() {
+        listening = false
         recognizer?.let { current ->
             runCatching { current.stopListening() }
         }
@@ -120,13 +124,14 @@ class HinglishSpeechRecognizer(
 
     /** Abandons the session. A no-op when nothing is listening. */
     fun cancel() {
+        listening = false
         recognizer?.let { current ->
             runCatching { current.cancel() }
         }
     }
 
     /** `true` while a session is open. */
-    fun isListening(): Boolean = runCatching { recognizer?.isListening == true }.getOrDefault(false)
+    fun isListening(): Boolean = listening
 
     /**
      * Releases the platform recogniser.
@@ -135,6 +140,7 @@ class HinglishSpeechRecognizer(
      * `destroy()` twice throws on some platform versions.
      */
     fun destroy() {
+        listening = false
         recognizer?.let { current ->
             runCatching { current.cancel() }
             runCatching { current.destroy() }
@@ -207,6 +213,7 @@ class HinglishSpeechRecognizer(
         }
 
         override fun onResults(results: Bundle?) {
+            listening = false
             publish(results, SpeechPhase.FINAL)
             // A final result ends the session; holding the recogniser open keeps the microphone
             // hot and drains the battery on exactly the devices plan.md §12 targets.
@@ -214,6 +221,7 @@ class HinglishSpeechRecognizer(
         }
 
         override fun onError(error: Int) {
+            listening = false
             destroy()
             onFailure(SpeechFailure.fromPlatformError(error))
         }

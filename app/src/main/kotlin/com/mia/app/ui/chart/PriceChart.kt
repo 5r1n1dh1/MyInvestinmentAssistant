@@ -30,10 +30,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.PointerEvent
-import androidx.compose.ui.input.pointer.calculateCentroid
-import androidx.compose.ui.input.pointer.calculatePan
-import androidx.compose.ui.input.pointer.calculateZoom
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -673,7 +673,7 @@ internal fun readoutText(candle: Candle): String = buildString {
  */
 private fun chartDescription(state: ChartState): String {
     val last = state.candles.lastOrNull()
-    val close = if (last == null) UiStrings.NOT_AVAILABLE else formatPrice(last.close)
+    val close = if (last == null) UiStrings.MISSING else formatPrice(last.close)
     return "Price chart, ${state.candles.size} ${state.timeframe.shortLabel()} bars, last close " +
         "$close. Dashed levels, if present, are ${MatchScoreLabels.PROJECTION_LABEL}."
 }

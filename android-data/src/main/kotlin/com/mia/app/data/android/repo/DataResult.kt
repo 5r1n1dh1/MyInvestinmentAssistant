@@ -103,7 +103,7 @@ data class Provenance(
  * repository that cannot answer returns [unavailable]. There is no third state in which a caller
  * receives `null` and has to guess — which is the guessing that plan.md §12 is about.
  */
-data class DataResult<T : Any>(
+data class DataResult<T>(
     val value: T?,
     val provenance: Provenance,
     val failure: DataFailure? = null,
@@ -145,7 +145,7 @@ data class DataResult<T : Any>(
     companion object {
 
         /** A successful read. [health] is `null` only when no parser was involved. */
-        fun <T : Any> ok(
+        fun <T> ok(
             value: T,
             source: Source,
             fetchedOn: LocalDate,
@@ -164,7 +164,7 @@ data class DataResult<T : Any>(
         )
 
         /** A typed failure. The UI renders [DataFailure.message] rather than an empty screen. */
-        fun <T : Any> unavailable(
+        fun <T> unavailable(
             failure: DataFailure,
             source: Source = Source.DERIVED,
             fetchedOn: LocalDate,
@@ -193,7 +193,7 @@ data class DataResult<T : Any>(
          * sites below are written so that a health that is not ok, or a note that says something
          * could not be checked, downgrades the result to a failure instead.
          */
-        fun <T : Any> emptyIsFailure(
+        fun <T> emptyIsFailure(
             emptyMessage: String,
             reason: DataFailureReason,
             source: Source,

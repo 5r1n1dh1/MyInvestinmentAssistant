@@ -156,7 +156,7 @@ class PatternsUnavailableException(
     val reason: String,
     val isTransient: Boolean = true,
     val isNotPublished: Boolean = false,
-) : Exception(reason)
+) : RuntimeException(reason)
 
 /**
  * One suppressed candidate, ready to render.

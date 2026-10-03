@@ -23,6 +23,12 @@ android {
     namespace = "com.mia.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("$rootDir/data/src/main/resources")
+        }
+    }
+
     defaultConfig {
         applicationId = "com.mia.app"
 
@@ -102,6 +108,7 @@ dependencies {
     // this on the compile classpath `:app` does not compile. It is `implementation`, not `api`,
     // so nothing else in the module can name a WorkManager type by accident.
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)

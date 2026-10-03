@@ -1,6 +1,6 @@
 package com.mia.app.ui.stocklist
 
-import dagger.Qualifier
+import javax.inject.Qualifier
 import java.time.LocalDate
 
 /**

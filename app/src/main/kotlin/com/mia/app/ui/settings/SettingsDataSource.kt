@@ -248,7 +248,7 @@ class SettingsUnavailableException(
     /** Plain language, shown verbatim. */
     val reason: String,
     val isTransient: Boolean = true,
-) : Exception(reason)
+) : RuntimeException(reason)
 
 /** Test tag on the settings root. */
 const val SETTINGS_TAG: String = "mia_settings"

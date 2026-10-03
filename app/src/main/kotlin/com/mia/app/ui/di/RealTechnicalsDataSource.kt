@@ -186,7 +186,7 @@ class RealTechnicalsDataSource @Inject constructor(
 
     /** The value, or this tab's typed exception carrying the failure's own words. */
     private fun <T : Any> DataResult<T>.orThrowTyped(): T =
-        valueOrNull() ?: throw unavailable(failureOrNull())
+        valueOrNull() ?: throw unavailable(failureOrNull()!!)
 
     private fun unavailable(failure: DataFailure) = TechnicalsUnavailableException(
         reason = failure.userFacingReason(),

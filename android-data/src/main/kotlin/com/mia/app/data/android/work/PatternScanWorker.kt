@@ -110,7 +110,7 @@ class PatternScanWorker @AssistedInject constructor(
 
                 val projections = patterns.projections(ticker, Timeframe.D1).valueOrNull().orEmpty()
                 for (projection in projections) {
-                    if (alertsDelivered.dispatch(projection)) alertsDelivered++
+                    if (alerts.dispatch(projection)) alertsDelivered++
                 }
 
                 outcomes += SymbolScanOutcome(
@@ -167,7 +167,7 @@ class PatternScanWorker @AssistedInject constructor(
      *
      * @return `true` when a notification was actually posted.
      */
-    private suspend fun alertsDelivered.dispatch(projection: PatternProjection): Boolean {
+    private suspend fun BreakoutAlertDispatcher.dispatch(projection: PatternProjection): Boolean {
         val trigger = projection.trigger ?: return false
         if (!trigger.fired) return false
         // Read from the shared policy rather than restated: a projection and an alert both need

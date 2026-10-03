@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.ui.accuracy.AccuracyScreen
+import com.mia.app.ui.detail.StockDetailScreen
 import com.mia.app.ui.di.SearchRoute
 import com.mia.app.ui.fundamentals.FundamentalsScreen
 import com.mia.app.ui.patterns.PatternsScreen

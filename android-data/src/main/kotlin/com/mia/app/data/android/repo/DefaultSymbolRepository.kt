@@ -176,7 +176,7 @@ class DefaultSymbolRepository @Inject constructor(
                 bhavcopyHealth = report.health,
             ),
             source = Source.NSE_BHAVCOPY,
-            fetchedOn = cache.fetchedOn,
+            fetchedOn = LocalDate.parse(cache.date),
             asOf = report.asOf,
             health = report.health,
         )

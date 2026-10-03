@@ -1001,7 +1001,7 @@ private const val NOT_EVALUATED = "Not evaluated —"
 private const val FAILED = "Failed —"
 private const val BULLET = "•"
 
-private const val SUPPRESSED_NAME_WIDTH = 120.dp
+private val SUPPRESSED_NAME_WIDTH = 120.dp
 
 /**
  * Dash glyphs for the overlay legend.

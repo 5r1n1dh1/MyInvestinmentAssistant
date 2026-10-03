@@ -52,7 +52,7 @@ internal class TrackRecordReader(
         }
 
         val result = accuracyRepository.trackRecord(symbol, patternName)
-        val context = result.valueOrNull() ?: throw onFailure(result.failureOrNull())
+        val context = result.valueOrNull() ?: throw onFailure(result.failureOrNull()!!)
         return HitRate(
             symbol = symbol,
             patternName = patternName,

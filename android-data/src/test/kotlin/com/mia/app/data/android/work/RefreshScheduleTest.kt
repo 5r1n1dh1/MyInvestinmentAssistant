@@ -35,7 +35,7 @@ class RefreshScheduleTest {
     // ------------------------------------------------------------------- landing near 19:00
 
     @Test
-    fun `a run scheduled at 09:00 IST lands at 19:00 IST the same evening`() {
+    fun `a run scheduled at 0900 IST lands at 1900 IST the same evening`() {
         val now = istAt(2026, 10, 1, 9, 0)
         val target = RefreshSchedule.eodTarget(now, ist)
 
@@ -46,7 +46,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `a run scheduled at 18:31 IST still lands at 19:00 IST the same evening`() {
+    fun `a run scheduled at 1831 IST still lands at 1900 IST the same evening`() {
         // The measured bhavcopy publication time is 18:32 IST (plan.md §14), so this is the
         // realistic "user opened the app shortly after the file appeared" case.
         val now = istAt(2026, 10, 1, 18, 31)
@@ -57,7 +57,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `the pattern scan targets 19:05 IST, five minutes after the refresh`() {
+    fun `the pattern scan targets 1905 IST, five minutes after the refresh`() {
         val now = istAt(2026, 10, 1, 9, 0)
 
         assertEquals(19, RefreshSchedule.patternScanTarget(now, ist).hour)
@@ -81,7 +81,7 @@ class RefreshScheduleTest {
     // ------------------------------------------------------------------ already past 19:00
 
     @Test
-    fun `a run scheduled after 19:00 IST is deferred to the next evening, never to now`() {
+    fun `a run scheduled after 1900 IST is deferred to the next evening, never to now`() {
         val now = istAt(2026, 10, 1, 20, 30)
         val delay = RefreshSchedule.eodInitialDelay(now, ist)
         val target = RefreshSchedule.eodTarget(now, ist)
@@ -93,7 +93,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `a run scheduled at exactly 19:00 IST is deferred rather than firing immediately`() {
+    fun `a run scheduled at exactly 1900 IST is deferred rather than firing immediately`() {
         val now = istAt(2026, 10, 1, 19, 0)
 
         // `!candidate.isAfter(now)` is true at exact equality, so the target rolls forward.
@@ -102,7 +102,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `the pattern scan at 19:00 IST is also deferred even though its own target is 19:05`() {
+    fun `the pattern scan at 1900 IST is also deferred even though its own target is 1905`() {
         val now = istAt(2026, 10, 1, 19, 2)
         val delay = RefreshSchedule.patternScanInitialDelay(now, ist)
 
@@ -130,7 +130,7 @@ class RefreshScheduleTest {
     // ------------------------------------------------------------------------- weekends
 
     @Test
-    fun `a run scheduled on a Saturday still targets 19:00, and the worker is what skips it`() {
+    fun `a run scheduled on a Saturday still targets 1900, and the worker is what skips it`() {
         // 2026-10-03 is a Saturday. The *schedule* is wall-clock and does not know about trading
         // days; `TradingCalendar` is the guard that makes the run exit early.
         val saturday = istAt(2026, 10, 3, 10, 0)
@@ -155,7 +155,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `anchoring to IST from a device in another zone still targets 19:00 IST`() {
+    fun `anchoring to IST from a device in another zone still targets 1900 IST`() {
         val istZone = ZoneId.of("Asia/Kolkata")
         val berlin = ZoneId.of("Europe/Berlin")
         // 2026-10-01 08:00 Berlin (CEST, UTC+2) is 06:00 UTC, i.e. 11:30 IST.
@@ -174,7 +174,7 @@ class RefreshScheduleTest {
     }
 
     @Test
-    fun `the device-zone variant targets 19:00 in the device zone`() {
+    fun `the device-zone variant targets 1900 in the device zone`() {
         val berlin = ZoneId.of("Europe/Berlin")
         val now = ZonedDateTime.of(LocalDate.of(2026, 10, 1), java.time.LocalTime.of(8, 0), berlin)
         val target = RefreshSchedule.eodTarget(now, berlin)

@@ -102,7 +102,7 @@ class RealFundamentalsDataSource @Inject constructor(
                     ),
                 )
             }
-            throw unavailable(failure)
+            throw unavailable(failure, notFetchedIsNote = false)
         }
         val view = result.valueOrNull() ?: return@onBackground FundamentalsRedFlags(
             skipped = listOf(

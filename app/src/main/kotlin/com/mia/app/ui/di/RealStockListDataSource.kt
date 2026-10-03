@@ -167,7 +167,7 @@ class RealStockListDataSource @Inject constructor(
         withContext(backgroundDispatcher) { block() }
 
     private fun <T : Any> DataResult<T>.orThrowTyped(): T =
-        valueOrNull() ?: throw unavailable(failureOrNull())
+        valueOrNull() ?: throw unavailable(failureOrNull()!!)
 
     private fun unavailable(failure: DataFailure) = StockListUnavailableException(
         reason = failure.userFacingReason(),

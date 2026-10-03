@@ -59,9 +59,9 @@ class DefaultRedFlagRepository @Inject constructor(
             )
         }
 
-        val report = evaluate(symbol, timeframe, fundamentals.valueOrNull(), series.valueOrNull())
+        val redFlagView = evaluate(symbol, timeframe, fundamentals.valueOrNull(), series.valueOrNull())
         DataResult.ok(
-            value = report.toView(symbol, timeframe),
+            value = redFlagView,
             source = Source.DERIVED,
             fetchedOn = todayInMarket(),
             asOf = series.valueOrNull()?.asOf ?: fundamentals.valueOrNull()?.ratios?.asOf,
@@ -224,7 +224,7 @@ class DefaultRedFlagRepository @Inject constructor(
         )
 
     /** `FundamentalsView` narrowed to just what a flag banner needs. */
-    private fun FundamentalsView.toFlagView(symbol: String, timeframe: Timeframe): RedFlagView {
+    private suspend fun FundamentalsView.toFlagView(symbol: String, timeframe: Timeframe): RedFlagView {
         val candles = candleRepository.storedSeries(symbol, timeframe).valueOrNull()?.ordered().orEmpty()
         val context = technicalContext(symbol, candles, timeframe, this)
         val engine = FundamentalsRedFlagEngine()

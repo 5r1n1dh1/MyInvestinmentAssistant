@@ -83,7 +83,7 @@ data class StockDetailUiState(
 @HiltViewModel
 class StockDetailViewModel @Inject constructor(
     private val dataSource: StockDetailDataSource,
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     @DetailBackgroundDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -138,7 +138,7 @@ class StockDetailViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        load()
+        load(timeframe)
     }
 
     /**

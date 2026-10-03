@@ -1,7 +1,7 @@
 package com.mia.app.ui.search
 
 import com.mia.app.domain.model.Source
-import dagger.Qualifier
+import javax.inject.Qualifier
 import java.time.LocalDate
 
 /**

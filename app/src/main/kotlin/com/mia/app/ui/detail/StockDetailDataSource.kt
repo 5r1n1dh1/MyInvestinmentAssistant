@@ -5,7 +5,7 @@ import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.ratios.Freshness
 import com.mia.app.domain.ratios.FreshnessKind
 import com.mia.app.domain.ratios.FreshnessPolicy
-import dagger.Qualifier
+import javax.inject.Qualifier
 import java.time.LocalDate
 
 /**

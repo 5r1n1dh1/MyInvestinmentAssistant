@@ -73,15 +73,5 @@ object DatabaseModule {
     @Provides
     fun provideWorkStateDao(database: MiaDatabase): WorkStateDao = database.workStateDao()
 
-    /**
-     * `:app` hands this to `Configuration.Provider.setWorkManagerConfiguration`.
-     *
-     * Provided as a concrete type rather than as a `List<WorkerFactory>` so `:app` has one thing
-     * to wire and no way to accidentally drop it. The factory is Hilt-generated from the
-     * `@HiltWorker` classes in `work/`, which is why the two workers there must live in this
-     * module rather than in `:app`.
-     */
-    @Provides
-    @Singleton
-    fun provideHiltWorkerFactory(): HiltWorkerFactory = HiltWorkerFactory()
+
 }

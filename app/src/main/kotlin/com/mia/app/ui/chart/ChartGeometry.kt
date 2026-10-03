@@ -151,10 +151,10 @@ internal class ChartGeometry(
             if (total <= 0) return null
             if (widthPx <= 0f || heightPx <= 0f) return null
 
-            val gutterPx = with(ChartDefaults.AXIS_GUTTER) { density.toPx() }
-            val dateStripPx = with(ChartDefaults.DATE_STRIP_HEIGHT) { density.toPx() }
-            val readoutPx = with(ChartDefaults.READOUT_HEIGHT) { density.toPx() }
-            val paneGapPx = with(ChartDefaults.PANE_GAP) { density.toPx() }
+            val gutterPx = with(density) { ChartDefaults.AXIS_GUTTER.toPx() }
+            val dateStripPx = with(density) { ChartDefaults.DATE_STRIP_HEIGHT.toPx() }
+            val readoutPx = with(density) { ChartDefaults.READOUT_HEIGHT.toPx() }
+            val paneGapPx = with(density) { ChartDefaults.PANE_GAP.toPx() }
 
             val plotLeft = 0f
             val plotRight = max(gutterPx, widthPx - gutterPx)
