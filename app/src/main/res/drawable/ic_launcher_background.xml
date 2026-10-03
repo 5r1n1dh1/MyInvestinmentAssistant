@@ -24,18 +24,7 @@
 
     <!-- Base fill. Covers the full 108x108 viewport, including the 18dp bleed on each edge
          that adaptive-icon guidelines require for parallax and for circular masks. -->
-    <path android:pathData="M0,0h108v108h-108z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:startX="0"
-                android:startY="0"
-                android:endX="108"
-                android:endY="108"
-                android:type="linear">
-                <item android:offset="0" android:color="#FF1B2A4A" />
-                <item android:offset="0.55" android:color="#FF22345C" />
-                <item android:offset="1" android:color="#FF2C4374" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <path
+        android:fillColor="#FF1B2A4A"
+        android:pathData="M0,0h108v108h-108z" />
 </vector>

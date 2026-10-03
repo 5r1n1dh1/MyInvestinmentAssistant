@@ -1,0 +1,988 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "3f6de1be76c3022a172ad28ac81b6e69",
+    "entities": [
+      {
+        "tableName": "candles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `timeframe` TEXT NOT NULL, `date` TEXT NOT NULL, `open` REAL NOT NULL, `high` REAL NOT NULL, `low` REAL NOT NULL, `close` REAL NOT NULL, `volume` INTEGER NOT NULL, `deliveryPercent` REAL, `source` TEXT NOT NULL, PRIMARY KEY(`symbol`, `timeframe`, `date`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeframe",
+            "columnName": "timeframe",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "open",
+            "columnName": "open",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "high",
+            "columnName": "high",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "low",
+            "columnName": "low",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "close",
+            "columnName": "close",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "volume",
+            "columnName": "volume",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryPercent",
+            "columnName": "deliveryPercent",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "symbol",
+            "timeframe",
+            "date"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_candles_date",
+            "unique": false,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_candles_date` ON `${TABLE_NAME}` (`date`)"
+          }
+        ]
+      },
+      {
+        "tableName": "symbols",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `name` TEXT NOT NULL, `isin` TEXT NOT NULL, `series` TEXT NOT NULL, `listingDate` TEXT, `paidUpValue` REAL, `lotSize` INTEGER, `faceValue` REAL, `source` TEXT NOT NULL, PRIMARY KEY(`isin`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isin",
+            "columnName": "isin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "series",
+            "columnName": "series",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "listingDate",
+            "columnName": "listingDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "paidUpValue",
+            "columnName": "paidUpValue",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "lotSize",
+            "columnName": "lotSize",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "faceValue",
+            "columnName": "faceValue",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "isin"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_symbols_symbol",
+            "unique": true,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_symbols_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          }
+        ]
+      },
+      {
+        "tableName": "ratios",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `asOf` TEXT NOT NULL, `sector` TEXT NOT NULL, `source` TEXT NOT NULL, `confidence` TEXT NOT NULL, `roce` REAL, `roe` REAL, `debtToEquity` REAL, `interestCoverage` REAL, `operatingMargin` REAL, `fcf` REAL, `pat` REAL, `cfoToOp` REAL, `revenueCagr3y` REAL, `revenueGrowth` REAL, `grossMargin` REAL, `pe` REAL, `pb` REAL, `evToEbitda` REAL, `dividendYield` REAL, `promoterHolding` REAL, `marketCap` REAL, PRIMARY KEY(`symbol`, `asOf`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "asOf",
+            "columnName": "asOf",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sector",
+            "columnName": "sector",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roce",
+            "columnName": "roce",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "roe",
+            "columnName": "roe",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "debtToEquity",
+            "columnName": "debtToEquity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "interestCoverage",
+            "columnName": "interestCoverage",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "operatingMargin",
+            "columnName": "operatingMargin",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "fcf",
+            "columnName": "fcf",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "pat",
+            "columnName": "pat",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cfoToOp",
+            "columnName": "cfoToOp",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "revenueCagr3y",
+            "columnName": "revenueCagr3y",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "revenueGrowth",
+            "columnName": "revenueGrowth",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "grossMargin",
+            "columnName": "grossMargin",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "pe",
+            "columnName": "pe",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "pb",
+            "columnName": "pb",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "evToEbitda",
+            "columnName": "evToEbitda",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "dividendYield",
+            "columnName": "dividendYield",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "promoterHolding",
+            "columnName": "promoterHolding",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "marketCap",
+            "columnName": "marketCap",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "symbol",
+            "asOf"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_ratios_symbol",
+            "unique": false,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ratios_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          }
+        ]
+      },
+      {
+        "tableName": "quarters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `year` INTEGER NOT NULL, `quarter` INTEGER NOT NULL, `sales` REAL, `expenses` REAL, `operatingProfit` REAL, `opmPercent` REAL, `otherIncome` REAL, `interest` REAL, `depreciation` REAL, `eps` REAL, PRIMARY KEY(`symbol`, `year`, `quarter`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quarter",
+            "columnName": "quarter",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sales",
+            "columnName": "sales",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "expenses",
+            "columnName": "expenses",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "operatingProfit",
+            "columnName": "operatingProfit",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "opmPercent",
+            "columnName": "opmPercent",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "otherIncome",
+            "columnName": "otherIncome",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "interest",
+            "columnName": "interest",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "depreciation",
+            "columnName": "depreciation",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "eps",
+            "columnName": "eps",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "symbol",
+            "year",
+            "quarter"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_quarters_symbol",
+            "unique": false,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_quarters_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          }
+        ]
+      },
+      {
+        "tableName": "statement_rows",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `statement` TEXT NOT NULL, `fiscalYear` INTEGER NOT NULL, `ordinal` INTEGER NOT NULL, `label` TEXT NOT NULL, `value` REAL, PRIMARY KEY(`symbol`, `statement`, `fiscalYear`, `ordinal`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "statement",
+            "columnName": "statement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiscalYear",
+            "columnName": "fiscalYear",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ordinal",
+            "columnName": "ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "symbol",
+            "statement",
+            "fiscalYear",
+            "ordinal"
+          ]
+        }
+      },
+      {
+        "tableName": "derived_metrics",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`symbol` TEXT NOT NULL, `asOf` TEXT NOT NULL, `metric` TEXT NOT NULL, `fiscalYear` INTEGER NOT NULL, `value` REAL NOT NULL, PRIMARY KEY(`symbol`, `asOf`, `metric`, `fiscalYear`))",
+        "fields": [
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "asOf",
+            "columnName": "asOf",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metric",
+            "columnName": "metric",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiscalYear",
+            "columnName": "fiscalYear",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "symbol",
+            "asOf",
+            "metric",
+            "fiscalYear"
+          ]
+        }
+      },
+      {
+        "tableName": "patterns",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `patternId` INTEGER NOT NULL, `symbol` TEXT NOT NULL, `timeframe` TEXT NOT NULL, `name` TEXT NOT NULL, `score` INTEGER NOT NULL, `detectedOn` TEXT NOT NULL, `category` TEXT NOT NULL, `verdict` TEXT NOT NULL, `geometry` INTEGER, `structure` INTEGER, `confirmation` INTEGER, `context` INTEGER, `moveHeight` REAL, `moveTrigger` REAL, `moveProjected` REAL, `moveDirection` TEXT, `barCount` INTEGER NOT NULL, `notes` TEXT NOT NULL, FOREIGN KEY(`symbol`) REFERENCES `symbols`(`symbol`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patternId",
+            "columnName": "patternId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeframe",
+            "columnName": "timeframe",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "score",
+            "columnName": "score",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedOn",
+            "columnName": "detectedOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verdict",
+            "columnName": "verdict",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geometry",
+            "columnName": "geometry",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "structure",
+            "columnName": "structure",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "confirmation",
+            "columnName": "confirmation",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "context",
+            "columnName": "context",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "moveHeight",
+            "columnName": "moveHeight",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "moveTrigger",
+            "columnName": "moveTrigger",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "moveProjected",
+            "columnName": "moveProjected",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "moveDirection",
+            "columnName": "moveDirection",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "barCount",
+            "columnName": "barCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patterns_symbol",
+            "unique": false,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patterns_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          },
+          {
+            "name": "index_patterns_detectedOn",
+            "unique": false,
+            "columnNames": [
+              "detectedOn"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patterns_detectedOn` ON `${TABLE_NAME}` (`detectedOn`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "symbols",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "symbol"
+            ],
+            "referencedColumns": [
+              "symbol"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pattern_pivots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`patternId` INTEGER NOT NULL, `pivotIndex` INTEGER NOT NULL, `price` REAL NOT NULL, `kind` TEXT NOT NULL, `barIndex` INTEGER NOT NULL, `date` TEXT NOT NULL, `legIndex` INTEGER NOT NULL, PRIMARY KEY(`patternId`, `pivotIndex`), FOREIGN KEY(`patternId`) REFERENCES `patterns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "patternId",
+            "columnName": "patternId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pivotIndex",
+            "columnName": "pivotIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "price",
+            "columnName": "price",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "barIndex",
+            "columnName": "barIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "legIndex",
+            "columnName": "legIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "patternId",
+            "pivotIndex"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pattern_pivots_patternId",
+            "unique": false,
+            "columnNames": [
+              "patternId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pattern_pivots_patternId` ON `${TABLE_NAME}` (`patternId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patterns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patternId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "outcomes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`patternId` INTEGER NOT NULL, `symbol` TEXT NOT NULL, `patternName` TEXT NOT NULL, `timeframe` TEXT NOT NULL, `category` TEXT NOT NULL, `projectedOn` TEXT NOT NULL, `score` INTEGER NOT NULL, `direction` TEXT NOT NULL, `projectedLevel` REAL NOT NULL, `actualHigh` REAL, `actualLow` REAL, `hit` INTEGER, `resolved` INTEGER NOT NULL, `horizonBars` INTEGER NOT NULL, PRIMARY KEY(`patternId`), FOREIGN KEY(`patternId`) REFERENCES `patterns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "patternId",
+            "columnName": "patternId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patternName",
+            "columnName": "patternName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeframe",
+            "columnName": "timeframe",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectedOn",
+            "columnName": "projectedOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "score",
+            "columnName": "score",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectedLevel",
+            "columnName": "projectedLevel",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualHigh",
+            "columnName": "actualHigh",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "actualLow",
+            "columnName": "actualLow",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "hit",
+            "columnName": "hit",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resolved",
+            "columnName": "resolved",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "horizonBars",
+            "columnName": "horizonBars",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "patternId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outcomes_patternId",
+            "unique": true,
+            "columnNames": [
+              "patternId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outcomes_patternId` ON `${TABLE_NAME}` (`patternId`)"
+          },
+          {
+            "name": "index_outcomes_symbol",
+            "unique": false,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outcomes_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patterns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patternId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "bhavcopy_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `fetchedOn` TEXT NOT NULL, `rowsTotal` INTEGER NOT NULL, `rowsKept` INTEGER NOT NULL, `deliveryAttached` INTEGER NOT NULL, `healthOk` INTEGER NOT NULL, `notes` TEXT NOT NULL, `presence` TEXT NOT NULL, PRIMARY KEY(`date`))",
+        "fields": [
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedOn",
+            "columnName": "fetchedOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowsTotal",
+            "columnName": "rowsTotal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowsKept",
+            "columnName": "rowsKept",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryAttached",
+            "columnName": "deliveryAttached",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "healthOk",
+            "columnName": "healthOk",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "presence",
+            "columnName": "presence",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "date"
+          ]
+        }
+      },
+      {
+        "tableName": "watchlist",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`isin` TEXT NOT NULL, `symbol` TEXT NOT NULL, `addedOn` TEXT NOT NULL, `alertsEnabled` INTEGER NOT NULL, PRIMARY KEY(`isin`))",
+        "fields": [
+          {
+            "fieldPath": "isin",
+            "columnName": "isin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "symbol",
+            "columnName": "symbol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedOn",
+            "columnName": "addedOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alertsEnabled",
+            "columnName": "alertsEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "isin"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_watchlist_symbol",
+            "unique": false,
+            "columnNames": [
+              "symbol"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_watchlist_symbol` ON `${TABLE_NAME}` (`symbol`)"
+          }
+        ]
+      },
+      {
+        "tableName": "work_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `lastSuccess` TEXT, `lastError` TEXT, `lastAttempt` TEXT, `status` TEXT, PRIMARY KEY(`taskId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSuccess",
+            "columnName": "lastSuccess",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastAttempt",
+            "columnName": "lastAttempt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3f6de1be76c3022a172ad28ac81b6e69')"
+    ]
+  }
+}
