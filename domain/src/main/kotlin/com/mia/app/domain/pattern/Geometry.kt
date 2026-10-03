@@ -4,6 +4,7 @@ import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.technical.TrendlineFit
 import com.mia.app.domain.technical.linearRegression
+import com.mia.app.domain.model.MeasureBand
 import kotlin.math.abs
 
 /**

@@ -4,6 +4,8 @@ import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Category
 import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.MatchScorePolicy
+import com.mia.app.domain.model.Measure
+import com.mia.app.domain.model.MeasureBand
 import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.PivotKind

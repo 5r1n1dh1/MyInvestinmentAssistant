@@ -90,6 +90,19 @@ data class Match(
     val timeframe: Timeframe,
     val detectedOn: LocalDate,
     val breakdown: ScoreBreakdown? = null,
+    /**
+     * The weighted measures [breakdown] was computed from, or empty when never scored.
+     *
+     * A detector emits measures and never a score (`docs/CONTRACTS.md`, the locked seam), so
+     * [matchOf] is the last place these exist — and it used to drop them there. Keeping them is
+     * what lets a **near-miss** show *why* it fell short: a score of 47 is equally consistent with
+     * geometry failing, structure failing, or a penalty being applied, and the factor totals alone
+     * cannot distinguish those.
+     *
+     * Empty rather than absent-and-null: a candidate that was never scored carries no measures,
+     * and "no measures" is the honest reading. A caller must not infer "scored 0" from it.
+     */
+    val measures: List<Measure> = emptyList(),
 )
 
 /** Per-factor scores, kept so the UI can explain *why* a match scored what it scored. */

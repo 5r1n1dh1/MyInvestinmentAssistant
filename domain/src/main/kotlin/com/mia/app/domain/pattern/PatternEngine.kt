@@ -11,6 +11,7 @@ import com.mia.app.domain.model.ScoreBreakdown
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.domain.technical.TrendRegime
+import com.mia.app.domain.model.Measure
 
 /**
  * The detection pipeline of plan.md §6.2 / §6.4.
@@ -28,7 +29,21 @@ import com.mia.app.domain.technical.TrendRegime
  * nightly scan that finishes and one that does not.
  */
 
-/** A candidate that was *not* shown, with the reason. Transparency is a product requirement. */
+/**
+ * A candidate that was *not* shown, with the reason. Transparency is a product requirement.
+ *
+ * ### Why this carries the score's innards
+ * This type used to be `name`, `score` and `reason` alone, which made a near-miss a bare number.
+ * The Pattern Explorer exists to answer *"why did nothing match?"*, and a number alone cannot: a
+ * score of 47 is equally consistent with geometry failing, structure failing, or a penalty being
+ * applied. [breakdown] and [measures] are what make the answer specific.
+ *
+ * Both are optional because **not every suppressed candidate was ever scored**. A candidate
+ * rejected by the `minBars` gate, or by a detector's own geometry pre-checks before it emitted
+ * anything, has no breakdown and no measures — and [score] is `0` in exactly those cases. A caller
+ * must therefore distinguish "scored 47 and held back" from "never scored at all", which is the
+ * difference between a pattern that nearly fitted and one that was never really a candidate.
+ */
 data class SuppressedMatch(
     /** Pattern display name, so the UI can say what it chose not to draw. */
     val name: String,
@@ -36,7 +51,59 @@ data class SuppressedMatch(
     val score: Int,
     /** Why it was hidden, in UI language. Never advice, never a probability. */
     val reason: String,
-)
+    /**
+     * The four factor readings behind [score], or `null` when the candidate was never scored.
+     *
+     * `score == breakdown.total` holds whenever both are present, so a reader can reconstruct the
+     * arithmetic rather than being asked to trust it.
+     */
+    val breakdown: ScoreBreakdown? = null,
+    /**
+     * The individual measures that produced [breakdown], weakest factor first.
+     *
+     * Carried so the Explorer can show *which* geometry or structure rule fell short rather than
+     * only the factor total. Empty when the candidate was never scored.
+     */
+    val measures: List<Measure> = emptyList(),
+) {
+    /** `true` when this candidate reached the scorer, as opposed to being rejected earlier. */
+    val wasScored: Boolean get() = breakdown != null
+
+    /**
+     * The lowest-scoring factor, or `null` when nothing was scored.
+     *
+     * The single most useful thing to show a reader who asks why a pattern did not match: the
+     * factor that dragged the total down, ties broken by weight so the factor that *could* have
+     * cost the most wins. Returns `null` rather than a fabricated 0 for an unscored candidate,
+     * because "no factor failed" is a different claim from "nothing was measured".
+     */
+    fun weakestFactor(): ScoreFactor? {
+        val scored = breakdown ?: return null
+        val readings = ScoreFactor.ALL.map { factor ->
+            factor to when (factor) {
+                ScoreFactor.GEOMETRY -> scored.geometry
+                ScoreFactor.STRUCTURE -> scored.structure
+                ScoreFactor.CONFIRMATION -> scored.confirmation
+                ScoreFactor.CONTEXT -> scored.context
+            }
+        }
+        return readings.minWithOrNull(
+            compareBy<Pair<ScoreFactor, Int>> { it.second }.thenByDescending { it.first.weight },
+        )?.first
+    }
+
+    /**
+     * The measures belonging to [weakestFactor], or every measure when no factor is named.
+     *
+     * Falls back to all measures rather than returning empty for an unscored candidate, so a UI
+     * with nowhere else to put the detail still has something honest to render.
+     */
+    fun weakestFactorMeasures(): List<Measure> {
+        val factor = weakestFactor() ?: return measures
+        val forFactor = measures.filter { it.factor == factor }
+        return forFactor.ifEmpty { measures }
+    }
+}
 
 /** Per-detector cost, so a slow detector can be found on a 2 GB phone (plan.md §12). */
 data class ScanDiagnostic(
@@ -206,20 +273,41 @@ object PatternEngine {
             val aligned = regimeAligned(regime, direction, match.category)
             val verdict = MatchScorePolicy.verdict(match.score, timeframe, barCount, aligned)
 
+            // The score's innards travel with every suppression, whatever the cause. A reader who
+            // asks "why did nothing match?" needs the same breakdown whether the answer is "scored
+            // 47" or "needed 60 bars and there are 30" — and in the latter case `wasScored` is
+            // `false`, which is exactly the distinction a bare score cannot carry.
+            val carriedBreakdown = match.breakdown
+            val carriedMeasures = match.measures
+
             if (insufficientHistory) {
-                suppressed += SuppressedMatch(match.name, match.score, notEnoughHistoryReason(timeframe, barCount))
+                suppressed += SuppressedMatch(
+                    name = match.name,
+                    score = match.score,
+                    reason = notEnoughHistoryReason(timeframe, barCount),
+                    breakdown = carriedBreakdown,
+                    measures = carriedMeasures,
+                )
                 continue
             }
             if (verdict == MatchScorePolicy.Verdict.NOT_ENOUGH_HISTORY) {
-                suppressed += SuppressedMatch(match.name, match.score, notEnoughHistoryReason(timeframe, barCount))
+                suppressed += SuppressedMatch(
+                    name = match.name,
+                    score = match.score,
+                    reason = notEnoughHistoryReason(timeframe, barCount),
+                    breakdown = carriedBreakdown,
+                    measures = carriedMeasures,
+                )
                 continue
             }
             if (verdict == MatchScorePolicy.Verdict.SUPPRESS) {
                 suppressed += SuppressedMatch(
-                    match.name,
-                    match.score,
-                    "${match.name} not shown — match score ${match.score} is below the " +
+                    name = match.name,
+                    score = match.score,
+                    reason = "${match.name} not shown — match score ${match.score} is below the " +
                         "${MatchScorePolicy.SUPPRESS_THRESHOLD} render threshold. Geometric fit only.",
+                    breakdown = carriedBreakdown,
+                    measures = carriedMeasures,
                 )
                 continue
             }

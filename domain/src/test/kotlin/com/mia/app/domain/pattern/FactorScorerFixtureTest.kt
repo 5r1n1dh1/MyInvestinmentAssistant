@@ -4,6 +4,8 @@ import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.ScoreBreakdown
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.model.Measure
+import com.mia.app.domain.model.MeasureBand
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals

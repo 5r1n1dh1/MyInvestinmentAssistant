@@ -3,13 +3,13 @@ package com.mia.app.domain.pattern.detectors.chart
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.MatchScorePolicy
+import com.mia.app.domain.model.Measure
 import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.PivotKind
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.BoundaryLine
 import com.mia.app.domain.pattern.BreakoutEvaluator
-import com.mia.app.domain.pattern.Measure
 import com.mia.app.domain.pattern.PatternScoringPolicy
 import com.mia.app.domain.pattern.Penalty
 import com.mia.app.domain.pattern.ScoreFactor

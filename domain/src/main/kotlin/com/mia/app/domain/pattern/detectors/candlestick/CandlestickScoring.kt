@@ -2,11 +2,11 @@ package com.mia.app.domain.pattern.detectors.candlestick
 
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.MatchScorePolicy
-import com.mia.app.domain.pattern.Measure
-import com.mia.app.domain.pattern.MeasureBand
 import com.mia.app.domain.pattern.PatternScoringPolicy
 import com.mia.app.domain.pattern.ScoreFactor
 import com.mia.app.domain.pattern.coefficientOfVariation
+import com.mia.app.domain.model.Measure
+import com.mia.app.domain.model.MeasureBand
 import kotlin.math.max
 
 /**

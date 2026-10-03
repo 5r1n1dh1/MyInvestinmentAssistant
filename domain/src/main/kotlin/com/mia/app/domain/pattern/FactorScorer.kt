@@ -1,6 +1,7 @@
 package com.mia.app.domain.pattern
 
 import com.mia.app.domain.model.ScoreBreakdown
+import com.mia.app.domain.model.Measure
 import kotlin.math.roundToInt
 
 /**

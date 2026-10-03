@@ -9,7 +9,6 @@ import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.PivotKind
 import com.mia.app.domain.pattern.BoundaryLine
 import com.mia.app.domain.pattern.BreakoutEvaluator
-import com.mia.app.domain.pattern.Measure
 import com.mia.app.domain.pattern.MeasuredMoveCalculator
 import com.mia.app.domain.pattern.Penalty
 import com.mia.app.domain.pattern.PenaltyId
@@ -18,6 +17,7 @@ import com.mia.app.domain.pattern.ScoreFactor
 import com.mia.app.domain.pattern.fitBoundary
 import com.mia.app.domain.pattern.monoScore
 import com.mia.app.domain.pattern.progressPctPerBar
+import com.mia.app.domain.model.Measure
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min

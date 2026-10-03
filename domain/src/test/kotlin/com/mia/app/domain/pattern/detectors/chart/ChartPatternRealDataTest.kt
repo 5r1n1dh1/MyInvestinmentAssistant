@@ -5,6 +5,7 @@ import com.mia.app.domain.model.PatternDetector
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.ZigzagPivots
 import com.mia.app.domain.technical.IndicatorSnapshot
+import com.mia.app.domain.model.Measure
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

@@ -16,6 +16,7 @@ import com.mia.app.domain.pattern.detectors.chart.FlagDetector
 import com.mia.app.domain.pattern.detectors.chart.HeadAndShouldersDetector
 import com.mia.app.domain.pattern.detectors.chart.InverseHeadAndShouldersDetector
 import com.mia.app.domain.technical.CandleResampler
+import com.mia.app.domain.model.Measure
 import kotlin.test.Test
 import kotlin.test.assertTrue
 

@@ -5,6 +5,7 @@ import com.mia.app.domain.model.Evidence
 import com.mia.app.domain.model.FlagGroup
 import com.mia.app.domain.model.FlagSeverity
 import com.mia.app.domain.model.FlagTab
+import com.mia.app.domain.model.Measure
 import com.mia.app.domain.model.Sector
 import kotlin.test.Test
 import kotlin.test.assertEquals

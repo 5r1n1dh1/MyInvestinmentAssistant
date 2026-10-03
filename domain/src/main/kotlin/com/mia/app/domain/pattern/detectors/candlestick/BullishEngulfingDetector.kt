@@ -6,10 +6,10 @@ import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.PatternDetector
 import com.mia.app.domain.model.Pivot
-import com.mia.app.domain.pattern.Measure
 import com.mia.app.domain.pattern.Penalty
 import com.mia.app.domain.pattern.PenaltyId
 import com.mia.app.domain.pattern.matchOf
+import com.mia.app.domain.model.Measure
 import kotlin.math.abs
 import kotlin.math.min
 

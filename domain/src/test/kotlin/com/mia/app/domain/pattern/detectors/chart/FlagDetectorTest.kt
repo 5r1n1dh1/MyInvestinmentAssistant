@@ -4,6 +4,7 @@ import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.PivotKind
 import com.mia.app.domain.pattern.FactorScorer
 import com.mia.app.domain.pattern.PatternIds
+import com.mia.app.domain.model.Measure
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

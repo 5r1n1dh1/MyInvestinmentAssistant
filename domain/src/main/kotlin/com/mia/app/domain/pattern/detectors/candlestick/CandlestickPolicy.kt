@@ -3,6 +3,7 @@ package com.mia.app.domain.pattern.detectors.candlestick
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.priorTrendPct
+import com.mia.app.domain.model.Measure
 import kotlin.math.abs
 import kotlin.math.min
 
