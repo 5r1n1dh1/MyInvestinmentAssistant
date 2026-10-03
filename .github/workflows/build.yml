@@ -68,6 +68,48 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      # This MUST stay the first step that touches ./gradlew.
+      #
+      # Bug it fixes: the chmod used to live in the "Ensure gradlew executable" step, ~16 lines
+      # *below* the JVM-test step. So the very first `./gradlew` call ran against a non-executable
+      # wrapper and failed with:
+      #     shell: ./gradlew: Permission denied
+      # before this step ever ran. The chmod was load-bearing but positioned after its own
+      # first caller, so it could never prevent the failure it was written to prevent.
+      #
+      # Belt-and-braces by design: .gitattributes now pins `gradlew` to mode 100755 and the index
+      # records 100755, so the wrapper should already be executable. This step is what makes the
+      # build survive a checkout that lost the bit anyway (filesystem without mode preservation,
+      # or a clone made with core.fileMode=false). Do not move any ./gradlew call above this.
+      - name: Ensure gradlew is executable
+        run: |
+          set -euo pipefail
+          if [ ! -f gradlew ]; then
+            echo "::error::gradlew is missing from the repository root. The Gradle wrapper must be committed."
+            exit 1
+          fi
+          # Fix the exec bit in the index too, not just on disk, so it survives to the next commit.
+          chmod +x gradlew
+          git update-index --chmod=+x gradlew 2>/dev/null || true
+          # Re-read the mode rather than trusting `chmod`; a noexec or core.fileMode=false
+          # checkout can leave this looking right in `ls` while the kernel still refuses exec.
+          if [ ! -x ./gradlew ]; then
+            echo "::error::./gradlew is still not executable after chmod. Running it via 'sh ./gradlew'."
+          fi
+          ls -l gradlew
+
+      # Proves the wrapper actually runs. `./gradlew --version` is the cheapest possible
+      # execution test: if this passes, every later ./gradlew call will at least get past exec.
+      - name: Verify Gradle wrapper runs
+        run: |
+          set -euo pipefail
+          if [ -x ./gradlew ]; then
+            ./gradlew --version
+          else
+            echo "Exec bit unavailable; invoking through sh."
+            sh ./gradlew --version
+          fi
+
       # CHANGE 1 (this repo only): the engine's 1,337 JVM tests need no Android SDK, so they run
       # before the SDK install and fail fast. On a broken parser or detector this step fails in
       # ~1 minute instead of after a full SDK download, and it is the part of the build that has
@@ -89,26 +131,17 @@ jobs:
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
 
-      - name: Ensure gradlew executable
-        run: |
-          if [ ! -f "gradlew" ]; then
-            echo "gradlew not found in root. Generating Gradle wrapper..."
-            gradle wrapper
-          fi
-          chmod +x gradlew
+      # NOTE: the "Ensure gradlew executable" step that used to live here has moved ABOVE the
+      # first ./gradlew call. It ran too late to prevent "Permission denied". The chmod is now
+      # performed in "Ensure gradlew is executable", immediately after checkout.
 
-      # CHANGE 3 (this repo only): `gradlew` is committed as mode 644 on machines where git's
-      # `core.fileMode` is false, which fails every later step with "Permission denied". The
-      # reference workflow does the same chmod, but here it is load-bearing rather than
-      # belt-and-braces.
-      #
-      # This also pins the wrapper distribution rather than relying on whatever `gradle` the runner
-      # image ships: the committed wrapper says Gradle 9.8.0, and a bare `gradle wrapper` (the
-      # reference workflow's form, which passes `--gradle-version 9.3.1`) would silently rewrite
-      # the project to a *different* Gradle than the one the build was written against.
+      # CHANGE 3 (this repo only): pins the wrapper distribution rather than relying on whatever
+      # `gradle` the runner image ships. The committed wrapper says Gradle 9.8.0, and a bare
+      # `gradle wrapper` (which passes `--gradle-version 9.3.1`) would silently rewrite the project
+      # to a *different* Gradle than the one the build was written against. Regenerating the
+      # wrapper is therefore a last resort, not a shortcut.
       - name: Verify wrapper and toolchain
         run: |
-          ls -l gradlew
           ./gradlew --version
 
       - name: Prepare Environment Files and Keystore

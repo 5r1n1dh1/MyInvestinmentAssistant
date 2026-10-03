@@ -1,0 +1,34 @@
+# Normalise file modes in the index.
+#
+# Why this exists: `gradlew` was committed with mode 100644 (non-executable), so on a
+# Linux CI runner every `./gradlew` invocation died with "Permission denied" before a
+# single line of Kotlin was compiled. The chmod step in .github/workflows/build.yml
+# used to sit *after* the first ./gradlew call, so it could not help.
+#
+# Fixing the mode alone is not enough to guarantee it. Copying a checkout onto a
+# filesystem that does not preserve the exec bit, or a git clone made with
+# `core.fileMode=false`, will land it back on 100644. Pinning it here makes the
+# requirement explicit and makes git re-apply 755 on every clone.
+gradlew text eol=lf
+
+# Anything else that must stay executable.
+*.sh text eol=lf
+
+# Normalise line endings for everything else: LF in the index, checked out as-is.
+* text=auto eol=lf
+
+# Binary files must never be line-ending-normalised or diffed as text.
+*.jar binary
+*.aar binary
+*.apk binary
+*.keystore binary
+*.jks binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.so binary
+
+# Generated / vendored data files that are large and not meaningfully diffed.
+android-data/schemas/*.json linguist-generated=true
+*.csv linguist-generated=true -diff

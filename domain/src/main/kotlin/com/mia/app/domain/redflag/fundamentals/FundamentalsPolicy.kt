@@ -278,6 +278,20 @@ object FundamentalsPolicy {
         Sector.INSURANCE to 15.0,
         Sector.DEFENCE to 45.0,
         Sector.RAILWAY to 22.0,
+        /**
+         * Upstream, refining and midstream energy.
+         *
+         * Low band on purpose. Indian oil & gas is capital-intensive and cyclical, and the
+         * comparables trade at a discount to the broad market for that reason: ONGC and Oil India
+         * are single-digit, IOC and BPCL low-teens, GAIL mid-teens. A band near the market average
+         * would classify every one of them as cheap *by construction* and make the value-trap
+         * rule (P/E below band AND falling ROCE) fire constantly, which is exactly the
+         * false-positive behaviour the rule exists to avoid.
+         *
+         * `[derived]` on the same footing as every other row: an absolute stand-in, not a
+         * measured sector median.
+         */
+        Sector.OIL_GAS to 10.0,
     )
 
     /**
