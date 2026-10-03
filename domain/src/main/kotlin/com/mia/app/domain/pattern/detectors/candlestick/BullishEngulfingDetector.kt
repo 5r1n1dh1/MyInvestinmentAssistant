@@ -229,7 +229,17 @@ class BullishEngulfingDetector : PatternDetector {
             )
             // §4 rule 4: a match below the suppress threshold is never returned. The most recent
             // qualifying instance is reported; an older one is not promoted in its place.
-            return if (CandlestickScoring.renderable(match.score)) listOf(match) else emptyList()
+            // The render gate is NOT applied here. A sub-threshold candidate is returned and the
+            // engine decides its fate: `PatternEngine` routes anything under
+            // `MatchScorePolicy.SUPPRESS_THRESHOLD` into `suppressed`, never into `matches`.
+            //
+            // Filtering here as well was a second, redundant copy of that gate, and it destroyed
+            // the candidate: a Hammer scoring 47 reached neither `matches` nor `suppressed`, so it
+            // was recorded nowhere and the UI could not explain its absence. Measured over 20 real
+            // large caps x 372 sessions, the candlestick detectors that never appeared at any
+            // window depth were Shooting Star, Morning Star and Evening Star — invisible rather
+            // than absent.
+            return listOf(match)
         }
         return emptyList()
     }

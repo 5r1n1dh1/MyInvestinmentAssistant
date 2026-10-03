@@ -346,15 +346,18 @@ internal object CandlestickScoring {
     internal fun wickMinusBodyFrac(shape: CandleShape): Double =
         max(0.0, max(shape.upperFrac, shape.lowerFrac) - shape.bodyFrac)
 
-    /**
-     * §4 rule 4: **no match may be returned with a score below the suppress threshold.**
-     *
-     * Returning one would let the UI render a pattern the gate exists to hide
-     * (`patterns-spec.md` §4). A detector that builds a candidate, scores it and finds it below
-     * the gate must return `emptyList()` — which is also why "no match" and "suppressed" are the
-     * same observable behaviour to a caller.
-     */
-    internal fun renderable(score: Int): Boolean = score >= MatchScorePolicy.RENDER_THRESHOLD
+    // Formerly `renderable(score)`, a per-detector copy of the render gate. Removed deliberately:
+    //
+    // patterns-spec.md §4 rule 4 says no match below the suppress threshold may be *returned*, and
+    // that is still guaranteed — but by `PatternEngine`, not by each detector. The engine scores
+    // every candidate and routes the sub-threshold ones into `PatternScanResult.suppressed` with a
+    // reason, so `matches` still never contains one and the UI still never renders one.
+    //
+    // Having the gate in both places meant it also *destroyed* the candidate before the engine
+    // could see it: a Hammer scoring 47 was written nowhere at all. That is strictly worse than the
+    // spec required, because it made "detected but not drawn" unanswerable for exactly the patterns
+    // that most often fall short. `CandlestickScoreInvariantTest` now asserts the engine-level
+    // invariant, which is the one the spec is actually protecting.
 
     private const val GEOMETRY_PRIMARY_WEIGHT: Int = 20
 

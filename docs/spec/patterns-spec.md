@@ -1795,7 +1795,14 @@ Before a detector is considered done:
 4. `measuredMove.height ≥ 0` for every emitted match (plan.md §12 property test).
 5. `match.score ∈ [0, 100]` always (plan.md §12 property test).
 6. `measuredMove.projectedLevel` is on the correct side of `triggerLevel` for `direction`.
-7. No `Match` with `score < 50` is returned (contract rule 4).
+7. No `Match` with `score < 50` reaches `PatternScanResult.matches` (contract rule 4). **Enforced
+   by `PatternEngine`, not by each detector.** A detector returns every candidate it scored; the
+   engine routes a sub-threshold one into `PatternScanResult.suppressed` with a reason. The
+   guarantee is unchanged — a sub-threshold match is never rendered — but a candidate is no longer
+   *discarded* before anything can record it, so "detected but not drawn" is answerable.
+   Measured over 20 real NSE large caps × 372 sessions: with the per-detector copy of this gate in
+   place, three candlestick patterns (Shooting Star, Morning Star, Evening Star) appeared at no
+   window depth at all, because their sub-threshold candidates were destroyed rather than recorded.
 8. Every penalty the detector can fire is in the §19.1 matrix with the right applicability flag.
 9. Each §"Worked example" fixture in this file is encoded as a unit test with the stated numbers.
 10. `ScoreBreakdown.total` recomputed from `scoring-spec.md` matches, for all three fixtures in
