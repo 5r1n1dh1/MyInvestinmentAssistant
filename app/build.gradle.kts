@@ -44,6 +44,31 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        // Release signing is supplied entirely by the environment, and is **optional**.
+        //
+        // The whole point of plan.md G1 is that this app costs nothing to build and needs no
+        // secrets, so a missing keystore must degrade to an unsigned release rather than fail the
+        // build. CI sets the four KEYSTORE_* variables when a signing secret exists and leaves them
+        // empty otherwise; `assembleRelease` then still produces an APK that installs via
+        // `adb install` and can be side-loaded, just without a Play-upload signature.
+        //
+        // The values are read as Gradle properties rather than from `local.properties` because CI
+        // passes them as environment variables, and reading both keeps a developer's machine and a
+        // runner working from one code path.
+        create("release") {
+            val keystorePath = providers.gradleProperty("KEYSTORE_PATH")
+                .orElse(providers.environmentVariable("KEYSTORE_PATH"))
+                .orNull
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storePassword = signingValue("STORE_PASSWORD")
+                keyAlias = signingValue("KEY_ALIAS")
+                keyPassword = signingValue("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // plan.md G1: no API keys, no build-time configuration, no flavour matrix. The
@@ -51,11 +76,31 @@ android {
             isMinifyEnabled = false
         }
         release {
+            // R8 stays **off**, deliberately, and this is worth being explicit about because
+            // `isMinifyEnabled = false` on a release build looks like an oversight.
+            //
+            // Two independent reasons:
+            // 1. plan.md G1 makes this app free to build with no configuration, and turning R8 on
+            //    introduces a class of failure (a stripped reflection entry point, a renamed Hilt
+            //    or Room generated class) that is invisible until a release APK is installed —
+            //    and the build machine here has no Android SDK, so that failure could not be
+            //    caught before shipping. The APK is a few hundred KB larger and that is the price.
+            // 2. `release` is currently signed with the debug key or unsigned in CI, so it is not
+            //    distributable via Play anyway. R8 earns its risk back when real signing exists.
+            //
+            // If it is ever enabled, `proguard-rules.pro` already exists with the keep rules
+            // kotlinx.serialization and Room need.
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Falls back to the debug signing config when no keystore was supplied, so
+            // `assembleRelease` produces an installable APK instead of failing on a missing
+            // signing config.
+            signingConfig = signingConfigs.findByName("release")
+                ?.takeIf { it.storeFile != null }
+                ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -90,6 +135,22 @@ ksp {
     // `:android-data`. `arg` is set here so a future Room entity in this module has a home.
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+/**
+ * One signing value, read from a Gradle property or the environment.
+ *
+ * `[providers.gradleProperty(x)]` is Kotlin's bracket access on a provider, which reads like
+ * `gradleProperty(x)` and is *not* a call into the provider — it is only valid inside
+ * `build.gradle.kts`, which is the only place this is used.
+ *
+ * Returns an empty string rather than `null` so a missing value becomes an explicit signing
+ * failure with a clear message from AGP, instead of a `NullPointerException` inside this function.
+ */
+fun signingValue(name: String): String =
+    providers.gradleProperty(name)
+        .orElse(providers.environmentVariable(name))
+        .orNull
+        ?: ""
 
 dependencies {
     // `:domain` is declared explicitly even though `:android-data` re-exports it, because the UI

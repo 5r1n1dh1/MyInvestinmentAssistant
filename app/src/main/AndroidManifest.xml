@@ -10,9 +10,20 @@
   Compose tree and re-run the 500-bar indicator pass for a screen rotation on a device that
   may only have 2 GB of RAM.
 
-  No `android:icon` / `android:roundIcon` is declared: the default launcher icon is used until
-  a real icon asset exists, which is better than shipping a broken reference to a mipmap that
-  does not exist in this module.
+  `android:icon` / `android:roundIcon` point at `mipmap-anydpi-v26`, an **adaptive icon**
+  (`minSdk` is 26, so every supported device resolves it). It carries three layers: a gradient
+  background the OEM mask may crop freely, a candle foreground confined to the 72dp safe zone,
+  and a monochrome layer so Android 13+ themed icons work — an app with no monochrome layer is
+  simply absent from themed-icon pickers on many launchers, which is a discoverability cost
+  rather than a cosmetic one.
+
+  The per-density PNGs (`mipmap-*/ic_launcher.png`, `ic_launcher_round.png`) exist only as a
+  fallback for a launcher that asks for a bitmap by density; they are generated from the same
+  geometry as the vectors so the two cannot drift.
+
+  The icon depicts a *rising* session, which is a silhouette choice for legibility at 48dp and
+  not a directional claim: plan.md §1.4 forbids framing this app as a recommendation, and nothing
+  in the app infers direction from the icon — there is no per-stock icon anywhere.
 -->
 <!-- `tools` is needed for the WorkManager initializer removal at the bottom of this file. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -44,6 +55,8 @@
 
     <application
         android:name=".MiaApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyInvestinmentAssistant">

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/drawable/ic_launcher_monochrome.xml
+
+  The adaptive-icon **monochrome** layer, used by Android 13+ themed icons (API 33+).
+
+  ### Why this file matters more than it looks
+  When a user turns on "themed icons", Android discards every colour in the launcher icon and
+  tints this layer with the wallpaper's palette. An app without a monochrome layer simply does
+  not appear in themed-icon pickers on many launchers. That is a discoverability cost, not a
+  cosmetic one.
+
+  ### The rule a monochrome layer must follow
+  The system tints it, so only the **alpha channel** survives: every shape must read as solid
+  silhouette against any background. That means no gradients, no opacity tricks, and shapes that
+  must stay distinct as pure outlines.
+
+  ### How the silhouette holds up
+  The candle body is solid; the wick is drawn as a solid bar *wider* than in the colour version
+  (it has to read without a fill contrast to separate from); the baseline segments are solid.
+  Because the wick is a single colour here, it is rendered as one continuous shape from top to
+  bottom and the body is layered over it — reversing the colour file's z-order, which is
+  harmless since both are the same tint.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background: opaque where the icon is meant to be, so a tinted icon still has a body. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,26h10v46h-10z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M46,22h8v54h-8z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M62,30h8v42h-8z" />
+
+    <!-- Cut-outs: a 0-alpha punch turns the three bars into hollow outlines, which survive
+         tinting as clear shapes rather than a single filled blob. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M32,32h6v34h-6z" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,28h4v42h-4z" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M64,36h4v30h-4z" />
+
+    <!-- The baseline, kept solid so the silhouette still reads as "a session resting on a
+         level" once everything else is hollow. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M28,74h44v5h-44z" />
+</vector>

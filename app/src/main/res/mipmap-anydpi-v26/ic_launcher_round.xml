@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+  The round variant, for launchers that request `android:roundIcon` explicitly.
+
+  ### Why this is a copy rather than a reference to ic_launcher.xml
+  Both point at the same three layers, so the only difference is the shape the launcher applies.
+  Referencing one adaptive-icon from the other is not possible in the resource format — each
+  `mipmap-anydpi-v26` file must declare its own `<adaptive-icon>` element. The duplication is
+  three lines and is the only supported way to express it.
+
+  The monochrome layer is included here too: omitting it on the round variant would make themed
+  icons work on the square one and silently fail on the round one.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

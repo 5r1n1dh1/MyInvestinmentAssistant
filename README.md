@@ -181,11 +181,27 @@ plan.md                  the specification this was built from
 docs/CONTRACTS.md        module boundaries + the rules every contributor follows
 docs/DATA-NOTES.md       measured behaviour of every source, and what is unverifiable here
 docs/VERIFICATION.md     what was proven, defects caught, and the open gaps
-docs/ENVIRONMENT.md      toolchain, build, how to add a pattern
+docs/ENVIRONMENT.md      toolchain, build, CI, how to add a pattern
 docs/spec/               detector + scoring + red-flag rules extracted from the textbook
 domain/  data/           pure-JVM engine and parsers (1,337 tests)
 android-data/  app/      Android persistence, DI, workers and Compose UI
+.github/workflows/       APK build on every push; the JVM suites run first, before the SDK install
 ```
+
+---
+
+## Building an APK
+
+Push to `main` and [the workflow](.github/workflows/build.yml) builds it; download the artifact
+from the run summary. Or locally, with an SDK installed:
+
+```bash
+./gradlew :app:assembleRelease     # app/build/outputs/apk/release/
+```
+
+Release signing is optional by design — with no keystore configured, the release build is signed
+with the debug key and still installs. This app has no keys and no build-time configuration
+(plan.md G1), so nothing about it should require a secret to produce an APK.
 
 ---
 

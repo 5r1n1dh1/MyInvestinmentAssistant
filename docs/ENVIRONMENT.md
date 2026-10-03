@@ -75,9 +75,37 @@ Expect to fix things on that first build: it is the first true compile of the Co
 ## Verified commands
 
 ```bash
-./gradlew :domain:test   # 853 tests, 0 failures
-./gradlew :data:test     # 484 tests, 0 failures
+./gradlew :domain:test :data:test   # 1,337 tests — 853 domain + 484 data, 0 failures
 ```
+
+> If `./gradlew` reports "Permission denied", run `chmod +x gradlew`. Git records the executable bit
+> only when `core.fileMode` is true, so the wrapper can arrive as mode 644 on a fresh clone. CI does
+> this for you.
+
+## CI
+
+`.github/workflows/build.yml` builds on every push and pull request to `main`, and on manual
+dispatch. The step order is deliberate:
+
+1. **JDK 21**, then the pure-JVM suites *before* the SDK exists. Those 1,337 tests need no Android
+   SDK, so a broken parser or detector fails in about a minute instead of after a full SDK download —
+   and they are the only part of this build that has actually been executed before.
+2. **Android SDK + licences**, writing `local.properties`. Load-bearing rather than cosmetic:
+   `settings.gradle.kts` includes `:android-data` and `:app` *only when an SDK is detectable*, so no
+   task touching them will even configure until that file exists.
+3. **Debug keystore**, generated if absent. `assembleRelease` needs *a* signing config.
+4. **Upload keystore, optional.** With none configured, release falls back to the debug key and
+   still produces an installable APK — deliberate, per plan.md G1 (no keys, no cost).
+5. **Build, then verify the signature** with `apksigner` rather than assuming it.
+6. **Upload** the APKs, plus the build log and reports on failure.
+
+The workflow deliberately does **not** pass `--gradle-version` to `gradle wrapper`, unlike the
+reference workflow it is modelled on. The committed wrapper pins Gradle 9.8.0 — the version this
+build was written against — and regenerating with a different number would silently move the
+project.
+
+R8 is off (see `app/build.gradle.kts` for the reasoning), so `proguard-rules.pro` is present and
+documented but inactive.
 
 ## Test layout
 

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/drawable/ic_launcher_background.xml
+
+  The adaptive-icon background layer.
+
+  ### Why this shape rather than a flat colour
+  An adaptive icon is masked by the launcher, and each OEM mask is different: a circle on
+  Pixel, a squircle on stock Android, a rounded square on some Samsung builds. Anything drawn
+  here is cropped by that mask, so the background is a diagonal gradient wide enough that the
+  visible centre is identical under all of them. A gradient also reads as depth at 48dp without
+  a single pixel of the foreground being sacrificed to it.
+
+  The two stops are the app's own market palette from `ui/theme/MarketColors.kt`: a deep
+  indigo for "the market at rest" and a slightly lighter indigo toward the upper-left, so the
+  chart in the foreground layer sits on a subtly lit surface. Nothing here is decorative
+  branding — an icon that has to be redrawn per OEM is not worth the maintenance.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Base fill. Covers the full 108x108 viewport, including the 18dp bleed on each edge
+         that adaptive-icon guidelines require for parallax and for circular masks. -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF1B2A4A" />
+                <item android:offset="0.55" android:color="#FF22345C" />
+                <item android:offset="1" android:color="#FF2C4374" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
