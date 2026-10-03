@@ -131,4 +131,34 @@ object TopRatiosParser {
      */
     fun companyName(doc: Document): String? =
         doc.selectFirst("h1")?.let { ScreenerHtml.normalise(it.text()) }?.ifBlank { null }
+
+    /**
+     * screener.in's own industry classification, broadest first, as one sentence.
+     *
+     * Returns e.g. `"Energy, Oil, Gas & Consumable Fuels, Petroleum Products, Refineries &
+     * Marketing"` for RELIANCE, or `null` when the page carries no industry block.
+     *
+     * ### Why this is the source and not the company's name
+     * plan.md §7.1 lets the sector come from screener.in's sector page, and
+     * [com.mia.app.domain.ratios.SectorResolver]'s highest-precedence input is exactly this
+     * sentence. Without it the resolver could only match a word in the company's *name*, which is
+     * why `RELIANCE` used to be unresolvable: "Reliance Industries Ltd" contains no industry word
+     * at all, while the page has always said `Energy` in as many words.
+     *
+     * ### Why the whole chain and not just the deepest link
+     * The links are a taxonomy path — `/market/IN03/IN0301/IN030103/IN030103001/` — broadest first.
+     * Any single link can be ambiguous on its own (`Petroleum Products` could be a chemicals
+     * name), while the path disambiguates itself. Joining them is also what lets the resolver
+     * reach `Confidence.AGREED`, which is defined against name and industry *agreeing*. Order is
+     * preserved because "broadest first" is the order a human reads them in.
+     */
+    fun industryChain(doc: Document): String? =
+        doc.select("a[href^=/market/]")
+            .asSequence()
+            .map { ScreenerHtml.normalise(it.text()) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
 }

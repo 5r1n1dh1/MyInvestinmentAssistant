@@ -246,6 +246,25 @@ object SectorResolver {
             "agrochemicals", "fertiliser", "fertilizer", "fertilisers", "speciality chemicals",
             "paints", "upl",
         ),
+        SectorKeywords(
+            Sector.OIL_GAS,
+            // screener.in's own strings for the bucket, exactly as its industry taxonomy writes
+            // them: "Energy, Oil, Gas & Consumable Fuels, Petroleum Products, Refineries &
+            // Marketing".
+            //
+            // "energy" is safe to claim here only because of the longest-run rule: every
+            // RENEWABLE phrase that contains it is two tokens (`green energy`, `solar energy`,
+            // `clean energy`), so `Adani Green Energy` still resolves to RENEWABLE and never ties
+            // with this one-token match. A one-token `renewable` alone would have tied and fallen
+            // through to Rule C.
+            "energy", "oil", "gas", "fuels", "consumable fuels", "oil and gas", "oil gas",
+            "crude oil", "petroleum", "petroleum products", "refinery", "refineries",
+            // Refining names that carry no industry word, the same gap FMCG's list already covers
+            // with whole-name phrases. Deliberately no bare "ioc": a three-letter token is too
+            // easy to hit by accident, the way `hal` and `bel` already are for DEFENCE.
+            "reliance industries", "oil india", "bharat petroleum", "hindustan petroleum",
+            "petronet", "oil and gas corporation",
+        ),
         // Sector.OTHER is intentionally absent: it is the default, never a match.
     )
 
@@ -283,6 +302,7 @@ object SectorResolver {
         Sector.LOGISTICS to "Logistics",
         Sector.CAPITAL_GOODS to "Capital goods",
         Sector.CHEMICALS to "Chemicals",
+        Sector.OIL_GAS to "Oil & gas",
         Sector.OTHER to "Other",
     )
 

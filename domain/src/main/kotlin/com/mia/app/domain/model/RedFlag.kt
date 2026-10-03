@@ -86,6 +86,17 @@ data class FundamentalsSnapshot(
     val name: String,
     val sector: Sector,
     val sectorResolved: Boolean,
+    /**
+     * screener.in's own industry classification, broadest first — e.g. `"Energy, Oil, Gas &
+     * Consumable Fuels, Petroleum Products, Refineries & Marketing"`.
+     *
+     * Carried rather than discarded because it is `SectorResolver`'s highest-precedence input. It
+     * is the only field that lets a company with no industry word in its *name* be classified at
+     * all: "Reliance Industries Ltd" resolves to nothing on its own, while this sentence resolves
+     * unambiguously. Kept so the explanation shown to the reader can name the source rather than
+     * saying only "matched a keyword".
+     */
+    val industry: String? = null,
     val ratios: Ratios,
     val health: ParserHealth,
     val quarters: List<QuarterRecord> = emptyList(),

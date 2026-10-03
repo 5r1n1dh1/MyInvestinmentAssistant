@@ -13,11 +13,18 @@ import kotlin.math.pow
  * Fills a domain [Ratios] **as far as the published page allows** — nothing more.
  *
  * ### Sector is never guessed here
- * plan.md §1.4 rule 8 and §7.1: default to [Sector.OTHER] and never guess. The sector is the
- * domain-side `SectorResolver`'s job, so this mapper always writes [Sector.OTHER] and the
- * facade always reports `sectorResolved = false`. screener.in's page does carry an industry
- * name, but mapping that text to a sector is a classification decision with a
- * wrong-answer-is-worse-than-blank failure mode, so it is not made in the data layer.
+ * plan.md §1.4 rule 8 and §7.1: default to [Sector.OTHER] and never guess. This mapper makes no
+ * classification decision of its own — it copies the [sector] its caller resolved through the
+ * domain's `SectorResolver`, and defaults to [Sector.OTHER] when it was given nothing.
+ *
+ * It used to *always* write [Sector.OTHER] and report `sectorResolved = false`, on the reasoning
+ * that mapping text to a sector is a classification decision with a wrong-answer-is-worse-than-
+ * blank failure mode. That reasoning was right and the implementation over-applied it: the
+ * persisted `OTHER` was then read back by `DefaultRedFlagRepository` as the sector for
+ * `RedFlagContext`, so **every** sector-conditioned red flag was evaluated against `OTHER` for
+ * every stock — the flag engine could never apply a single sector suppression. Delegating to
+ * `SectorResolver` keeps the decision in one place (the domain) while making the stored value
+ * mean something.
  *
  * ### Field-by-field provenance and units
  *
@@ -60,6 +67,7 @@ object RatioMapper {
         derived: CashFlowDerived,
         profitLoss: ParsedTable?,
         shareholding: ParsedTable?,
+        sector: Sector = Sector.OTHER,
     ): Ratios {
         val years = derived.revenueByYear.keys + derived.patByYear.keys
         val latest = years.maxOrNull()
@@ -73,7 +81,7 @@ object RatioMapper {
 
         return Ratios(
             symbol = symbol,
-            sector = Sector.OTHER,
+            sector = sector,
             asOf = asOf,
             source = Source.SCREENER_IN,
             confidence = Confidence.SINGLE,

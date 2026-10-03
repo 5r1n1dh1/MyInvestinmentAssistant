@@ -129,7 +129,7 @@ class ScreenerGoldenFileTest {
     // ------------------------------------------------------------------------- Ratios
 
     @Test
-    fun `reliance ratios carry provenance, a null debt to equity and unresolved sector`() {
+    fun `reliance ratios carry provenance, a null debt to equity and a resolved sector`() {
         val snapshot = ScreenerFixtures.parse("RELIANCE").snapshot
         val r = snapshot.ratios
         assertEquals("RELIANCE", r.symbol)
@@ -137,10 +137,21 @@ class ScreenerGoldenFileTest {
         assertEquals(Source.SCREENER_IN, r.source)
         assertEquals(Confidence.SINGLE, r.confidence)
 
-        // plan.md §1.4 rule 8 / §7.1: the data layer never guesses a sector.
-        assertEquals(Sector.OTHER, r.sector)
-        assertEquals(Sector.OTHER, snapshot.sector)
-        assertEquals(false, snapshot.sectorResolved)
+        // plan.md §1.4 rule 8 / §7.1: never guess a sector — but the sector is now *read*, not
+        // guessed, because the page has always carried screener.in's own classification and
+        // `SectorResolver` is its single decision function. RELIANCE's page says
+        // `Energy → Oil, Gas & Consumable Fuels → Petroleum Products → Refineries & Marketing`,
+        // and `ratios.sector` agrees with `snapshot.sector`, which is the pairing that matters:
+        // `DefaultRedFlagRepository` reads `ratios.sector` to build `RedFlagContext`, so when the
+        // two disagreed the red-flag engine and the screen would have shown different answers.
+        assertEquals(Sector.OIL_GAS, snapshot.sector)
+        assertEquals(Sector.OIL_GAS, r.sector)
+        assertEquals(true, snapshot.sectorResolved)
+        assertEquals(
+            "Energy, Oil, Gas & Consumable Fuels, Petroleum Products, Refineries & Marketing",
+            snapshot.industry,
+            "the industry chain is kept so the evidence can name the source, not just a keyword",
+        )
 
         assertEquals(10.3, r.roce)
         assertEquals(8.91, r.roe)

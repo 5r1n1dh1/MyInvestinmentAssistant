@@ -78,6 +78,19 @@ enum class Sector {
     LOGISTICS,
     CAPITAL_GOODS,
     CHEMICALS,
+    /**
+     * Upstream, refining and midstream energy.
+     *
+     * Added because plan.md §5's list had no energy bucket at all, which made every Indian oil and
+     * gas name unresolvable — and it is not a rare case: ONGC, IOC, BPCL, GAIL, Oil India and
+     * Reliance Industries are all large caps. The omission was carried deliberately as a
+     * *documented gap* (`SectorResolverTest` asserted RELIANCE stayed `OTHER`), on the reasoning
+     * that an unnamed bucket invites a guess. It is named now because screener.in publishes the
+     * classification itself: RELIANCE's page has always said `Energy → Oil, Gas & Consumable
+     * Fuels → Petroleum Products → Refineries & Marketing`, so this sector is read off the source
+     * rather than inferred from a company name.
+     */
+    OIL_GAS,
     OTHER,
 }
 

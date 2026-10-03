@@ -7,6 +7,7 @@ import com.mia.app.domain.model.ParserHealth
 import com.mia.app.domain.model.Ratios
 import com.mia.app.domain.model.Sector
 import com.mia.app.domain.model.Source
+import com.mia.app.domain.ratios.SectorResolver
 import org.jsoup.nodes.Document
 import java.time.LocalDate
 import java.time.ZoneId
@@ -116,17 +117,39 @@ object FundamentalsParserFacade {
         val derived = DerivedMetrics.derive(
             profitLoss, balanceSheet, cashFlow, shareholding, topRatios, ratiosCard,
         )
-        val ratios = RatioMapper.map(symbol, asOf, topRatios, derived.derived, profitLoss, shareholding)
+        val name = TopRatiosParser.companyName(doc) ?: symbol
+
+        val industry = TopRatiosParser.industryChain(doc)
+
+        // plan.md §1.4 rule 8: never guess a sector. But do *ask* — the decision belongs to the
+        // domain's `SectorResolver` and its input is screener.in's own industry taxonomy, which
+        // this page has always carried and nothing ever read. Resolving here, rather than in `:app`,
+        // is what makes the persisted `sector` column real: `DefaultRedFlagRepository` reads it to
+        // build `RedFlagContext`, so a permanently-`OTHER` value silently disabled every
+        // sector-conditioned red flag for every stock.
+        val resolution = SectorResolver.resolve(
+            name = name,
+            about = industry,
+        )
+
+        val ratios = RatioMapper.map(
+            symbol = symbol,
+            asOf = asOf,
+            topRatios = topRatios,
+            derived = derived.derived,
+            profitLoss = profitLoss,
+            shareholding = shareholding,
+            sector = resolution.sector,
+        )
 
         val health = health(topRatios, quarters, tables, ratiosCard, derived.notes, asOf)
 
         val snapshot = FundamentalsSnapshot(
             symbol = symbol,
-            name = TopRatiosParser.companyName(doc) ?: symbol,
-            // plan.md §1.4 rule 8: default to OTHER and never guess. The domain's
-            // SectorResolver owns inference; this layer never guesses.
-            sector = Sector.OTHER,
-            sectorResolved = false,
+            name = name,
+            sector = resolution.sector,
+            sectorResolved = resolution.resolved,
+            industry = industry,
             ratios = ratios,
             health = health,
             quarters = quarters.records,

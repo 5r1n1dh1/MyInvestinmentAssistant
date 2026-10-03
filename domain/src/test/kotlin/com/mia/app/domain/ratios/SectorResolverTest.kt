@@ -18,7 +18,7 @@ class SectorResolverTest {
 
     /**
      * Name → sector, for real companies. Every row is a company a user can search for, and the
-     * sectors span all 20 keyword-bearing values of the enum (plan.md §5 `Sector`).
+     * sectors span all 21 keyword-bearing values of the enum (plan.md §5 `Sector`).
      */
     private val TABLE: List<Pair<String, Sector>> = listOf(
         // Banks
@@ -110,6 +110,13 @@ class SectorResolverTest {
         "Tata Chemicals Ltd" to Sector.CHEMICALS,
         "Asian Paints Ltd" to Sector.CHEMICALS,
         "UPL Ltd" to Sector.CHEMICALS,
+        // Oil & gas. Screener.in classifies all of these as energy companies, so the rows assert
+        // the same answer the stored pipeline reaches — they are not guesses at a convention.
+        "Oil and Natural Gas Corporation Ltd" to Sector.OIL_GAS,
+        "Indian Oil Corporation Ltd" to Sector.OIL_GAS,
+        "Bharat Petroleum Corporation Ltd" to Sector.OIL_GAS,
+        "Oil India Ltd" to Sector.OIL_GAS,
+        "Reliance Industries Ltd" to Sector.OIL_GAS,
     )
 
     @Test
@@ -137,10 +144,13 @@ class SectorResolverTest {
         assertTrue(resolution.evidence.contains("\"bank\""), resolution.evidence)
         assertTrue(resolution.evidence.contains("company name"), resolution.evidence)
 
-        val reliance = SectorResolver.resolve("Reliance Industries Ltd")
-        assertFalse(reliance.resolved)
-        assertEquals(Sector.OTHER, reliance.sector)
-        assertTrue(reliance.evidence.contains("plan.md §7.1"), reliance.evidence)
+        // Unresolvable input must still explain itself rather than go quiet. This was RELIANCE
+        // before `Sector.OIL_GAS` existed; it is now the evidence *path* that is asserted, using a
+        // name that genuinely matches nothing.
+        val unresolved = SectorResolver.resolve("Zebra Widgets India Ltd")
+        assertFalse(unresolved.resolved)
+        assertEquals(Sector.OTHER, unresolved.sector)
+        assertTrue(unresolved.evidence.contains("plan.md §7.1"), unresolved.evidence)
     }
 
     @Test
@@ -156,16 +166,51 @@ class SectorResolverTest {
     }
 
     /**
-     * The documented gap: RELIANCE carries no keyword and oil & gas is not one of plan.md §5's
-     * 21 sectors, so the app says OTHER rather than inventing a bucket. Asserted so the gap
-     * stays visible instead of quietly being closed with a wrong keyword.
+     * The former documented gap, now closed — and the reason it closed is worth keeping.
+     *
+     * This test used to assert that RELIANCE stayed `OTHER`, on the reasoning that plan.md §5 named
+     * no energy bucket and an unnamed bucket invites a guess. That reasoning was sound, but the
+     * consequence was that ONGC, IOC, BPCL, GAIL and Reliance — five large caps — could not be
+     * classified at all, and every sector-conditioned red flag was therefore evaluated against
+     * `OTHER` for them.
+     *
+     * The gap is closed with a bucket rather than a keyword, and the bucket is not a guess about
+     * Reliance: screener.in publishes the classification, and RELIANCE's own page has always said
+     * `Energy → Oil, Gas & Consumable Fuels → Petroleum Products → Refineries & Marketing`. The
+     * company name alone also resolves, via a whole-name phrase, so the answer does not depend on
+     * that field being read.
+     *
+     * Reliance is still a conglomerate — it also runs retail and telecom — so this asserts what the
+     * source states and no more. A reader who needs the full picture gets the industry chain in the
+     * evidence string, not a synthesised claim that the company is only an oil company.
      */
     @Test
-    fun `a conglomerate with no industry word stays OTHER`() {
-        val resolution = SectorResolver.resolve("Reliance Industries Ltd")
-        assertEquals(Sector.OTHER, resolution.sector)
-        assertFalse(resolution.resolved)
-        assertEquals(Confidence.SINGLE, resolution.confidence)
+    fun `RELIANCE resolves to the sector its own published industry states`() {
+        val fromName = SectorResolver.resolve("Reliance Industries Ltd")
+        assertEquals(Sector.OIL_GAS, fromName.sector)
+        assertTrue(fromName.resolved)
+
+        val industry = "Energy, Oil, Gas & Consumable Fuels, Petroleum Products, " +
+            "Refineries & Marketing"
+        val fromIndustry = SectorResolver.resolve("Reliance Industries Ltd", about = industry)
+        assertEquals(Sector.OIL_GAS, fromIndustry.sector)
+        assertTrue(fromIndustry.resolved)
+
+        // Name and published industry agree, which is the case `Confidence.AGREED` exists for. It
+        // was unreachable in production before the industry chain was carried on the snapshot.
+        assertEquals(Confidence.AGREED, fromIndustry.confidence)
+    }
+
+    /**
+     * The one-token `energy` claim must not steal a renewable name, because `RENEWABLE` lists
+     * `energy` only as part of a two-token phrase (`green energy`, `solar energy`). If that pairing
+     * is ever removed, these break — which is the point of pinning it.
+     */
+    @Test
+    fun `an energy renewable name still resolves to renewable, not to oil and gas`() {
+        for (name in listOf("Adani Green Energy Ltd", "Adani Solar Energy Ltd", "Tata Renewables")) {
+            assertEquals(Sector.RENEWABLE, SectorResolver.resolve(name).sector, name)
+        }
     }
 
     /**

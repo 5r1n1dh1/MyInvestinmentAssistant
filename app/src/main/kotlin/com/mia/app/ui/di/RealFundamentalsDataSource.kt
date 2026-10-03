@@ -155,7 +155,16 @@ class RealFundamentalsDataSource @Inject constructor(
         view: FundamentalsView,
     ): SectorResolution = SectorResolver.resolve(
         name = view.snapshot.name,
-        about = null,
+        // Was `null`. screener.in's industry classification is carried on the snapshot, and it is
+        // the resolver's highest-precedence input: without it only the company *name* could be
+        // matched, which is why a name like "Reliance Industries Ltd" — carrying no industry word
+        // at all — could not be resolved while the page itself said `Energy`.
+        //
+        // Recomputed rather than read back from `snapshot.sector`, so the confidence shown is the
+        // resolver's real verdict (`AGREED` when name and industry agree) instead of one invented
+        // here. `resolve` is a pure function of three values, so repeating it costs nothing and the
+        // stored sector it produced in the first place is already the same answer.
+        about = view.snapshot.industry,
         shape = RatioShape(hasDepositsRow = view.snapshot.balanceSheet.any { row ->
             row.label.trim().equals(DEPOSITS_ROW_LABEL, ignoreCase = true)
         }),

@@ -34,8 +34,11 @@ import java.time.LocalDate
  * [Golden.relianceRatios] and friends belong to that date.
  *
  * ### Sector choices are the ones the resolver would make
- * RELIANCE is [Sector.OTHER] — "Oil & Gas" matches no keyword in `SectorResolver`'s table, and
- * plan.md §7.1 says default to OTHER and never guess. TCS is [Sector.IT] and TITAN is
+ * RELIANCE is pinned to [Sector.OTHER] here — **not** because the resolver would say so (it says
+ * OIL_GAS, since `Sector.OIL_GAS` now exists and screener.in classifies RELIANCE as energy), but
+ * because these fixtures hand-build their `Ratios` and want the sector-suppression branch under
+ * test. `Golden.relianceRatios` therefore exercises "sector unknown" on purpose, and
+ * `ScreenerGoldenFileTest` is where the real parse is asserted. TCS is [Sector.IT] and TITAN is
  * [Sector.DURABLES] (both match). HDFCBANK is [Sector.BANKING], and its published statements are
  * bank-shaped: no `Operating Profit` row at all, so `ebitByYear` is **empty**, which is itself
  * one of the cases these rules have to survive.
