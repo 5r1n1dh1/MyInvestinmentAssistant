@@ -80,11 +80,17 @@ internal object PatternCatalogData {
             shapeSummary = "A candle whose body engulfs the previous candle's body, opposite way.",
             shape = PatternShape.CandleLayout(
                 listOf(
-                    NormalisedCandle(bodyHigh = 0.60f, bodyLow = 0.50f, wickHigh = 0.75f, wickLow = 0.45f),
-                    NormalisedCandle(bodyHigh = 0.70f, bodyLow = 0.40f, wickHigh = 0.80f, wickLow = 0.30f),
+                    NormalisedCandle(
+                        bodyHigh = 0.40f, bodyLow = 0.30f,
+                        wickHigh = 0.50f, wickLow = 0.15f,
+                    ),
+                    NormalisedCandle(
+                        bodyHigh = 0.45f, bodyLow = 0.20f,
+                        wickHigh = 0.60f, wickLow = 0.15f,
+                    ),
                 ),
             ),
-            glossary = GlossaryEntry(
+glossary = GlossaryEntry(
                 whatItIs = "The bearish mirror of the bullish engulfing: the second candle's " +
                     "real body completely covers the first.",
                 howItLooks = "The first bar is small; the next is larger and the opposite colour, " +
@@ -128,11 +134,17 @@ internal object PatternCatalogData {
             shapeSummary = "A small body near the bottom with a long upper wick.",
             shape = PatternShape.CandleLayout(
                 listOf(
-                    NormalisedCandle(bodyHigh = 0.60f, bodyLow = 0.55f, wickHigh = 0.70f, wickLow = 0.50f),
-                    NormalisedCandle(bodyHigh = 0.72f, bodyLow = 0.68f, wickHigh = 0.98f, wickLow = 0.62f),
+                    NormalisedCandle(
+                        bodyHigh = 0.62f, bodyLow = 0.55f,
+                        wickHigh = 0.70f, wickLow = 0.45f,
+                    ),
+                    NormalisedCandle(
+                        bodyHigh = 0.72f, bodyLow = 0.68f,
+                        wickHigh = 0.98f, wickLow = 0.62f,
+                    ),
                 ),
             ),
-            glossary = GlossaryEntry(
+glossary = GlossaryEntry(
                 whatItIs = "The hammer's mirror image, at the top of a range: small body low in " +
                     "the range, upper wick at least twice the body.",
                 howItLooks = "Long shadow above, little below, body near the low of the session.",
@@ -175,12 +187,21 @@ internal object PatternCatalogData {
             shapeSummary = "Three candles: a long one up, a small one, then a long one down.",
             shape = PatternShape.CandleLayout(
                 listOf(
-                    NormalisedCandle(bodyHigh = 0.55f, bodyLow = 0.25f, wickHigh = 0.60f, wickLow = 0.20f),
-                    NormalisedCandle(bodyHigh = 0.50f, bodyLow = 0.45f, wickHigh = 0.56f, wickLow = 0.40f),
-                    NormalisedCandle(bodyHigh = 0.45f, bodyLow = 0.15f, wickHigh = 0.50f, wickLow = 0.10f),
+                    NormalisedCandle(
+                        bodyHigh = 0.45f, bodyLow = 0.15f,
+                        wickHigh = 0.50f, wickLow = 0.10f,
+                    ),
+                    NormalisedCandle(
+                        bodyHigh = 0.50f, bodyLow = 0.45f,
+                        wickHigh = 0.56f, wickLow = 0.40f,
+                    ),
+                    NormalisedCandle(
+                        bodyHigh = 0.45f, bodyLow = 0.20f,
+                        wickHigh = 0.48f, wickLow = 0.15f,
+                    ),
                 ),
             ),
-            glossary = GlossaryEntry(
+glossary = GlossaryEntry(
                 whatItIs = "The morning star's mirror at a top: a long up candle, a small " +
                     "indecision candle, then a long down candle.",
                 howItLooks = "Three bars — long, small, long — with the third giving back at least " +
@@ -207,7 +228,7 @@ internal object PatternCatalogData {
                     NormalisedPoint(0.78f, 0.30f), // right shoulder
                     NormalisedPoint(0.88f, 0.12f), // right shoulder fails
                 ),
-                closed = false,
+                closed = true,
                 roleLabels = listOf(
                     "Left shoulder",
                     "Neckline",
@@ -244,7 +265,7 @@ internal object PatternCatalogData {
                     NormalisedPoint(0.78f, 0.70f), // right shoulder
                     NormalisedPoint(0.88f, 0.88f), // break
                 ),
-                closed = false,
+                closed = true,
                 roleLabels = listOf(
                     "Left shoulder",
                     "Neckline",
@@ -279,7 +300,7 @@ internal object PatternCatalogData {
                     NormalisedPoint(0.80f, 0.70f), // failure below the first peak
                     NormalisedPoint(0.92f, 0.25f), // break of the trough
                 ),
-                closed = false,
+                closed = true,
                 roleLabels = listOf(
                     "First peak",
                     "Trough",
@@ -314,7 +335,7 @@ internal object PatternCatalogData {
                     NormalisedPoint(0.80f, 0.30f), // failure above the first trough
                     NormalisedPoint(0.92f, 0.75f), // break of the peak
                 ),
-                closed = false,
+                closed = true,
                 roleLabels = listOf(
                     "First trough",
                     "Peak",
@@ -342,21 +363,19 @@ internal object PatternCatalogData {
             detectionStatus = DETECTED,
             minBars = 15,
             shapeSummary = "A flat ceiling with rising lows, pressed against resistance.",
-            shape = PatternShape.Polyline(
-                points = listOf(
+            // Two independent boundary lines, not one point list. Listing support then resistance
+            // in a single list gave x = 0, 0.5, 1, 0, 1, and the draw pass joins points in list
+            // order — so it would have rendered a zigzag leaping back to the left edge.
+            shape = PatternShape.Boundaries(
+                upper = listOf(
+                    NormalisedPoint(0f, 0.80f),   // flat resistance
+                    NormalisedPoint(0.5f, 0.80f),
+                    NormalisedPoint(1f, 0.80f),
+                ),
+                lower = listOf(
                     NormalisedPoint(0f, 0.55f),   // rising support
                     NormalisedPoint(0.5f, 0.30f),
                     NormalisedPoint(1f, 0.10f),
-                    NormalisedPoint(0f, 0.80f),   // flat resistance
-                    NormalisedPoint(1f, 0.80f),
-                ),
-                closed = false,
-                roleLabels = listOf(
-                    "Rising support",
-                    "Rising support",
-                    "Rising support",
-                    "Flat resistance",
-                    "Flat resistance",
                 ),
             ),
             glossary = GlossaryEntry(
@@ -377,21 +396,19 @@ internal object PatternCatalogData {
             detectionStatus = DETECTED,
             minBars = 15,
             shapeSummary = "A flat floor with falling highs, pressed against support.",
-            shape = PatternShape.Polyline(
-                points = listOf(
-                    NormalisedPoint(0f, 0.25f),   // falling resistance
-                    NormalisedPoint(0.5f, 0.50f),
-                    NormalisedPoint(1f, 0.70f),
-                    NormalisedPoint(0f, 0.20f),   // flat support
-                    NormalisedPoint(1f, 0.20f),
+            // The exact vertical mirror of the ascending triangle: every level is 1 − y and the
+            // boundaries swap. So its flat 0.80 resistance becomes a flat 0.20 support, and its
+            // rising 0.55 → 0.10 support becomes a falling 0.45 → 0.90 resistance.
+            shape = PatternShape.Boundaries(
+                upper = listOf(
+                    NormalisedPoint(0f, 0.45f),   // falling resistance
+                    NormalisedPoint(0.5f, 0.70f),
+                    NormalisedPoint(1f, 0.90f),
                 ),
-                closed = false,
-                roleLabels = listOf(
-                    "Falling resistance",
-                    "Falling resistance",
-                    "Falling resistance",
-                    "Flat support",
-                    "Flat support",
+                lower = listOf(
+                    NormalisedPoint(0f, 0.20f),   // flat support
+                    NormalisedPoint(0.5f, 0.20f),
+                    NormalisedPoint(1f, 0.20f),
                 ),
             ),
             glossary = GlossaryEntry(
@@ -410,23 +427,29 @@ internal object PatternCatalogData {
             detectionStatus = DETECTED,
             minBars = 10,
             shapeSummary = "A near-vertical pole, then a small downward-sloping channel.",
-            shape = PatternShape.Polyline(
-                points = listOf(
-                    NormalisedPoint(0.05f, 0.10f), // the pole: sharp rise
-                    NormalisedPoint(0.28f, 0.78f),
-                    NormalisedPoint(0.35f, 0.82f), // flag upper boundary, gently falling
-                    NormalisedPoint(0.95f, 0.60f),
-                    NormalisedPoint(0.35f, 0.66f), // flag lower boundary, parallel
-                    NormalisedPoint(0.95f, 0.44f),
-                ),
-                closed = false,
-                roleLabels = listOf(
-                    "Pole base",
-                    "Pole top",
-                    "Flag upper",
-                    "Flag upper",
-                    "Flag lower",
-                    "Flag lower",
+            // Pole and channel are separate shapes. Joining them into one point list would draw a
+            // line from the pole's top to the flag's first touch — not part of the pattern, but it
+            // would look plausible, which is worse than drawing nothing.
+            shape = PatternShape.Composite(
+                parts = listOf(
+                    PatternShape.Polyline(
+                        points = listOf(
+                            NormalisedPoint(0.05f, 0.10f), // the pole: sharp rise
+                            NormalisedPoint(0.28f, 0.78f),
+                        ),
+                        closed = false,
+                        roleLabels = listOf("Pole base", "Pole top"),
+                    ),
+                    PatternShape.Boundaries(
+                        upper = listOf(
+                            NormalisedPoint(0.35f, 0.82f), // gently falling
+                            NormalisedPoint(0.95f, 0.60f),
+                        ),
+                        lower = listOf(
+                            NormalisedPoint(0.35f, 0.66f), // parallel
+                            NormalisedPoint(0.95f, 0.44f),
+                        ),
+                    ),
                 ),
             ),
             glossary = GlossaryEntry(
@@ -447,23 +470,29 @@ internal object PatternCatalogData {
             detectionStatus = DETECTED,
             minBars = 10,
             shapeSummary = "A near-vertical drop, then a small upward-sloping channel.",
-            shape = PatternShape.Polyline(
-                points = listOf(
-                    NormalisedPoint(0.05f, 0.90f), // the pole: sharp fall
-                    NormalisedPoint(0.28f, 0.22f),
-                    NormalisedPoint(0.35f, 0.18f), // flag upper boundary, gently rising
-                    NormalisedPoint(0.95f, 0.40f),
-                    NormalisedPoint(0.35f, 0.34f), // flag lower boundary, parallel
-                    NormalisedPoint(0.95f, 0.56f),
-                ),
-                closed = false,
-                roleLabels = listOf(
-                    "Pole base",
-                    "Pole top",
-                    "Flag upper",
-                    "Flag upper",
-                    "Flag lower",
-                    "Flag lower",
+            // The exact mirror of the bull flag. Its pole (0.10 → 0.78) reflects to 0.90 → 0.22,
+            // and the channel's two lines swap: the bull flag's upper 0.82 → 0.60 becomes this
+            // flag's lower 0.18 → 0.40, and its lower 0.66 → 0.44 becomes the upper 0.34 → 0.56.
+            shape = PatternShape.Composite(
+                parts = listOf(
+                    PatternShape.Polyline(
+                        points = listOf(
+                            NormalisedPoint(0.05f, 0.90f), // the pole: sharp fall
+                            NormalisedPoint(0.28f, 0.22f),
+                        ),
+                        closed = false,
+                        roleLabels = listOf("Pole base", "Pole top"),
+                    ),
+                    PatternShape.Boundaries(
+                        upper = listOf(
+                            NormalisedPoint(0.35f, 0.34f), // gently rising
+                            NormalisedPoint(0.95f, 0.56f),
+                        ),
+                        lower = listOf(
+                            NormalisedPoint(0.35f, 0.18f), // parallel
+                            NormalisedPoint(0.95f, 0.40f),
+                        ),
+                    ),
                 ),
             ),
             glossary = GlossaryEntry(

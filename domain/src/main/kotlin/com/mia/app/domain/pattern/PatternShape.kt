@@ -75,6 +75,50 @@ sealed interface PatternShape {
     }
 
     /**
+     * Two independent boundary lines, which is what a triangle, rectangle, wedge or flag actually
+     * is.
+     *
+     * Added after the first draft modelled an ascending triangle as a single point list
+     * `[(0,.55), (.5,.30), (1,.10), (0,.80), (1,.80)]` — support followed by resistance. That
+     * produced **non-monotonic x** (`0, 0.5, 1, 0, 1`), and since the draw pass joins points in
+     * list order it would have rendered a zigzag that leaps back to the left edge. A pattern made
+     * of two lines needs two lines.
+     */
+    data class Boundaries(
+        val upper: List<NormalisedPoint>,
+        val lower: List<NormalisedPoint>,
+    ) : PatternShape {
+        init {
+            require(upper.size >= 2) { "an upper boundary needs at least two points" }
+            require(lower.size >= 2) { "a lower boundary needs at least two points" }
+            requireAscending(upper, "upper")
+            requireAscending(lower, "lower")
+        }
+
+        private fun requireAscending(points: List<NormalisedPoint>, which: String) {
+            for (i in 1 until points.size) {
+                require(points[i].x >= points[i - 1].x) {
+                    "the $which boundary must ascend in x: ${points.map { it.x }}"
+                }
+            }
+        }
+    }
+
+    /**
+     * Several shapes drawn as one figure.
+     *
+     * Exists for the flags, where the pole is a single stroke and the flag body is a separate
+     * channel. Listing them in one point list would have joined the pole's top to the flag's first
+     * touch with a line that is not part of the pattern — a shape that looks plausible and is wrong,
+     * which is worse than no shape.
+     */
+    data class Composite(val parts: List<PatternShape>) : PatternShape {
+        init {
+            require(parts.size >= 2) { "a composite needs at least two parts" }
+        }
+    }
+
+    /**
      * A candlestick pattern: a fixed sequence of bars, each described independently.
      *
      * @property bars oldest first, each `x` equal to its index over `bars.size`.

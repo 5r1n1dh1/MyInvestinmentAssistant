@@ -27,6 +27,10 @@ import com.mia.app.domain.model.Timeframe
  *   confused with recorded price (plan.md §6.6 item 2).
  * * The breakout trigger is [ChartState.breakoutTrigger], a third, separately-styled object
  *   (plan.md §6.6 item 3, decision D2: never conflated with either of the others).
+ * * [ChartState.patternOverlay] is a fourth, for the Explorer's idealised pattern shape. It is
+ *   dashed, labelled "idealised", and carries [PatternOverlay.isAnchoredToDetectedGeometry] so a
+ *   shape drawn at the detector's own pivots is never mistaken for one merely scaled to the window.
+ *   It is excluded from the price auto-range so candles cannot rescale when a pattern is selected.
  * * [ChartState.minimumBars] gates the whole series. Below it the chart says
  *   "not enough history" rather than drawing a short line that looks like a decline.
  */
@@ -39,6 +43,61 @@ enum class ChartStyle {
     /** A close-price line with a translucent area under it — weekly, where individual bars are noise. */
     LINE_AREA,
 }
+
+/**
+ * An idealised chart pattern drawn over the price series, already mapped into the chart's own
+ * coordinate space.
+ *
+ * ### Why this carries prices and not a normalised shape
+ * `PatternShape` in `:domain` is authored in `0..1` space so one shape serves every symbol and
+ * window. Mapping it to concrete prices is a **drawing** decision, so it happens here rather than in
+ * the domain — the domain has no chart, no window and no pixel scale, and giving it one would put
+ * layout knowledge into the module that is deliberately free of it.
+ *
+ * ### The honesty contract
+ * Every point here is a textbook shape, not measured data. It is drawn dashed and labelled
+ * "idealised" wherever it appears, and it is **excluded from the price auto-range** (see
+ * `ChartGeometry.addOverlays`, which deliberately ignores this field) so that turning a pattern on
+ * or off cannot rescale the candles and make the chart appear to move.
+ */
+data class PatternOverlay(
+    /** Polyline through the pattern's role points, in chart price units. */
+    val points: List<Pair<Float, Float>>,
+    /** Idealised candle bars, in chart price units. At most one of [points] and [bars] is non-empty. */
+    val bars: List<PatternOverlayBar> = emptyList(),
+    /** Per-point labels, oldest first. Empty when the shape carries no role names. */
+    val roleLabels: List<String> = emptyList(),
+    /**
+     * `true` when the shape is closed — a formation whose pattern is the enclosed region, rather
+     * than a continuation whose boundary lines are the pattern.
+     */
+    val closed: Boolean = false,
+    /**
+     * Whether the overlay sits where a detector actually found this pattern, or at the window's
+     * scale as an illustration.
+     *
+     * Drawn identically but reported differently, because the two are different claims: one says
+     * "here is the formation the app measured", the other "here is what the shape looks like".
+     */
+    val isAnchoredToDetectedGeometry: Boolean = false,
+) {
+    val isEmpty: Boolean get() = points.isEmpty() && bars.isEmpty()
+}
+
+/**
+ * One idealised candle of a [PatternOverlay], in chart price units.
+ *
+ * @property barIndex absolute bar index the candle sits at, so the draw pass places it on the same
+ *   slot a real candle of the series would occupy rather than at a proportional x.
+ */
+data class PatternOverlayBar(
+    val barIndex: Int,
+    val bodyHigh: Float,
+    val bodyLow: Float,
+    val wickHigh: Float,
+    val wickLow: Float,
+    val isBullish: Boolean,
+)
 
 /**
  * The visible slice of the series, in **absolute bar indices** (not screen offsets).
@@ -88,6 +147,18 @@ data class ChartState(
     val measuredMove: MeasuredMove? = null,
     val projectedPath: ProjectedPath? = null,
     val breakoutTrigger: BreakoutTrigger? = null,
+    /**
+     * An idealised pattern shape to draw over the series, or `null` for none.
+     *
+     * A fourth overlay, styled separately from [measuredMove], [projectedPath] and
+     * [breakoutTrigger] — decision D2's rule applies here too: an idealised teaching shape must
+     * never be confusable with anything the app measured.
+     *
+     * Deliberately **excluded from the price auto-range**: [ChartGeometry.addOverlays] does not
+     * read this field, so selecting a pattern cannot rescale the candles and make the chart appear
+     * to move under the reader.
+     */
+    val patternOverlay: PatternOverlay? = null,
     val minimumBars: Int = MatchScorePolicy.minBars(timeframe),
     val window: ChartWindow = ChartWindow.whole(candles.size),
     val style: ChartStyle = defaultStyleFor(timeframe),
@@ -143,6 +214,15 @@ object ChartDefaults {
 
     /** Candle body width as a fraction of the bar slot. */
     const val BODY_WIDTH_FRACTION = 0.62f
+
+    /**
+     * Fewest visible bars an idealised pattern shape can be placed over.
+     *
+     * Below this a two- or three-point shape would span a handful of pixels and read as a
+     * smudge rather than a pattern, so [PatternOverlayMapper] declines rather than drawing
+     * something the reader cannot see or interpret.
+     */
+    const val MIN_OVERLAY_BARS = 12
 
     /** Narrowest candle body, in px, so a doji is still visible when 400 bars are on screen. */
     const val MIN_BODY_PX = 1.5f

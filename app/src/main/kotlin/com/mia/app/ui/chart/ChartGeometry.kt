@@ -312,6 +312,14 @@ internal class ChartGeometry(
         /**
          * Expands the price range to include the overlay levels, but **only within a cap**.
          *
+         * ### [ChartState.patternOverlay] is deliberately not read here
+         * An idealised pattern shape is mapped into the *visible window's* price range, so it
+         * always lies inside it by construction. Including it in this widening would therefore
+         * change nothing — but relying on that invariant silently would make the chart's scale
+         * depend on whether a pattern happened to be selected, so it is stated instead: this
+         * method reads `measuredMove`, `projectedPath` and `breakoutTrigger`, and nothing else. A
+         * reader turning a pattern on must not see the candles rescale and think the data moved.
+         *
          * A projected level far outside the visible range would squash the candles into a
          * hairline, so the total range is limited to 2× the price-only range. Beyond that the
          * overlay is clipped out of the pane (the draw pass clips) and its exact value is still

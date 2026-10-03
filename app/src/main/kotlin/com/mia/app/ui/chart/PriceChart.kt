@@ -445,22 +445,108 @@ private fun DrawScope.drawOverlays(
         )
     }
 
-    val projected = state.projectedPath ?: return
-    if (projected.points.size < 2) return
-    var previousX = geometry.plotRight
-    var previousY = geometry.closeY[geometry.drawnCount - 1]
-    for (i in projected.points.indices) {
-        val x = projectedPathX(geometry, index = i, pointCount = projected.points.size)
-        val y = geometry.priceToY(projected.points[i].second.toFloat())
+    val projected = state.projectedPath
+    if (projected != null && projected.points.size >= 2) {
+        var previousX = geometry.plotRight
+        var previousY = geometry.closeY[geometry.drawnCount - 1]
+        for (i in projected.points.indices) {
+            val x = projectedPathX(geometry, index = i, pointCount = projected.points.size)
+            val y = geometry.priceToY(projected.points[i].second.toFloat())
+            drawLine(
+                color = marketColors.projectedPath,
+                start = Offset(previousX, previousY),
+                end = Offset(x, y),
+                strokeWidth = SERIES_WIDTH_PX,
+                pathEffect = PROJECTED_PATH_EFFECT,
+            )
+            previousX = x
+            previousY = y
+        }
+    }
+
+    // The idealised pattern shape, drawn last so it sits above the series rather than under it.
+    state.patternOverlay?.takeIf { !it.isEmpty }?.let { overlay ->
+        drawPatternOverlay(geometry = geometry, overlay = overlay, color = marketColors.projectedPath)
+    }
+}
+
+/**
+ * The idealised pattern shape from the Pattern Explorer.
+ *
+ * ### Drawn as a teaching aid, and never as data
+ * Dashed, at its own stroke weight, and in a colour taken from [MiaMarketColors.projectedPath] —
+ * already used for a dashed geometric projection, because both are the same kind of claim: an
+ * illustration of a shape, not recorded price.
+ *
+ * It is **excluded from the price auto-range** by construction (see `ChartGeometry.addOverlays`),
+ * so a reader selecting a pattern never sees the candles rescale. It is also clamped per-point:
+ * a point outside the visible window is skipped rather than clipped, so a shape cannot imply
+ * structure in bars that are not on screen.
+ */
+private fun DrawScope.drawPatternOverlay(
+    geometry: ChartGeometry,
+    overlay: PatternOverlay,
+    color: Color,
+) {
+    // Candle layouts first: their bars need slot geometry, which the polyline branch does not use.
+    for (bar in overlay.bars) {
+        val relative = bar.barIndex - geometry.window.startBar
+        if (relative < 0 || relative >= geometry.drawnCount) continue
+        val x = geometry.barX[relative]
+        val wickTop = geometry.priceToY(bar.wickHigh)
+        val wickBottom = geometry.priceToY(bar.wickLow)
+        if (!wickTop.isFinite() || !wickBottom.isFinite()) continue
+
         drawLine(
-            color = marketColors.projectedPath,
-            start = Offset(previousX, previousY),
-            end = Offset(x, y),
-            strokeWidth = SERIES_WIDTH_PX,
-            pathEffect = PROJECTED_PATH_EFFECT,
+            color = color,
+            start = Offset(x, wickTop),
+            end = Offset(x, wickBottom),
+            strokeWidth = max(geometry.barWidth * ChartDefaults.BODY_WIDTH_FRACTION * 0.2f, 1f),
+            pathEffect = PATTERN_OVERLAY_EFFECT,
         )
-        previousX = x
-        previousY = y
+        val bodyTop = geometry.priceToY(bar.bodyHigh)
+        val bodyBottom = geometry.priceToY(bar.bodyLow)
+        val top = minOf(bodyTop, bodyBottom)
+        drawLine(
+            color = color,
+            start = Offset(x, top),
+            end = Offset(x, top + max(kotlin.math.abs(bodyBottom - bodyTop), ChartDefaults.MIN_BODY_PX)),
+            strokeWidth = max(geometry.barWidth * ChartDefaults.BODY_WIDTH_FRACTION, ChartDefaults.MIN_BODY_PX),
+        )
+    }
+
+    val points = overlay.points
+    if (points.size < 2) return
+
+    val drawn = ArrayList<Offset>(points.size)
+    for ((barIndex, price) in points) {
+        val relative = barIndex.toInt() - geometry.window.startBar
+        // Skip rather than clamp: a point outside the window means the shape extends beyond what
+        // is drawn, and clamping would place it at the edge as though the pivot were there.
+        if (relative < 0 || relative >= geometry.drawnCount) continue
+        val y = geometry.priceToY(price)
+        if (!y.isFinite() || y < geometry.plotTop || y > geometry.plotBottom) continue
+        drawn += Offset(geometry.barX[relative], y)
+    }
+    if (drawn.size < 2) return
+
+    for (i in 0 until drawn.size - 1) {
+        drawLine(
+            color = color,
+            start = drawn[i],
+            end = drawn[i + 1],
+            strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
+            pathEffect = PATTERN_OVERLAY_EFFECT,
+        )
+    }
+    if (overlay.closed && drawn.size >= 3) {
+        drawLine(
+            color = color,
+            start = drawn[drawn.size - 1],
+            end = drawn[0],
+            strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
+            pathEffect = PATTERN_OVERLAY_EFFECT,
+        )
     }
 }
 
@@ -683,6 +769,24 @@ private fun chartDescription(state: ChartState): String {
 /** Dash patterns are file-scope constants so they are built once per process, not per frame. */
 private val MEASURED_MOVE_EFFECT: PathEffect = PathEffect.dashPathEffect(ChartDefaults.MEASURED_MOVE_DASH)
 private val PROJECTED_PATH_EFFECT: PathEffect = PathEffect.dashPathEffect(ChartDefaults.PROJECTED_PATH_DASH)
+
+/**
+ * Dash for the Explorer's idealised pattern shape.
+ *
+ * Deliberately the **same** dash as the projected path, not a new pattern: both are the same kind
+ * of claim — a geometric illustration rather than recorded price — and reusing the established
+ * dash means the reader learns one convention instead of two. A third dash pattern here would
+ * imply a distinction the app cannot actually make.
+ */
+private val PATTERN_OVERLAY_EFFECT: PathEffect = PROJECTED_PATH_EFFECT
+
+/**
+ * Stroke for the idealised shape.
+ *
+ * Heavier than [SERIES_WIDTH_PX] so it reads as an annotation *over* the data rather than as
+ * another price series — which is the whole honesty requirement of this overlay.
+ */
+private const val PATTERN_OVERLAY_WIDTH_PX = 3f
 private val TRIGGER_EFFECT: PathEffect = PathEffect.dashPathEffect(ChartDefaults.TRIGGER_DASH)
 
 private const val GRID_WIDTH_PX = 1f

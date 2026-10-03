@@ -170,6 +170,10 @@ class PatternCatalogTest {
     fun `candlestick patterns use candle layouts and chart patterns use polylines`() {
         // The reason PatternShape is sealed rather than a bare point list: forcing candles into a
         // polyline would drop the body and wick, which for a hammer *is* the pattern.
+        //
+        // Chart patterns have three legitimate representations, not one: a single line (double top,
+        // head & shoulders), two boundary lines (triangles), or a composite of a line and a
+        // boundary (the flags, whose pole is separate from their channel).
         for (spec in PatternCatalog.evaluated) {
             when (spec.family) {
                 PatternFamily.CANDLESTICK -> assertTrue(
@@ -178,8 +182,33 @@ class PatternCatalogTest {
                 )
 
                 else -> assertTrue(
-                    spec.shape is PatternShape.Polyline,
-                    "${spec.name} is a chart pattern but does not use a Polyline",
+                    spec.shape is PatternShape.Polyline ||
+                        spec.shape is PatternShape.Boundaries ||
+                        spec.shape is PatternShape.Composite,
+                    "${spec.name} is a chart pattern but uses " +
+                        "${spec.shape::class.simpleName}, which is not a line-based shape",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a candle layout is never used for a chart pattern and vice versa`() {
+        // The stronger form of the family check above: `CandleLayout` is only ever legal on a
+        // candlestick row, because rendering a chart pattern as bars would draw nonsense and
+        // rendering a candlestick as lines would erase its signal.
+        for (spec in PatternCatalog.all) {
+            if (spec.shape is PatternShape.CandleLayout) {
+                assertEquals(
+                    PatternFamily.CANDLESTICK,
+                    spec.family,
+                    "${spec.name} uses a CandleLayout but is not a candlestick pattern",
+                )
+            }
+            if (spec.family == PatternFamily.CANDLESTICK && spec.isEvaluated) {
+                assertTrue(
+                    spec.shape is PatternShape.CandleLayout,
+                    "${spec.name} is an evaluated candlestick but has no CandleLayout",
                 )
             }
         }
