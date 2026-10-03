@@ -264,12 +264,23 @@ class ScreenerGoldenFileTest {
     // ------------------------------------------------------------------------- health
 
     @Test
-    fun `every fixture parses all six sections ok`() {
+    fun `every fixture parses all seven sections ok`() {
+        // Seven, not the plan.md §3.3 six: `RatiosCardParser` now reads the page's `ratios` card,
+        // so it is accounted for like any other section. Asserted in full because a section that
+        // quietly stops being reported is the plan.md §12 failure this whole accounting exists
+        // to prevent.
+        assertEquals(
+            listOf(
+                "top-ratios", "quarters", "profit-loss", "balance-sheet", "cash-flow",
+                "ratios", "shareholding",
+            ),
+            FundamentalsParserFacade.SECTION_IDS,
+        )
         for (symbol in ScreenerFixtures.symbols) {
             val result = ScreenerFixtures.parse(symbol)
             assertTrue(result.health.ok, "$symbol: ${result.health.notes}")
             assertEquals(
-                listOf("top-ratios", "quarters", "profit-loss", "balance-sheet", "cash-flow", "shareholding"),
+                FundamentalsParserFacade.SECTION_IDS,
                 result.health.sectionsFound,
                 symbol,
             )

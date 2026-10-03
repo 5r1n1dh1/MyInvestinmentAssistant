@@ -61,6 +61,48 @@ will promote it to `domain/model`.
 - `domain/src/test/resources/fixtures/eod_history.json` — multi-month daily OHLCV for ~40 large
   caps assembled from the NSE archive (schema documented in `docs/DATA-NOTES.md`)
 
+## The detector ↔ scorer seam (locked by the orchestrator — do not redesign)
+
+Detectors and the scorer are built by different agents, so the API between them is fixed here.
+
+**A detector does NOT compute a score.** It emits *weighted measures*; the scorer turns
+measures into a `ScoreBreakdown`. This is what keeps all 12 patterns comparable and makes
+the P7 discrimination gate meaningful.
+
+```kotlin
+// com.mia.app.domain.pattern
+data class Measure(val name: String, val value: Double, val weight: Int, val band: MeasureBand, val factor: ScoreFactor)
+enum class ScoreFactor { GEOMETRY, STRUCTURE, CONFIRMATION, CONTEXT }   // 40 / 25 / 20 / 15
+sealed class MeasureBand {                       // normalisation primitives (scoring-spec.md §4)
+    data class Linear(val invert: Boolean, val lo: Double, val hi: Double) : MeasureBand()
+    data class Decay(val halfLife: Double) : MeasureBand()               // penalty per unit above target
+    data class Exact(val target: Double, val tolerance: Double) : MeasureBand()
+    data class RatioEqual(val target: Double, val tolerance: Double) : MeasureBand()
+}
+object FactorScorer {
+    fun geometry(measures: List<Measure>): Int      // 0..100
+    fun structure(measures: List<Measure>): Int
+    fun confirmation(measures: List<Measure>): Int
+    fun context(measures: List<Measure>): Int
+    fun combine(breakdown: ScoreBreakdown, penalties: List<Penalty>): ScoreBreakdown
+}
+data class Penalty(val name: String, val points: Int, val reason: String)   // capped, never below 0
+```
+
+Rules: `weight` is relative within its factor; a detector MUST emit measures for **all four**
+factors or the engine treats the missing factor as 0 with a recorded reason (never silently
+100). `Match.score` always comes from `ScoreBreakdown.total` — never computed ad hoc.
+
+Other locked pieces of the seam:
+- `ZigzagPivots.compute(candles, timeframe, params): PivotSet` is computed **once** and shared
+  by all detectors (plan.md §6.2 — the single biggest performance win).
+- Detectors return `List<Match>` via a helper `matchOf(detector, candles, pivots, measures,
+  measuredMove, penalties)` so `Match` construction is uniform.
+- Regime gate: `regimeAligned` is **pattern-direction aware** (orchestrator decision, plan.md
+  §6.4 + spec DD-4): TRENDING_UP/UP for continuation-up, TRENDING_DOWN/DOWN for
+  continuation-down, and `RANGING` **also counts as aligned** for reversal patterns, because
+  range-boundary reversals are the case reversals exist for. Never aligned: `UNKNOWN`.
+
 ## Non-negotiable product rules (plan.md §1.4, §6.1)
 
 1. **No advice language.** No "buy", "sell", "target price", "guaranteed", "will rise",

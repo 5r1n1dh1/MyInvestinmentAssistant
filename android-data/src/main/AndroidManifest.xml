@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  android-data/src/main/AndroidManifest.xml
+
+  Two permissions, both strictly necessary and neither of them a user prompt:
+
+  * INTERNET      — OkHttp. The bhavcopy, the legacy delivery file, Yahoo history and the
+                    screener.in page are the app's only data sources (plan.md §3).
+  * ACCESS_NETWORK_STATE — WorkManager's NetworkType.CONNECTED constraint. Without it the
+                    constraint cannot be evaluated and the constraint is silently ignored,
+                    which would turn the 19:00 EOD refresh into a retry storm on a device
+                    that is offline.
+
+  POST_NOTIFICATIONS is deliberately NOT requested here: plan.md §1.4 keeps the app
+  permission-light in v1 and the notification dispatcher degrades to a no-op when the user
+  has not granted it. That decision belongs to `:app`, which owns the runtime prompt.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

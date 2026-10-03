@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The one and only platform theme, and it does nothing but give the window a background and no
+  action bar. Every colour, typeface and shape the user sees comes from Compose
+  (`com.mia.app.ui.theme.MiaTheme`).
+
+  `android:Theme.Material.Light.NoActionBar` is used rather than a DayNight variant because
+  DayNight platform themes only exist from API 29 and `minSdk` is 26 — and the dark-mode window
+  background is handled by `values-night/colors.xml` instead.
+
+  `windowLightStatusBar` / `windowLightNavigationBar` are left alone: `MainActivity` calls
+  `enableEdgeToEdge()` and AndroidX recomputes the system-bar icon appearance for the Compose
+  theme, which is the supported way to do it and avoids a second source of truth.
+-->
+<resources>
+    <style name="Theme.MyInvestinmentAssistant" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_light</item>
+    </style>
+</resources>

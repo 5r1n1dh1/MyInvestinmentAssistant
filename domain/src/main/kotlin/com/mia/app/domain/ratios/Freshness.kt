@@ -138,7 +138,7 @@ object FreshnessPolicy {
                 asOf = null,
                 today = today,
                 ageDays = null,
-                note = "no ${kind.label} have been fetched for this symbol yet",
+                note = "no ${kind.label} data has been fetched for this symbol yet",
             )
         }
         val age = ChronoUnit.DAYS.between(asOf, today)
@@ -195,7 +195,7 @@ object FreshnessPolicy {
 
     fun describe(freshness: Freshness): String {
         val asOf = freshness.asOf
-            ?: return "no ${freshness.kind.label} have been fetched for this symbol yet"
+            ?: return "no ${freshness.kind.label} data has been fetched for this symbol yet"
         val age = freshness.ageDays ?: 0L
         if (age < 0) {
             return "as of ${format(asOf)} (this date is after today, ${format(freshness.today)})"
@@ -232,25 +232,6 @@ object FreshnessPolicy {
         else -> parsed
     }
 
-    /**
-     * [Ratios] with [Confidence.STALE] applied when the page is older than
-     * [FreshnessKind.FUNDAMENTALS_SNAPSHOT] allows.
-     *
-     * The `Ratios` snapshot has no way to say "these figures are nine months old" — [Confidence]
-     * is its only provenance channel — so this is the single place that fact can be carried into
-     * the UI, the share-image and the red-flag engine. It returns `this` unchanged when the
-     * snapshot is fresh, so it is cheap and safe to call on every render.
-     */
-    fun Ratios.withFreshness(today: LocalDate = LocalDate.now(MARKET_ZONE)): Ratios {
-        val confidence = confidenceFor(
-            asOf = asOf,
-            today = today,
-            kind = FreshnessKind.FUNDAMENTALS_SNAPSHOT,
-            parsed = confidence,
-        )
-        return if (confidence == this.confidence) this else copy(confidence = confidence)
-    }
-
     /** `dd MMM yyyy`, e.g. `02 Oct 2026`. Locale-independent. */
     fun format(date: LocalDate): String {
         val month = MONTH_ABBREVIATIONS[date.monthValue - 1]
@@ -260,4 +241,34 @@ object FreshnessPolicy {
     private val MONTH_ABBREVIATIONS = listOf(
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     )
+}
+
+/**
+ * [Ratios] with [Confidence.STALE] applied when the page is older than
+ * [FreshnessKind.FUNDAMENTALS_SNAPSHOT]'s window.
+ *
+ * A `Ratios` snapshot has no way to say "these figures are nine months old" — [Confidence] is its
+ * only provenance channel — so this is the single place that fact can reach the UI, the
+ * share-image and the red-flag engine. It returns `this` unchanged when the snapshot is fresh,
+ * so it is cheap and safe to call on every render:
+ *
+ * ```kotlin
+ * val shown = snapshot.ratios.withFreshness()          // market clock by default
+ * val tested = snapshot.ratios.withFreshness(today)    // injected clock
+ * ```
+ *
+ * Declared at file scope rather than inside [FreshnessPolicy] because a Kotlin member extension
+ * cannot be called without a `with(FreshnessPolicy)` scope, and every caller in this app would
+ * otherwise have to write one.
+ */
+fun Ratios.withFreshness(
+    today: LocalDate = LocalDate.now(FreshnessPolicy.MARKET_ZONE),
+): Ratios {
+    val resolved = FreshnessPolicy.confidenceFor(
+        asOf = asOf,
+        today = today,
+        kind = FreshnessKind.FUNDAMENTALS_SNAPSHOT,
+        parsed = confidence,
+    )
+    return if (resolved == confidence) this else copy(confidence = resolved)
 }

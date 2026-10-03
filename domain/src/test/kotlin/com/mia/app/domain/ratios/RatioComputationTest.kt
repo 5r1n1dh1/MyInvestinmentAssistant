@@ -130,16 +130,18 @@ class RatioComputationTest {
 
     @Test
     fun `reliance three year revenue cagr matches the published figure`() {
+        // Sales 876,396 (Mar 2023) → 1,055,780 (Mar 2026).
         val result = RatioComputation.revenueCagr(relianceDerived(), years = 3)
-        // 2023 → 2026: 963,889 → 1,055,780.
         assertRatioClose(6.4039330737, result.value, 1e-8)
+        assertTrue(result.note!!.contains("2023"), result.note!!)
+        assertTrue(result.note!!.contains("2026"), result.note!!)
     }
 
     @Test
     fun `revenue growth is the year on year change in percent`() {
-        // 2025 → 2026: 1,063,009 → 1,055,780.
+        // Sales 962,820 (Mar 2025) → 1,055,780 (Mar 2026).
         val result = RatioComputation.revenueGrowth(relianceDerived())
-        assertRatioClose(9.6549718535, result.value, 1e-8, "expected value from the RELIANCE fixture")
+        assertRatioClose(9.6549718535, result.value, 1e-8)
     }
 
     /**
@@ -197,7 +199,9 @@ class RatioComputationTest {
         // FCF 70,023; PAT 95,754.
         val result = RatioComputation.fcfToPat(relianceDerived())
         assertRatioClose(70_023.0 / 95_754.0, result.value)
-        assertRatioClose(0.731350, result.value, 1e-6)
+        assertEquals(0.7312801554, result.value!!, 1e-9)
+        assertTrue(result.note!!.contains("70023"), result.note!!)
+        assertTrue(result.note!!.contains("95754"), result.note!!)
         assertEquals(70_023.0, RatioComputation.freeCashFlow(relianceDerived()).value)
         assertEquals(95_754.0, RatioComputation.pat(relianceDerived()).value)
     }
@@ -290,15 +294,17 @@ class RatioComputationTest {
             listOf(relianceShareholdingRow),
         )
         val trend = assertNotNull(result.value)
-        assertEquals(50.48, trend.latestPercent)
+        assertEquals(50.48, trend.latestPercent, "Jun 2026, the column RatioMapper publishes")
         assertEquals("Jun 2026", trend.latestPeriod)
-        assertEquals(50.47, trend.previousPercent)
+        assertEquals(50.07, trend.previousPercent, "Jun 2025, not the adjacent Mar 2026 column")
         assertEquals("Jun 2025", trend.previousPeriod)
         assertEquals(PromoterTrend.Comparison.SAME_PERIOD_PRIOR_YEAR, trend.comparison)
-        // 50.48 − 50.47, in percentage points, not a percent change.
-        assertRatioClose(0.01, trend.changePercentagePoints, 1e-9)
+        // 50.48 − 50.07, in percentage points, not a percent change. The adjacent-column
+        // comparison would have said +0.48 and been wrong about the period.
+        assertRatioClose(0.41, trend.changePercentagePoints, 1e-9)
         assertTrue(trend.isRising)
         assertTrue(result.note!!.contains("Jun 2026"), result.note!!)
+        assertEquals(50.48, RatioComputation.promoterHolding(relianceShareholdingPeriods, listOf(relianceShareholdingRow)).value)
     }
 
     @Test
@@ -353,34 +359,47 @@ class RatioComputationTest {
             listOf(relianceOpmRow),
         )
         val trend = assertNotNull(result.value)
-        // Window is Mar 2022..Mar 2026 (the TTM column is not a fiscal year), five points.
-        assertEquals(5, trend.points.size)
+        // Window is Mar 2021..Mar 2026 (the TTM column is not a fiscal year): six observations,
+        // five elapsed years.
+        assertEquals(6, trend.points.size)
         assertEquals(5, trend.yearsSpanned)
-        assertEquals(2022, trend.oldest!!.year)
+        assertEquals(2021, trend.oldest!!.year)
         assertEquals(2026, trend.latest!!.year)
-        assertEquals(11.55, trend.oldest!!.value)
+        assertEquals(17.0, trend.oldest!!.value)
         assertEquals(17.0, trend.latest!!.value)
-        assertRatioClose(5.45, trend.changeAbsolute, 1e-9, "percentage points")
-        assertEquals(Direction.UP, trend.direction)
-        assertRatioClose(1.09, trend.changePerYear, 1e-9)
+        // The published series is 17, 16, 16, 18, 17, 17 — the five-year change is exactly zero.
+        assertEquals(0.0, trend.changeAbsolute)
+        assertEquals(0.0, trend.changePerYear)
+        assertNull(trend.direction, "flat is neither up nor down")
+        assertTrue(result.note!!.contains("17"), result.note!!)
     }
 
     @Test
     fun `an operating margin trend with a missing year reports the years that exist`() {
-        val periods = listOf("Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "Mar 2026")
-        val row = AnnualRow("OPM %", listOf(10.0, 12.0, null, 16.0, 18.0))
-        val trend = assertNotNull(RatioComputation.operatingMarginTrend(periods, listOf(row)).value)
-        assertEquals(listOf(2022, 2023, 2025, 2026), trend.points.map { it.year })
-        assertEquals(4, trend.yearsSpanned)
-        assertRatioClose(2.0, trend.changePerYear, 1e-9, "8 points over 4 years")
-        assertTrue(result_note_mentions(trend))
+        val periods = listOf("Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "Mar 2026")
+        val row = AnnualRow("OPM %", listOf(10.0, 12.0, null, 16.0, 18.0, 20.0))
+        val result = RatioComputation.operatingMarginTrend(periods, listOf(row))
+        val trend = assertNotNull(result.value)
+        assertEquals(listOf(2021, 2022, 2024, 2025, 2026), trend.points.map { it.year })
+        assertEquals(5, trend.yearsSpanned, "the elapsed span is still five years")
+        assertEquals(2.0, trend.changePerYear, "10 points spread over the 5 years that exist")
+        assertTrue(result.note!!.contains("2023"), result.note!!)
+        assertTrue(result.note!!.contains("skipped"), result.note!!)
     }
 
-    private fun result_note_mentions(trend: Trend): Boolean =
-        RatioComputation.operatingMarginTrend(
-            listOf("Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "Mar 2026"),
-            listOf(AnnualRow("OPM %", listOf(10.0, 12.0, null, 16.0, 18.0))),
-        ).note!!.contains("2024")
+    @Test
+    fun `a synthetic operating margin trend of five years rises by two points a year`() {
+        val periods = listOf("Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "Mar 2026")
+        val row = AnnualRow("OPM %", listOf(11.0, 12.0, 13.0, 14.0, 15.0, 16.0))
+        val trend = assertNotNull(RatioComputation.operatingMarginTrend(periods, listOf(row)).value)
+        assertEquals(5.0, trend.changeAbsolute)
+        assertEquals(1.0, trend.changePerYear)
+        assertEquals(Direction.UP, trend.direction)
+        assertEquals(45.4545454545, trend.changePercent!!, 1e-9, "16/11 is a 45.45% relative rise")
+        assertEquals(5.0, trend.changeAbsolute, "and +5 percentage points in absolute terms")
+        assertTrue(trend.isRising)
+        assertTrue(trend.changeAbsolute!! > 0.0)
+    }
 
     @Test
     fun `a bank publishes no operating profit row so the trend explains why`() {
@@ -399,12 +418,15 @@ class RatioComputationTest {
 
         // With a series it behaves exactly like the operating margin trend.
         val populated = RatioComputation.grossMarginTrend(
-            mapOf(2022 to 40.0, 2023 to 42.0, 2024 to 41.0, 2025 to 45.0, 2026 to 47.0),
+            mapOf(2021 to 40.0, 2022 to 42.0, 2023 to 41.0, 2025 to 45.0, 2026 to 47.0),
         )
         val trend = assertNotNull(populated.value)
+        assertEquals(5, trend.points.size)
+        assertEquals(5, trend.yearsSpanned)
         assertEquals(47.0, trend.latest!!.value)
         assertEquals(Direction.UP, trend.direction)
-        assertRatioClose(7.0, trend.changeAbsolute, 1e-9)
+        assertEquals(7.0, trend.changeAbsolute)
+        assertTrue(populated.note!!.contains("2024"), populated.note!!)
     }
 
     @Test
@@ -426,12 +448,15 @@ class RatioComputationTest {
 
     @Test
     fun `dividend payout is read from the published row`() {
-        val periods = listOf("Mar 2025", "Mar 2026")
-        val rows = listOf(AnnualRow("Dividend Payout %", listOf(19.42, 0.0)))
-        assertEquals(19.42, RatioComputation.dividendPayout(periods, rows, 2025).value)
+        // RELIANCE publishes 11% (Mar 2024) and 10% (Mar 2025); the TTM cell is empty.
+        val periods = listOf("Mar 2024", "Mar 2025", "Mar 2026", "TTM")
+        val rows = listOf(AnnualRow("Dividend Payout %", listOf(11.0, 10.0, null, null)))
+        assertEquals(10.0, RatioComputation.dividendPayout(periods, rows, 2025).value)
         // A published zero is data, not a missing value.
-        assertEquals(0.0, RatioComputation.dividendPayout(periods, rows, 2026).value)
+        assertEquals(0.0, RatioComputation.dividendPayout(periods, listOf(AnnualRow("Dividend Payout %", listOf(11.0, 0.0, null, null))), 2025).value)
         assertTrue(RatioComputation.dividendPayout(periods, rows, 2020).note!!.contains("2020"))
+        // The empty TTM column is not a fiscal year, so it is never the latest period.
+        assertEquals(10.0, RatioComputation.dividendPayout(periods, rows).value)
     }
 
     // ------------------------------------------------------------------ all-null input

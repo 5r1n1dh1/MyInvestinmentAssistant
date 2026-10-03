@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode window background. See values/colors.xml for why this exists. -->
+    <color name="window_background_light">#FF121316</color>
+    <color name="window_background_dark">#FF121316</color>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the launcher label lives in a string resource, because AndroidManifest.xml needs a
+  literal reference to it. Everything else the user reads is a Kotlin constant:
+  the regulated copy lives in `:domain`'s `Disclosure` / `MatchScoreLabels` (plan.md §1.4)
+  and the neutral UI copy lives in `com.mia.app.ui.common.UiStrings`. A single registry keeps
+  "where does this sentence come from" answerable, and it keeps the compliance scan in
+  `AdviceLanguage` over one small, reviewable set of literals.
+
+  plan.md §1.4 / docs/CONTRACTS.md: this file is walked by the advice-language guard, so it
+  must never contain a recommendation.
+-->
+<resources>
+    <!-- Mirrors Disclosure.APP_NAME. Kept in sync by hand; there is exactly one of each. -->
+    <string name="app_name">My Investment Assistant</string>
+</resources>

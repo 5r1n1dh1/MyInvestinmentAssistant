@@ -204,8 +204,8 @@ object RatioComputation {
         suppressedBy(sector, RatioId.DEBT_TO_EQUITY)?.let { return it }
         val at = sharedYear(year, derived.debtByYear, derived.equityByYear)
             ?: return missing(
-                "no fiscal year publishes both 'Borrowings' and 'Equity Capital + Reserves', " +
-                    "which are the two inputs of debt/equity",
+                "no fiscal year publishes both 'Borrowings' and 'Equity Capital + Reserves'" +
+                    yearHint(year) + ", which are the two inputs of debt/equity",
             )
         val debt = derived.debtByYear.getValue(at)
         val equity = derived.equityByYear.getValue(at)
@@ -238,7 +238,7 @@ object RatioComputation {
         val at = sharedYear(year, derived.ebitByYear, derived.interestByYear)
             ?: return missing(
                 "no fiscal year publishes both an EBIT (operating profit + depreciation) and an " +
-                    "interest expense line",
+                    "interest expense line" + yearHint(year),
             )
         val ebit = derived.ebitByYear.getValue(at)
         val interest = derived.interestByYear.getValue(at)
@@ -276,13 +276,14 @@ object RatioComputation {
      * Compound annual growth of revenue over [years] fiscal years, in percent.
      *
      * ### Missing years are skipped, not assumed away
-     * The window is `[latest - years, latest]`. The endpoints are the **latest year with data
-     * inside the window** and the **oldest year with data inside it**, and the exponent is the
-     * number of fiscal years those endpoints actually span — not [years]. So for
-     * `{2018: 100, 2020: 121, 2021: 133.1}` over a 3-year window the answer is
-     * `(133.1/100)^(1/3) - 1 = 10.00%`: 2019 is simply absent and the three elapsed years are
-     * still three. Dividing by `years` while using two endpoints two years apart would
-     * understate growth by a third; treating the gap as continuity would fabricate a 2019.
+     * The window is `[latest - years, latest]` — a three-year CAGR uses endpoints three years
+     * apart, which is what makes the exponent `1/3`. The endpoints are the **latest year with
+     * data inside the window** and the **oldest year with data inside it**, and the exponent is
+     * the number of fiscal years those endpoints actually span. So for
+     * `{2018: 100, 2020: 121, 2021: 133.1}` the answer is `(133.1/100)^(1/3) - 1 = 10.00%`:
+     * 2019 is simply absent and the three elapsed years are still three. Dividing by `years`
+     * while using endpoints two years apart would overstate growth; treating the gap as
+     * continuity would fabricate a 2019.
      *
      * Requires at least two endpoints and both strictly positive — a revenue series that
      * starts at or below zero has no growth rate.
@@ -297,13 +298,14 @@ object RatioComputation {
         if (revenue.isEmpty()) return missing("this page publishes no revenue row")
         val latest = latestYear ?: revenue.keys.maxOrNull()
             ?: return missing("this page publishes no revenue row")
-        val window = revenue.filterKeys { it in (latest - years + 1)..latest }
-        if (window.isEmpty()) return missing("no revenue published in the $latest-$years window")
+        val window = revenue.filterKeys { it in (latest - years)..latest }
+        if (window.isEmpty()) {
+            return missing("no revenue published in the $years years ending $latest")
+        }
         val start = window.keys.minOrNull() ?: return missing("no revenue published")
         val end = window.keys.maxOrNull() ?: return missing("no revenue published")
         if (end <= start) {
-            return Computation(
-                null,
+            return missing(
                 "only ${end - start + 1} year(s) of revenue in the $years-year window, so a " +
                     "$years-year growth rate cannot be computed",
             )
@@ -621,11 +623,12 @@ object RatioComputation {
     /**
      * The [years]-year trend of any annual series, with gaps dropped.
      *
-     * The window is the [years] fiscal years ending at the latest point (`latest - years + 1`
-     * through `latest`), so a five-year trend is five points. Years absent from the series are
-     * skipped rather than interpolated: [Trend.yearsSpanned] and [Trend.changePerYear] both
-     * describe the window that actually exists, so a series missing its middle year reports a
-     * slower annual change instead of a wrong total.
+     * The window is the [years] fiscal years ending at the latest point (`latest - years`
+     * through `latest`), so a five-year trend is six observations and [Trend.yearsSpanned] is
+     * five — the same span convention as [revenueCagr], so a trend and a CAGR describe the same
+     * period. Years absent from the series are skipped rather than interpolated:
+     * [Trend.changePerYear] then describes the window that actually exists, so a series missing
+     * its middle year reports a slower annual change instead of a wrong total.
      *
      * Needs two points to say anything. A single point is a value, not a trend, so the result
      * is a null with the count named.
@@ -639,7 +642,7 @@ object RatioComputation {
         val usable = points.filter { it.value.isFinite() }.sortedBy { it.year }
         if (usable.isEmpty()) return missing("no $label data to plot")
         val latest = usable.last().year
-        val window = usable.filter { it.year in (latest - years + 1)..latest }
+        val window = usable.filter { it.year in (latest - years)..latest }
         if (window.size < 2) {
             return Computation(
                 null,
@@ -711,6 +714,9 @@ object RatioComputation {
     /** Latest fiscal year any of [labels] denotes; `null` when none of them parses. */
     private fun latestYearOf(labels: Collection<String>): Int? =
         labels.mapNotNull { PeriodColumn.of(it).year }.maxOrNull()
+
+    /** `", including $year"` when a specific year was asked for, so the message names it. */
+    private fun yearHint(year: Int?): String = if (year == null) "" else ", including $year"
 
     /** Latest (or requested) year present in **every** map, so a ratio never mixes two years. */
     private fun sharedYear(year: Int?, vararg maps: Map<Int, Double>): Int? {

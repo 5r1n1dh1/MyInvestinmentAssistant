@@ -1,0 +1,87 @@
+{
+  "_comment": [
+    "HAND-WRITTEN Yahoo Finance v8 chart fixture. NOT captured live.",
+    "Yahoo is unreachable from the build machine: https://query1.finance.yahoo.com/v1/test/getcrumb",
+    "answers 429 Too Many Requests even after the fc.yahoo.com cookie handshake (verified",
+    "2026-10-03). This document therefore reproduces the real v8 schema from plan.md §3.2 and",
+    "the parser's contract, with realistic values: 9 timestamps at 03:45 UTC (= 09:15 IST, the",
+    "NSE session open Yahoo stamps); three rows carry a null OHLC member (index 2 null open,",
+    "index 3 null high, index 8 null close) and must be dropped rather than zero-filled;",
+    "an adjclose block that differs on every row; and one events.splits entry.",
+    "The RELIANCE figures for 2026-10-01 (close 1167.70 / prev close 1187.00) are the real",
+    "bhavcopy values from fixtures/bhavcopy_20261001.csv so the two sources can be compared."
+  ],
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "INR",
+          "symbol": "RELIANCE.NS",
+          "exchangeName": "NS",
+          "fullExchangeName": "NSE",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 1015339000,
+          "regularMarketTime": 1790912700,
+          "hasPrePostMarketData": false,
+          "gmtoffset": 19800,
+          "timezone": "IST",
+          "exchangeTimezoneName": "Asia/Calcutta",
+          "regularMarketPrice": 1167.7,
+          "chartPreviousClose": 1187.0,
+          "previousClose": 1187.0,
+          "scale": -3,
+          "priceHint": 2,
+          "currentTradingPeriod": {
+            "pre": { "timezone": "IST", "start": 1789003500, "end": 1789006800, "gmtoffset": 19800 },
+            "regular": { "timezone": "IST", "start": 1790912700, "end": 1790935800, "gmtoffset": 19800 },
+            "post": { "timezone": "IST", "start": 1790935800, "end": 1790942700, "gmtoffset": 19800 }
+          },
+          "dataGranularity": "1d",
+          "range": "2y",
+          "validRanges": ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
+        },
+        "timestamp": [
+          1790048700,
+          1790135100,
+          1790221500,
+          1790307900,
+          1790567100,
+          1790653500,
+          1790739900,
+          1790826300,
+          1790912700
+        ],
+        "events": {
+          "dividends": {
+            "1790135100": { "amount": 6.0, "date": 1790135100 }
+          },
+          "splits": {
+            "1781049600": {
+              "date": 1781049600,
+              "numerator": 1,
+              "denominator": 2,
+              "splitRatio": "1:2"
+            }
+          }
+        },
+        "indicators": {
+          "quote": [
+            {
+              "open": [1188.00, 1185.40, null, 1181.05, 1176.80, 1179.30, 1172.15, 1180.10, 1185.00],
+              "high": [1192.60, 1189.95, 1183.40, null, 1183.10, 1186.75, 1180.00, 1183.90, 1190.00],
+              "low":  [1181.25, 1176.00, 1168.40, 1169.55, 1163.20, 1170.05, 1165.30, 1160.80, 1176.40],
+              "close": [1187.00, 1181.75, 1174.60, 1172.30, 1179.40, 1173.60, 1177.25, 1167.70, null],
+              "volume": [4123388, 5210447, 6188341, 4902110, 7345122, 3810994, 4556120, 16771221, 5230118]
+            }
+          ],
+          "adjclose": [
+            {
+              "adjclose": [1187.00, 1181.75, 1174.60, 1172.30, 1179.40, 1173.60, 1177.25, 1162.31, null]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

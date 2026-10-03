@@ -304,8 +304,8 @@ object SectorResolver {
 
         if (nameMatches.isEmpty() && aboutMatches.isEmpty()) {
             return SectorResolution.unresolved(
-                reason = "no sector keyword matched in the company name" +
-                    describe(name, about) + "; showing the generic ratio list (plan.md §7.1)",
+                reason = "no sector keyword matched in " + describe(name, about) +
+                    "; showing the generic ratio list (plan.md §7.1)",
             )
         }
 
@@ -363,6 +363,15 @@ object SectorResolver {
 
     // -------------------------------------------------------------------------- matching
 
+    /**
+     * Every keyword run found in [text], keeping only the **most specific** of them.
+     *
+     * A longer token run is a more specific statement about the company: in
+     * `"Adani Green Energy Ltd"`, `ADANI GREEN` (2 tokens) is the classification, and a
+     * one-token keyword elsewhere in the same name would be an accident of wording. Only the
+     * longest matches survive; if they still disagree, the caller turns that into
+     * [Sector.OTHER].
+     */
     private fun matchesIn(text: String?): List<Match> {
         val tokens = tokenize(text)
         if (tokens.isEmpty()) return emptyList()
@@ -380,15 +389,7 @@ object SectorResolver {
         return hits.filter { it.tokens == longest }
     }
 
-    /**
-     * Most-specific match wins.
-     *
-     * A longer token run is a more specific statement about the company: in
-     * `"Adani Green Energy"`, `ADANI GREEN` (2 tokens) is the classification, and a bare
-     * one-token keyword elsewhere in the same name is an accident of wording. Only the
-     * longest matches survive; if they disagree, the caller turns that into
-     * [Sector.OTHER].
-     */
+    /** The distinct sectors a set of matches points at. */
     private fun distinctSectors(matches: List<Match>): List<Sector> =
         matches.map { it.sector }.distinct()
 
@@ -453,10 +454,10 @@ object SectorResolver {
 
     private fun describe(name: String?, about: String?): String = when {
         !name.isNullOrBlank() && !about.isNullOrBlank() ->
-            " \"${name.trim()}\" or \"${about.trim()}\""
-        !name.isNullOrBlank() -> " \"${name.trim()}\""
-        !about.isNullOrBlank() -> " \"${about.trim()}\""
-        else -> ""
+            "the company name \"${name.trim()}\" or the published sector text \"${about.trim()}\""
+        !name.isNullOrBlank() -> "the company name \"${name.trim()}\""
+        !about.isNullOrBlank() -> "the published sector text \"${about.trim()}\""
+        else -> "anything (no company name and no sector text were provided)"
     }
 
     private fun Sector.display(): String = SECTOR_LABELS[this] ?: name

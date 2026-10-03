@@ -33,6 +33,17 @@ data class FundamentalsParseResult(
     val url: String? = null,
     /** Raw tables by section id, for evidence display. Absent sections are simply not present. */
     val sections: Map<String, ParsedTable> = emptyMap(),
+    /**
+     * The `ratios` card — debtor days, inventory days, days payable, ROCE/ROE.
+     *
+     * Kept beside [sections] rather than inside the snapshot because it is a *series* rather than
+     * a statement row, and `FundamentalsSnapshot` is a domain type this parser does not own. It is
+     * a section of the page like any other, so [health] reports it: [RatiosCard.isAbsent] and
+     * [RatiosCard.isEmpty] say which of the two failure modes occurred.
+     */
+    val ratiosCard: RatiosCard = RatiosCard.EMPTY,
+    /** [ratiosCard] keyed by fiscal year, plus the domain's `RatioExtras` / `RatiosCardSeries`. */
+    val ratioCard: RatioCardDerived = RatioCardDerived(),
 ) {
     val isOk: Boolean get() = health.ok
 }
@@ -41,11 +52,20 @@ data class FundamentalsParseResult(
  * The single entry point for turning screener.in HTML into a [FundamentalsSnapshot].
  *
  * ### What "ok" means here
- * `ok` is true only when **all six** sections named in plan.md §3.3 were found *and* each one
+ * `ok` is true only when **every** section named in [SECTION_IDS] was found *and* each one
  * produced at least one data row. A section that exists in the markup but parses to zero rows is
  * reported in [ParserHealth.sectionsMissing], because "present but empty" is indistinguishable
  * from "the page changed" — the same reasoning plan.md §12 gives for the silent-empty rule.
  * It is strict on purpose: a fundamentals tab that shows four of six statements should say so.
+ *
+ * ### The `ratios` card counts as a section
+ * plan.md §3.3 lists six sections because the card was unparsed when that list was written. Now
+ * that [RatiosCardParser] reads it, a page with no `ratios` card is a **missing section**, not a
+ * quietly absent series: debtor days and inventory days are the inputs to plan.md §8.1's two
+ * working-capital red flags, and a fundamentals tab that silently shows neither is the failure
+ * mode §12 exists to prevent. [SECTION_IDS] therefore extends [ScreenerHtml.SECTION_IDS] rather
+ * than replacing it, and the card sits between `cash-flow` and `shareholding` — its real position
+ * in the page markup — so a truncated-page diagnostic reads in document order.
  *
  * ### It never throws
  * Malformed HTML, an error page, a truncated download and a total redesign of the markup all
@@ -53,6 +73,18 @@ data class FundamentalsParseResult(
  * exception, because every caller would eventually turn that exception into a blank screen.
  */
 object FundamentalsParserFacade {
+
+    /**
+     * Every section a fundamentals parse accounts for, in page order.
+     *
+     * `[ScreenerHtml.SECTION_IDS]` plus the `ratios` card. A superset, so
+     * `ScreenerInSource.isComplete` — which checks the older six — stays satisfied by a page that
+     * also carries the card.
+     */
+    val SECTION_IDS: List<String> =
+        ScreenerHtml.SECTION_IDS.filterNot { it == ScreenerHtml.SHAREHOLDING } +
+            RatiosCardParser.SECTION_ID +
+            listOf(ScreenerHtml.SHAREHOLDING)
 
     /** Indian market time is what "as of" means for this app. */
     private val MARKET_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
@@ -69,6 +101,7 @@ object FundamentalsParserFacade {
         val balanceSheet = ScreenerHtml.tableRowsById(doc, ScreenerHtml.BALANCE_SHEET)
         val cashFlow = ScreenerHtml.tableRowsById(doc, ScreenerHtml.CASH_FLOW)
         val shareholding = ScreenerHtml.tableRowsById(doc, ScreenerHtml.SHAREHOLDING)
+        val ratiosCard = RatiosCardParser.parse(doc)
 
         val tables = listOf(
             ScreenerHtml.TOP_RATIOS to null,
@@ -76,13 +109,16 @@ object FundamentalsParserFacade {
             ScreenerHtml.PROFIT_LOSS to profitLoss,
             ScreenerHtml.BALANCE_SHEET to balanceSheet,
             ScreenerHtml.CASH_FLOW to cashFlow,
+            RatiosCardParser.SECTION_ID to ratiosCard.table,
             ScreenerHtml.SHAREHOLDING to shareholding,
         )
 
-        val derived = DerivedMetrics.derive(profitLoss, balanceSheet, cashFlow, shareholding, topRatios)
+        val derived = DerivedMetrics.derive(
+            profitLoss, balanceSheet, cashFlow, shareholding, topRatios, ratiosCard,
+        )
         val ratios = RatioMapper.map(symbol, asOf, topRatios, derived.derived, profitLoss, shareholding)
 
-        val health = health(topRatios, quarters, tables, derived.notes, asOf)
+        val health = health(topRatios, quarters, tables, ratiosCard, derived.notes, asOf)
 
         val snapshot = FundamentalsSnapshot(
             symbol = symbol,
@@ -105,6 +141,8 @@ object FundamentalsParserFacade {
             snapshot = snapshot,
             health = health,
             sections = tables.mapNotNull { (id, table) -> table?.let { id to it } }.toMap(),
+            ratiosCard = ratiosCard,
+            ratioCard = derived.ratioCard,
         )
     }
 
@@ -119,7 +157,7 @@ object FundamentalsParserFacade {
         val health = ParserHealth(
             ok = false,
             sectionsFound = emptyList(),
-            sectionsMissing = ScreenerHtml.SECTION_IDS,
+            sectionsMissing = SECTION_IDS,
             notes = listOf(reason),
         )
         val snapshot = FundamentalsSnapshot(
@@ -143,6 +181,7 @@ object FundamentalsParserFacade {
         topRatios: TopRatiosSnapshot,
         quarters: StatementParsers.QuarterSection,
         tables: List<Pair<String, ParsedTable?>>,
+        ratiosCard: RatiosCard,
         derivedNotes: List<String>,
         asOf: LocalDate,
     ): ParserHealth {
@@ -151,8 +190,13 @@ object FundamentalsParserFacade {
         val found = mutableListOf<String>()
         val missing = mutableListOf<String>()
         for ((id, table) in tables) {
+            // `ratiosCard.isUsable` rather than the generic row-count test, because the card has a
+            // third state the statements do not: a card can publish a row whose every cell is a
+            // placeholder (TCS's Inventory Days). It is structurally present and carries no figure,
+            // which for the working-capital flags is indistinguishable from having no card.
             val usable = when (id) {
                 ScreenerHtml.TOP_RATIOS -> !topRatios.isEmpty
+                RatiosCardParser.SECTION_ID -> ratiosCard.isUsable
                 else -> table != null && table.rows.isNotEmpty()
             }
             if (usable) {
@@ -163,6 +207,7 @@ object FundamentalsParserFacade {
             }
             table?.notes?.let { notes += it }
         }
+        notes += ratiosCard.notes
         notes += quarters.notes
 
         if (topRatios.isEmpty) {

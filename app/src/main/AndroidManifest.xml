@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/AndroidManifest.xml
+
+  Single activity (plan.md §4.1). `android:name` points at `MiaApplication`, which is the Hilt
+  root; the launch gate in `MainActivity` cannot run without it.
+
+  `android:configChanges` keeps the activity alive across rotation and theme changes. That is
+  deliberate for plan.md §12's low-RAM target: recreating the activity would rebuild the whole
+  Compose tree and re-run the 500-bar indicator pass for a screen rotation on a device that
+  may only have 2 GB of RAM.
+
+  No `android:icon` / `android:roundIcon` is declared: the default launcher icon is used until
+  a real icon asset exists, which is better than shipping a broken reference to a mipmap that
+  does not exist in this module.
+-->
+<!-- `tools` is needed for the WorkManager initializer removal at the bottom of this file. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      INTERNET / ACCESS_NETWORK_STATE are declared by `:android-data`'s own manifest and are
+      merged in automatically; they are not repeated here.
+
+      POST_NOTIFICATIONS (API 33+): the breakout alert in plan.md §6.6 item 3 is the only
+      feature that needs it, and `:android-data`'s AndroidBreakoutAlertDispatcher degrades to a
+      no-op when the user has not granted it. The permission is declared here so the runtime
+      prompt can be added later without a manifest change.
+      TODO(orchestrator): request it from the settings/alert surface, not from the technicals
+      tab — the user must be able to read a chart without being asked for notifications.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      RECORD_AUDIO (plan.md P11a): voice search. It is requested at runtime and only from the
+      voice affordance on the Search screen (`ui/speech/VoiceSearchField.kt` /
+      `HinglishSpeechRecognizer`), never on launch and never from a tab — a reader must be able
+      to open a chart without the app asking for the microphone. The permission is declared here so
+      the prompt can be added without a manifest change; `HinglishSpeechRecognizer` reports a
+      missing grant as `SpeechFailure.MICROPHONE_PERMISSION_MISSING` and degrades to typing, so
+      declaring it grants nothing on its own.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application
+        android:name=".MiaApplication"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MyInvestinmentAssistant">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.MyInvestinmentAssistant"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          FileProvider (plan.md P11b): the share-brief entry point. `ui/share/BriefSharer` writes a
+          rendered brief into the app's own cache and hands the receiving app a `content://` URI,
+          which is the only kind of URI another app is allowed to read on API 24+. A raw file path
+          in `EXTRA_STREAM` is ignored, and writing into a shared directory either throws on
+          API 29+ or exposes the whole cache to every installed app.
+
+          The two values below are asserted against `BriefSharer` and must match it exactly.
+          `android:authorities` must equal `BriefSharer.authorityFor(ctx)`, which is
+          `packageName + ".fileprovider"`. The `cache-path` in `@xml/file_paths` must be
+          `shared_briefs/`, which is `BriefSharer.SHARE_DIR_NAME` written as a sub-path of the
+          cache root. A mismatch in either is silent until a share is attempted, at which point
+          `FileProvider.getUriForFile` throws and the user sees only "the brief could not be
+          shared".
+
+          `exported="false"` because nothing outside this app has any business resolving the
+          authority without a grant, and `grantUriPermissions="true"` because the grant is
+          attached to the share `Intent` in `BriefSharer.buildChooser`; without it the chooser
+          opens and the receiving app cannot read the image.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+          WorkManager is initialised on demand instead of by androidx.startup.
+
+          `MiaApplication` implements `Configuration.Provider` and supplies a `HiltWorkerFactory`
+          so `@HiltWorker` classes can be injected. androidx.startup's automatic initialiser would
+          otherwise create WorkManager from the application context *before* Hilt's singleton
+          graph exists, and the workers (plan.md §10) would fail to construct on the very first
+          background run. The standard remedy is to remove only the WorkManager initializer and
+          leave every other androidx.startup provider intact — `WorkManagerInitializer` removed
+          from `InitializationProvider`, nothing else touched.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+    </application>
+
+</manifest>

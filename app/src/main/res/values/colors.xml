@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The window background only. Every colour the user actually sees is a Material 3 role resolved
+  at runtime in `com.mia.app.ui.theme.MiaTheme`; these two values exist so the ~200 ms between
+  the launcher tap and the first Compose frame is not a white flash on a dark-mode device.
+
+  `windowBackgroundLight` / `windowBackgroundDark` are plain colours rather than theme
+  attributes so the same file works on every API level from 26 up, with no `-v29` variant.
+-->
+<resources>
+    <color name="window_background_light">#FFFDFCFF</color>
+    <color name="window_background_dark">#FF121316</color>
+</resources>

@@ -30,7 +30,7 @@ class ScreenerResilienceTest {
                 "a ${(fraction * 100).toInt()}% page must name what it lost",
             )
             assertTrue(
-                result.health.sectionsMissing.all { it in ScreenerHtml.SECTION_IDS },
+                result.health.sectionsMissing.all { it in FundamentalsParserFacade.SECTION_IDS },
                 "unknown section names: ${result.health.sectionsMissing}",
             )
         }
@@ -39,15 +39,10 @@ class ScreenerResilienceTest {
     @Test
     fun `cutting the page before each section names that section and everything after it`() {
         val html = ScreenerFixtures.html("RELIANCE")
-        // Sections in page order. `top-ratios` is a <ul>, not a <section>.
-        val order = listOf(
-            ScreenerHtml.TOP_RATIOS,
-            ScreenerHtml.QUARTERS,
-            ScreenerHtml.PROFIT_LOSS,
-            ScreenerHtml.BALANCE_SHEET,
-            ScreenerHtml.CASH_FLOW,
-            ScreenerHtml.SHAREHOLDING,
-        )
+        // Sections in page order. `top-ratios` is a <ul>, not a <section>. `ratios` sits between
+        // `cash-flow` and `shareholding` in the real markup, which is why the facade's canonical
+        // list is in that order rather than appending the card at the end.
+        val order = FundamentalsParserFacade.SECTION_IDS
         for ((cutAt, id) in order.withIndex()) {
             val start = html.indexOf(elementOpenFor(id))
             check(start >= 0) { "fixture has no $id" }
@@ -82,7 +77,7 @@ class ScreenerResilienceTest {
     fun `empty input is a clean not-ok result`() {
         val result = FundamentalsParserFacade.parse("", "RELIANCE", ScreenerFixtures.AS_OF)
         assertFalse(result.health.ok)
-        assertEquals(ScreenerHtml.SECTION_IDS, result.health.sectionsMissing)
+        assertEquals(FundamentalsParserFacade.SECTION_IDS, result.health.sectionsMissing)
         assertEquals(emptyList(), result.snapshot.quarters)
         assertEquals("RELIANCE", result.snapshot.name, "falls back to the requested symbol")
     }
@@ -97,8 +92,11 @@ class ScreenerResilienceTest {
         )) {
             val result = FundamentalsParserFacade.parse(body, "RELIANCE", ScreenerFixtures.AS_OF)
             assertFalse(result.health.ok, body.take(40))
-            assertEquals(ScreenerHtml.SECTION_IDS, result.health.sectionsMissing, body.take(40))
+            assertEquals(FundamentalsParserFacade.SECTION_IDS, result.health.sectionsMissing, body.take(40))
             assertEquals(0, result.sections.size, body.take(40))
+            // The card is accounted for even on an error page: never a silent empty.
+            assertTrue(result.ratiosCard.isAbsent, body.take(40))
+            assertTrue(result.ratioCard.isEmpty, body.take(40))
         }
     }
 
@@ -166,7 +164,8 @@ class ScreenerResilienceTest {
 
     @Test
     fun `each section removed in turn is reported by name`() {
-        for (id in ScreenerHtml.SECTION_IDS) {
+        // Facade list, not ScreenerHtml.SECTION_IDS, so the `ratios` card is covered here too.
+        for (id in FundamentalsParserFacade.SECTION_IDS) {
             val html = removeSection(ScreenerFixtures.html("INFY"), id)
             val result = FundamentalsParserFacade.parse(html, "INFY", ScreenerFixtures.AS_OF)
             assertFalse(result.health.ok, id)

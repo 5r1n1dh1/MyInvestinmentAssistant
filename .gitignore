@@ -1,27 +1,48 @@
-# Compiled class file
+# ---------------------------------------------------------------------------
+# Gradle / Android
+# ---------------------------------------------------------------------------
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+.kotlin/
+.kotlin
+*.apk
+*.aab
+*.iml
+.idea/
+
+# Signing material — never commit keystores.
+*.jks
+*.keystore
+
+# ---------------------------------------------------------------------------
+# Compiled output / logs / crash dumps
+# ---------------------------------------------------------------------------
 *.class
-
-# Log file
 *.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+*.tab
+*.tab_i
+*.keystream
+*.keystream.len
 
-# Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
-.kotlin/
+# ---------------------------------------------------------------------------
+# OS noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Test fixtures are COMMITTED ON PURPOSE — see docs/DATA-NOTES.md.
+# The real NSE bhavcopy response is a .zip, and the golden screener.in pages are
+# .html. The `*.zip` / `*.jar` rules from the original BlueJ-era template were
+# dropped because they would silently exclude the golden files the parser tests
+# assert against. `*.jar` in particular would have excluded gradle/wrapper/,
+# which the build needs.
+#
+# Binary build output that must stay out is already covered by build/ and
+# .gradle/ above.
+# ---------------------------------------------------------------------------

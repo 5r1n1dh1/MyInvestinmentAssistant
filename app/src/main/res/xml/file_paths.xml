@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/xml/file_paths.xml
+
+  The one directory `BriefSharer` writes shared briefs into. `FileProvider` is scoped to exactly
+  this sub-directory of the app's own cache, so nothing else on the device can read it through the
+  provider.
+
+  Two names here are load-bearing and are asserted against `BriefSharer`:
+
+    * `android:authorities` in AndroidManifest.xml must equal `BriefSharer.authorityFor(context)`,
+      which is `context.packageName + ".fileprovider"`.
+    * the `path` below must be `shared_briefs/`, which is `BriefSharer.SHARE_DIR_NAME` written as
+      a sub-path of the cache root, trailing slash included.
+
+  `BriefSharer.writeToCache` writes to `File(context.cacheDir, SHARE_DIR_NAME)`, so a `path` that
+  does not match makes `FileProvider.getUriForFile` throw at share time, and the user sees only
+  "the brief could not be shared" with no way to tell why.
+
+  The `name` attribute is only an internal label the provider uses in its own generated paths and is
+  never read by `BriefSharer`, but it is kept identical to `SHARE_DIR_NAME` so that grepping for one
+  finds the other.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Written by `BriefSharer.writeToCache`; read by the receiving app under a read grant. -->
+    <cache-path
+        name="shared_briefs"
+        path="shared_briefs/" />
+
+</paths>

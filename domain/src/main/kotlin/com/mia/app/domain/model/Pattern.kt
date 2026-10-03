@@ -105,7 +105,7 @@ data class ScoreBreakdown(
             structure * MatchScorePolicy.STRUCTURE_WEIGHT +
             confirmation * MatchScorePolicy.CONFIRMATION_WEIGHT +
             context * MatchScorePolicy.CONTEXT_WEIGHT)
-            .toInt()
+            .toInt() / MatchScorePolicy.TOTAL_WEIGHT
             .coerceIn(0, 100)
 
     companion object {
@@ -134,6 +134,14 @@ object MatchScorePolicy {
     const val STRUCTURE_WEIGHT: Int = 25
     const val CONFIRMATION_WEIGHT: Int = 20
     const val CONTEXT_WEIGHT: Int = 15
+
+    /**
+     * The four weights sum to 100, so a weighted mean divides by this.
+     *
+     * `scoring-spec.md` §1: "`ScoreBreakdown.total` computes
+     * `(geometry·40 + structure·25 + confirmation·20 + context·15) / 100`, truncated then clamped."
+     */
+    const val TOTAL_WEIGHT: Int = GEOMETRY_WEIGHT + STRUCTURE_WEIGHT + CONFIRMATION_WEIGHT + CONTEXT_WEIGHT
 
     /** >= 70 plus gates: project and schedule an alert. */
     const val PROJECT_THRESHOLD: Int = 70
