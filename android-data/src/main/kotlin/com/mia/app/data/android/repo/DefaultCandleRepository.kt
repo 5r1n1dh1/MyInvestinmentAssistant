@@ -311,7 +311,7 @@ class DefaultCandleRepository @Inject constructor(
         } ?: "the bhavcopy parsed to ${parsed.candles.size} candle(s) but stored nothing new"
 
         val coverage = when {
-            after >= MIN_DAILY_BARS ->
+            after >= CandleRepository.MIN_DAILY_BARS ->
                 "the daily series now clears plan.md §6.4's 60-bar gate ($after bar(s))"
             else -> "the daily series is still short of plan.md §6.4's 60-bar gate " +
                 "($after bar(s)); the 19:00 IST worker adds only one session a day, so use " +
@@ -379,7 +379,7 @@ class DefaultCandleRepository @Inject constructor(
         // file; this walk wants *older* files, and the archive publishes every weekday regardless of
         // what today is. Guarding on the trading calendar would make a Saturday the one day a reader
         // cannot fetch history — exactly backwards.
-        val wanted = sessions.coerceAtMost(HISTORY_BATCH_LIMIT.coerceAtLeast(1))
+        val wanted = sessions.coerceAtMost(CandleRepository.HISTORY_BATCH_LIMIT.coerceAtLeast(1))
 
         var fetched = 0
         var skipped = 0

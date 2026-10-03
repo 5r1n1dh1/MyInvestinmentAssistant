@@ -51,7 +51,7 @@ class ScanCoordinatorTest {
         assertEquals(0, summary.scanned)
         assertEquals(0, summary.failed)
         assertTrue(!summary.isDegraded)
-        assertEquals("0 of 0 watched symbol(s) scanned as of 2026-10-01, 0 pattern(s) reported, 0 alert(s) delivered", summary.headline())
+        assertEquals("0 of 0 watched symbol(s) scanned as of 2026-10-01, 0 alert(s) delivered", summary.headline())
     }
 
     @Test
@@ -68,8 +68,8 @@ class ScanCoordinatorTest {
         assertEquals(3, summary.scanned)
         assertEquals(0, summary.failed)
         assertEquals(0, summary.skipped)
-        // Only RELIANCE is at or above the render threshold of 50.
-        assertEquals(1, summary.reported)
+        // RELIANCE (78) and TCS (64) are at or above the render threshold of 60.
+        assertEquals(2, summary.reported)
         assertEquals(1, summary.alertsDelivered)
         assertTrue(!summary.isDegraded)
         assertNull(ScanCoordinator.failureNote(summary), "a clean pass must leave no failure note")

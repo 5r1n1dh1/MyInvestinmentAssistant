@@ -445,7 +445,7 @@ class MappersTest {
             resolved = true,
             horizonBars = 5,
         )
-        val restored = Mappers.toOutcome(Mappers.fromOutcome(99L, outcome))
+        val restored = Mappers.toOutcome(Mappers.fromOutcome(outcome.patternId, outcome))
 
         assertEquals(outcome, restored)
         assertTrue(restored.resolved)
@@ -470,7 +470,7 @@ class MappersTest {
             hit = null,
             resolved = false,
         )
-        val restored = Mappers.toOutcome(Mappers.fromOutcome(99L, outcome))
+        val restored = Mappers.toOutcome(Mappers.fromOutcome(outcome.patternId, outcome))
 
         assertEquals(outcome, restored)
         assertNull(restored.hit)

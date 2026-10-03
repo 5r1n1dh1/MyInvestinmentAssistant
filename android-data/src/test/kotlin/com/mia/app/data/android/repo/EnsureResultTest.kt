@@ -96,7 +96,7 @@ class EnsureResultTest {
         // plan.md §12 is about, in a different costume.
         val results = listOf(
             EnsureResult.fresh("A", today, 1, today),
-            EnsureResult.fetched("A", today, 1, "stored"),
+            EnsureResult.fetched("A", today, 1, "the bhavcopy was successfully stored"),
             EnsureResult.failed(
                 "A",
                 today,

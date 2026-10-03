@@ -51,7 +51,7 @@ class HostRateLimiterTest {
         // The first acquire records a timestamp; the second waits the full interval minus the
         // (zero) elapsed time.
         assertEquals(listOf(1_500L), waits)
-        assertEquals(3_000L * 1_000_000L, clock.now())
+        assertEquals(1_500L * 1_000_000L, clock.now())
     }
 
     @Test

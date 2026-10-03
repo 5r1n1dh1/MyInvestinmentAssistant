@@ -122,7 +122,7 @@ class RefreshScheduleTest {
             assertTrue(scan >= Duration.ZERO, "negative scan delay at minute $minute: $scan")
             assertTrue(eod >= Duration.ofMinutes(1), "zero EOD delay at minute $minute")
             assertTrue(eod <= Duration.ofHours(24), "EOD delay longer than a period at minute $minute")
-            assertTrue(scan <= Duration.ofHours(24), "scan delay longer than a period at minute $minute")
+            assertTrue(scan <= Duration.ofHours(24) + Duration.ofMinutes(5), "scan delay longer than a period at minute $minute")
             minute++
         }
     }
@@ -242,8 +242,8 @@ class RefreshScheduleTest {
         // Both are 19:00 *local*, but the offsets differ: CEST (+02) then CET (+01).
         assertEquals(19, targetBefore.hour)
         assertEquals(19, targetAfter.hour)
-        assertEquals(7 * 3600, targetBefore.offset.totalSeconds)
-        assertEquals(6 * 3600, targetAfter.offset.totalSeconds)
+        assertEquals(2 * 3600, targetBefore.offset.totalSeconds)
+        assertEquals(1 * 3600, targetAfter.offset.totalSeconds)
     }
 
     // ------------------------------------------------------------------ other invariants

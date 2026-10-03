@@ -120,7 +120,7 @@ object RefreshSchedule {
 
     /** The instant the next watchlist rescan should fire — 19:05 by plan.md §10. */
     fun patternScanTarget(now: ZonedDateTime, zone: ZoneId = now.zone): ZonedDateTime =
-        target(now, zone, minutesAfterTarget = PATTERN_SCAN_OFFSET_MINUTES)
+        eodTarget(now, zone).plusMinutes(PATTERN_SCAN_OFFSET_MINUTES)
 
     /** [patternScanTarget] as a duration. Never negative. */
     fun patternScanInitialDelay(now: ZonedDateTime, zone: ZoneId = now.zone): Duration =

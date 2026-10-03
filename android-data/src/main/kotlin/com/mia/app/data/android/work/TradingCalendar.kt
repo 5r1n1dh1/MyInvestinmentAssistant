@@ -124,7 +124,7 @@ object TradingCalendar {
                 "to fetch (plan.md §10 depends on the file existing)."
         } else {
             "$date is a $dayName, when NSE does not trade, so no bhavcopy is published. The " +
-                "nightly refresh moved to the next trading day."
+                "nightly refresh moved to the next trading day (plan.md §10)."
         }
     }
 }
