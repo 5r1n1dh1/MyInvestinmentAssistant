@@ -247,7 +247,7 @@ class WindowSizingMeasurementTest {
             assertTrue(
                 detector.minBars <= tightestGate,
                 "${detector.name} needs ${detector.minBars} bars, at or above the " +
-                    "$tightest-bar weekly gate — the gate no longer dominates every detector",
+                    "$tightestGate-bar weekly gate — the gate no longer dominates every detector",
             )
         }
         // The gate values the chip set is built around (plan.md §6.4).

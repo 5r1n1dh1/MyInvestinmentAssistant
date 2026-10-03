@@ -30,7 +30,7 @@ Preserve and improve the Android app without regressing existing work.
 
 4. **Never build locally**
 
-   * Do **not** run Gradle builds, tests, APK/AAB generation, lint, or other build/verification commands locally.
+   * Do **not** run Gradle builds, APK/AAB generation, lint, or other build commands locally.
    * Do not install or modify local Android SDK/Gradle/JDK tooling to enable builds.
    * All building and build-dependent verification must happen through the user's Google AI Studio environment.
 
@@ -74,5 +74,3 @@ Preserve and improve the Android app without regressing existing work.
 When instructions conflict:
 
 `user's explicit request > preservation of existing work > minimal change > convenience`
-
-This version deliberately makes **“never build locally”**, **preserve others’ work**, and **interview before fundamental changes** hard constraints rather than suggestions.
