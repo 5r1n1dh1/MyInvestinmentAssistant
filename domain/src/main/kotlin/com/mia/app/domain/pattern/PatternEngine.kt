@@ -154,6 +154,27 @@ data class PatternScanOptions(
      * factory. Exists so a test can *count* how many times the expensive pass runs.
      */
     val snapshotFactory: ((List<Candle>, List<Candle>?) -> IndicatorSnapshot)? = null,
+    /**
+     * Whether this scan is the **canonical** one for this `(symbol, timeframe)`, or an exploratory
+     * view of some other slice of the same series.
+     *
+     * ### Why this exists, and why `true` is the default
+     * The Pattern Explorer re-scans on every window the reader picks. Each of those scans produces
+     * matches for the same patterns, on the same symbol, at the same timeframe — and
+     * `PatternIds.of` is name-based, so **the same pattern gets the same id in every window**.
+     * `OutcomeTracker` records on `(symbol, timeframe, patternId)`.
+     *
+     * So a window scan is not merely redundant: if it were recorded, picking "60 bars" and then
+     * "250 bars" would write two conflicting projections for one pattern, and the second would
+     * silently replace the first in the accuracy table. The hit rate — a headline number the app
+     * shows the reader — would then depend on which chip was tapped last. That is precisely the
+     * class of bug plan.md §12 is about, so the exploratory path opts out explicitly.
+     *
+     * Defaulted to `true` deliberately. A new caller gets the safe-by-default behaviour that
+     * matches today's single canonical scan; the Explorer is the one place that must remember to
+     * opt out, and it says so at the call site.
+     */
+    val isCanonicalScan: Boolean = true,
 ) {
     companion object {
         val DEFAULT = PatternScanOptions()
