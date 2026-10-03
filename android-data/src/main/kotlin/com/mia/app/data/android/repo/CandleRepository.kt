@@ -278,12 +278,30 @@ interface CandleRepository {
         const val DEFAULT_HISTORY_SESSIONS: Int = 280
 
         /**
-         * Sessions to try in one history pass before yielding.
+         * How many sessions one call to [backfillHistory] will *request* in a single pass.
          *
-         * Bounds one `WorkManager` run so a partially-completed pass still ends cleanly and can be
-         * resumed — a pass is resumable because every stored session is skipped without a request.
+         * ### Why this equals [DEFAULT_HISTORY_SESSIONS] and not less
+         * This was previously `60`, applied as `sessions.coerceAtMost(HISTORY_BATCH_LIMIT)` — which
+         * silently defeated the 280-session default: no caller could ever fetch more than 60
+         * sessions, no matter what it asked for.
+         *
+         * 60 was also the worst possible ceiling, for two arithmetic reasons:
+         * * it is **exactly** plan.md §6.4's 60-bar daily gate, so a single skipped session
+         *   (holiday, archive purge, one failed request) left 59 bars and the tab reported
+         *   "Not Enough History" *permanently*, with no retry able to fix it;
+         * * 60 daily bars aggregate to ~12 weekly bars against a 40-bar weekly gate, so the `1W`
+         *   tab could never clear its own gate at all.
+         *
+         * ### What this now means
+         * A pass walks the whole requested depth in one call. It remains **resumable** — every
+         * already-stored session is skipped without a request — so an interrupted pass continues
+         * where it stopped rather than restarting, and a reader who needs more depth can ask for
+         * more and get it.
+         *
+         * The value is still a ceiling rather than an unbounded walk: it bounds one pass's
+         * request count so a misconfigured caller cannot trigger an entire 18-month archive pull.
          */
-        const val HISTORY_BATCH_LIMIT: Int = 60
+        const val HISTORY_BATCH_LIMIT: Int = 280
     }
 }
 

@@ -66,6 +66,19 @@ interface TechnicalsDataSource {
     suspend fun candles(symbol: String, timeframe: Timeframe): List<Candle>
 
     /**
+     * Facts about the stored series that the reader must be told.
+     *
+     * Currently one thing: a **suspected corporate action inside the window**. The series is stored
+     * unadjusted (plan.md §5.1 makes the bhavcopy canonical, and it publishes raw prices), so a
+     * 1:2 or 1:10 split appears as a 50–90% cliff that silently skews every indicator spanning it.
+     *
+     * The bars are deliberately left as published — rewriting stored history would be fabricating
+     * data — so this note is the only honest way to surface the distortion, and plan.md §1.4 rule 3
+     * requires it. Empty list when the series is clean.
+     */
+    suspend fun seriesNotes(symbol: String, timeframe: Timeframe): List<String>
+
+    /**
      * Red flags for this symbol, already ordered by `RedFlagReport`'s severity → tab → id rule.
      *
      * Only flags whose [com.mia.app.domain.model.FlagTab] is `TECHNICALS` or `BOTH` belong here; a
@@ -196,4 +209,13 @@ internal data class TechnicalsLoad(
     val trackRecord: HitRate?,
     /** The stock's all-pattern figure. */
     val trackRecordForSymbol: HitRate?,
+    /**
+     * Facts about the stored series itself that the reader must be told — currently a suspected
+     * unadjusted corporate action inside the window.
+     *
+     * Carried as prose from the repository rather than recomputed in `:app`, for two reasons: the
+     * rule lives once in `:domain` (so it has one JVM test), and plan.md §4.3 forbids `:app` from
+     * reaching into `:data`. Empty when the series is clean, which is the normal case.
+     */
+    val seriesNotes: List<String> = emptyList(),
 )

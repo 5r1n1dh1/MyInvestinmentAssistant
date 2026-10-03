@@ -69,20 +69,30 @@ class MiaApplication : Application(), Configuration.Provider {
     }
 
     /**
-     * Enqueues the newest session, then a bounded history walk behind it.
+     * Enqueues a first-run history walk, and a first-run EOD refresh alongside it.
      *
-     * ### Why a chain rather than two independent requests
-     * The history walk traverses the archive **backwards from today**. Two independently enqueued
-     * one-shots may run concurrently, in which case the long job can be the only thing that stored
-     * today — so a reader watching the app populate would see history appear with no current price.
-     * `beginUniqueWork(…).then(…)` makes that ordering a guarantee rather than a hope, and gives
-     * the reader one work item representing the whole outcome instead of two to correlate.
+     * ### Why these are two independent enqueues rather than a chain
+     * This used to be `beginUniqueWork(EOD).then(HISTORY)`, reasoning that the EOD refresh should
+     * store the newest session before the walk started. That chain was the second cause of
+     * "Not Enough History" on every stock:
+     *
+     * `EodRefreshWorker` returns `Result.retry()` whenever today's bhavcopy is not published yet —
+     * plan.md §3.1 measures that as "404 until roughly 18:00 IST". A `retry` **fails the entire
+     * chain**, so a reader who installed at 10:00 had the history walk never run at all, and every
+     * tab reported "Not Enough History" until they happened to launch after 18:00.
+     *
+     * The chain was also unnecessary: `backfillHistory` walks *backwards from today*, so its first
+     * session is the newest published one — it covers today's bar by itself.
+     *
+     * Independence also fixes a *reporting* bug: one chain yields one status, so a failing EOD
+     * refresh made a working history walk look like it had never run. Each now records its own
+     * outcome in `work_state`.
      *
      * ### Why network-gated but not battery-gated
-     * Both downloads together are on the order of tens of megabytes, taken once, in the background.
-     * The cost of *never* getting the data — every tab permanently empty — is worse than the cost of
-     * downloading it, and it is the same download the nightly job performs anyway. plan.md §10's
-     * battery rule still governs the nightly schedule via [scheduler.scheduleAll].
+     * ~58 MB, once, in the background. The cost of *never* getting the data — every tab permanently
+     * empty — is worse than the cost of downloading it, and it is the same download the nightly job
+     * performs anyway. plan.md §10's battery rule still governs the nightly schedule via
+     * [scheduler.scheduleAll].
      *
      * ### Resumable
      * A pass interrupted by process death resumes rather than restarts: sessions already in the
@@ -93,40 +103,54 @@ class MiaApplication : Application(), Configuration.Provider {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        WorkManager.getInstance(this)
-            .beginUniqueWork(
-                ONE_SHOT_PRIME,
-                ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequestBuilder<EodRefreshWorker>()
-                    .setConstraints(networkRequired)
-                    .addTag(RefreshWorkScheduler.TAG_EOD)
-                    .build(),
-            )
-            .then(
-                OneTimeWorkRequestBuilder<HistoryBackfillWorker>()
-                    .setConstraints(networkRequired)
-                    // One bounded batch, not the full 280-session pass: this is priming, not the
-                    // deep walk. A reader who wants depth taps Settings → Refresh history, which
-                    // resumes from wherever this stopped.
-                    .setInputData(
-                        workDataOf(
-                            HistoryBackfillWorker.KEY_SESSIONS to CandleRepository.HISTORY_BATCH_LIMIT,
-                        ),
-                    )
-                    .addTag(RefreshWorkScheduler.TAG_BACKFILL)
-                    .build(),
-            )
-            .enqueue()
+        val workManager = WorkManager.getInstance(this)
+
+        // The newest published session. Deliberately NOT chained to the history walk: see the
+        // class KDoc. Its failure is recorded in `work_state`, not propagated.
+        workManager.enqueueUniqueWork(
+            ONE_SHOT_PRIME_EOD,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<EodRefreshWorker>()
+                .setConstraints(networkRequired)
+                .addTag(RefreshWorkScheduler.TAG_EOD)
+                .build(),
+        )
+
+        // The history walk, at full depth rather than a token batch.
+        //
+        // [CandleRepository.DEFAULT_HISTORY_SESSIONS] (280) is the number that clears *both*
+        // plan.md §6.4 gates — 280 daily bars against a 60-bar daily gate, and ~56 weekly bars
+        // against a 40-bar weekly gate. Priming with a smaller batch is precisely what left the
+        // `1W` tab permanently below its own gate.
+        workManager.enqueueUniqueWork(
+            ONE_SHOT_PRIME_HISTORY,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<HistoryBackfillWorker>()
+                .setConstraints(networkRequired)
+                .setInputData(
+                    workDataOf(
+                        HistoryBackfillWorker.KEY_SESSIONS to
+                            CandleRepository.DEFAULT_HISTORY_SESSIONS,
+                    ),
+                )
+                .addTag(RefreshWorkScheduler.TAG_BACKFILL)
+                .build(),
+        )
     }
 
     private companion object {
         /**
-         * The chained priming work name.
+         * Unique names for the two priming one-shots.
          *
-         * Distinct from `RefreshWorkScheduler.ONE_SHOT_EOD`, so pressing "refresh" in Settings
-         * cannot cancel an in-flight history walk: a reader who explicitly asked for history should
-         * not lose it because they also asked for a price.
+         * Both are distinct from `RefreshWorkScheduler.ONE_SHOT_EOD`, so pressing "refresh" in
+         * Settings cannot cancel an in-flight history walk: a reader who explicitly asked for
+         * history should not lose it because they also asked for a price.
+         *
+         * They are distinct from *each other* because the two used to share one chain, and a chain
+         * yields a single status — so a failing EOD refresh made a *successful* history walk look
+         * like it had never run.
          */
-        const val ONE_SHOT_PRIME: String = "mia.first_run_prime"
+        const val ONE_SHOT_PRIME_EOD: String = "mia.first_run_eod"
+        const val ONE_SHOT_PRIME_HISTORY: String = "mia.first_run_history"
     }
 }

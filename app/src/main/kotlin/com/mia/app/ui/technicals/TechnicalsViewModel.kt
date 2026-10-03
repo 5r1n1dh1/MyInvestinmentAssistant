@@ -91,6 +91,15 @@ data class TechnicalsUiState(
     val trackRecordForSymbol: HitRate? = null,
     /** The last bar's date: the chart's and the header's "as of". */
     val asOf: LocalDate? = null,
+    /**
+     * Facts about the stored series the reader must be told — currently a suspected unadjusted
+     * corporate action inside the window.
+     *
+     * Empty in the normal case. When non-empty it means a displayed number on this tab is
+     * distorted by an unadjusted price cliff, which plan.md §1.4 rule 3 requires be stated rather
+     * than left for the reader to infer from an odd-looking chart.
+     */
+    val seriesNotes: List<String> = emptyList(),
 ) {
     /** Bars currently stored. */
     val barCount: Int get() = candles.size
@@ -242,6 +251,7 @@ class TechnicalsViewModel @Inject constructor(
                         trackRecord = loaded.trackRecord,
                         trackRecordForSymbol = loaded.trackRecordForSymbol,
                         asOf = loaded.candles.lastOrNull()?.date,
+                        seriesNotes = loaded.seriesNotes,
                     )
                 }
             } catch (cancellation: CancellationException) {
@@ -324,6 +334,18 @@ class TechnicalsViewModel @Inject constructor(
 
         val candles = dataSource.candles(symbol, timeframe)
 
+        // A second read of the same local table, skipped entirely when there are no bars — a series
+        // that could not be read has no notes, and the tab already renders that absence in its own
+        // words.
+        //
+        // Accepted rather than folded into [TechnicalsDataSource.candles] for two reasons. `Candle`
+        // is a price, and attaching prose about the series to every bar would put it inside the one
+        // type every indicator consumes. And returning both together would drag a repository type
+        // across the seam plan.md §4.3 draws between `:app` and `:data`. The cost is one extra
+        // query against a local table of at most a few hundred rows, once per load.
+        val seriesNotes =
+            if (candles.isEmpty()) emptyList() else dataSource.seriesNotes(symbol, timeframe)
+
         // One indicator pass per load, shared by the render gate and by the screen's read-outs.
         val snapshot = if (candles.isEmpty()) null else IndicatorSnapshot.of(candles)
 
@@ -352,6 +374,7 @@ class TechnicalsViewModel @Inject constructor(
             breakoutTrigger = trigger,
             trackRecord = record,
             trackRecordForSymbol = recordForSymbol,
+            seriesNotes = seriesNotes,
         )
     }
 

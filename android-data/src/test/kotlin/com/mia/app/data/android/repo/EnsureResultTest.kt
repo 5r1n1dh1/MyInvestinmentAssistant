@@ -206,10 +206,48 @@ class CandleThresholdTest {
     }
 
     @Test
-    fun `a history batch is bounded so one run cannot monopolise a connection`() {
+    fun `the batch ceiling is deep enough to satisfy the weekly gate on its own`() {
+        // THE REGRESSION GUARD for "Not Enough History".
+        //
+        // `backfillHistory` clamps its request to `HISTORY_BATCH_LIMIT`. This constant used to be
+        // 60, which is *exactly* `MIN_DAILY_BARS`, and that made the bug unfixable from the
+        // outside: no caller could ask for more, a single skipped session left 59 bars, and the
+        // gate then failed permanently with no retry able to help. 60 daily bars also aggregate to
+        // ~12 weekly against a 40-bar weekly gate, so the `1W` tab could never clear its own gate.
+        //
+        // The clamp is therefore only safe if the ceiling on its own clears both gates. Asserting
+        // `ceiling <= default` (the old test) could not catch this — it passed at 60 and passes at
+        // 280, and is satisfied by any pair where the ceiling is merely small. This asserts the
+        // property that actually matters, with no reference to the default at all.
+        val ceiling = CandleRepository.HISTORY_BATCH_LIMIT
+
         assertTrue(
-            CandleRepository.HISTORY_BATCH_LIMIT <= CandleRepository.DEFAULT_HISTORY_SESSIONS,
-            "a batch larger than the whole pass would make the two constants meaningless",
+            ceiling >= CandleRepository.MIN_DAILY_BARS,
+            "a ceiling of $ceiling is at or below the ${CandleRepository.MIN_DAILY_BARS}-bar daily " +
+                "gate, so one skipped session is enough to strand a stock forever",
+        )
+        assertTrue(
+            ceiling / 5 >= CandleRepository.MIN_WEEKLY_BARS,
+            "a ceiling of $ceiling aggregates to ~${ceiling / 5} weekly bars, short of the " +
+                "${CandleRepository.MIN_WEEKLY_BARS}-bar weekly gate",
+        )
+    }
+
+    @Test
+    fun `the default depth is not clipped by the ceiling`() {
+        // The specific arithmetic that made the old pair of constants self-defeating: a caller
+        // asking for the documented default must receive it, un-clipped.
+        val sessions = CandleRepository.DEFAULT_HISTORY_SESSIONS
+        val effective = sessions.coerceIn(1, CandleRepository.HISTORY_BATCH_LIMIT)
+
+        assertEquals(
+            sessions,
+            effective,
+            "asking for the default $sessions sessions must not be clamped to $effective",
+        )
+        assertTrue(
+            effective >= CandleRepository.DEFAULT_HISTORY_SESSIONS,
+            "the default must survive its own clamp",
         )
     }
 

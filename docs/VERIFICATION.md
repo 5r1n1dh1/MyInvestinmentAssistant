@@ -312,13 +312,95 @@ rendered all four as one dead end:
 A button that cannot work teaches the reader to distrust buttons, which is why
 `DataFailure.isWorthRetrying` returns `false` for the no-rows case.
 
+### The write path existed but could not write enough — "Not Enough History" on every stock
+
+Adding the write path above fixed *"no data at all"*. It did **not** fix *"Not Enough History"*,
+which is what the emulator run then reported for every symbol on both the `1D` and `1W` tabs. Two
+independent defects compounded, and both are arithmetic rather than plumbing — which is why neither
+showed up as a failing test.
+
+**1. The 280-session default could never execute.** `backfillHistory` clamped its whole request
+with `sessions.coerceAtMost(HISTORY_BATCH_LIMIT)`, and `HISTORY_BATCH_LIMIT` was `60`. No caller
+could ever fetch more than 60 sessions regardless of what it asked for, so the documented 280 was
+dead code. 60 was the worst possible ceiling for two separate reasons:
+
+| Gate (plan.md §6.4) | Needs | A 60-session pass delivers | Verdict |
+|---|---|---|---|
+| `1D` | 60 daily bars | ~60 — and **59** if one session is skipped | fails permanently |
+| `1W` | 40 weekly bars | ~12 weekly bars | can never pass, at all |
+
+The `1D` row is the nastier one: 60 lands *exactly* on the 60-bar gate, so a single holiday, archive
+purge or failed request leaves 59 and the tab reports "Not Enough History" with no retry able to
+recover. The ceiling is now 280, and the regression guard asserts the property that matters — *the
+ceiling alone clears both gates* — rather than the old `ceiling <= default`, which was satisfied by
+the buggy value and would not have caught it.
+
+**2. The skip counter was a total, but guarded as if consecutive.** Inside the same walk, one `skipped`
+counter was incremented for every unproductive day and compared against a 12-day limit whose KDoc
+called it *consecutive*. Reaching 280 sessions means stepping back ~392 calendar days, crossing ~112
+weekend days, so a "12 skips total" guard tripped at about **60 fetched sessions** — reproducing
+exactly the symptom the deeper default was meant to fix. There are now two counters: `skipped` for
+reporting, and `consecutiveSkips` for the give-up guard, reset by every successful fetch **and by
+every session found already stored** (a resumed pass re-walks days it has already fetched, so without
+that reset it would trip the guard while making good progress).
+
+**3. The first-run chain meant history never ran before 18:00 IST.** `primeFirstRun` enqueued
+`EodRefresh → HistoryBackfill` as a chain. `EodRefreshWorker` returns `Result.retry()` while today's
+bhavcopy is unpublished (plan.md §3.1: 404 until ~18:00 IST), and a `retry` **fails the whole
+chain** — so an install at 10:00 skipped the history walk entirely for the entire day. The chain was
+also unnecessary: `backfillHistory` walks *backwards from today*, so its first session is the newest
+published one and it covers today's bar by itself. The two are now independent enqueues. That also
+fixed a reporting bug, because one chain yields one status: a failing EOD refresh made a *successful*
+history walk look like it had never run.
+
+`TradingCalendar.isPossiblyTradingDay` excludes only weekends when no holiday set is passed (and the
+walk passes none), so the weekend-only give-up branch is unreachable in practice — a weekend run
+tops out at 2 days, never 13. It is retained, and now documented as the defensive branch it is.
+
+### Corporate actions are flagged, never silently adjusted
+
+The stored series is **unadjusted**: plan.md §5.1 makes the NSE bhavcopy canonical and it publishes
+raw prices, and plan.md §3.2's Yahoo source is stored the same way. The repository's own committed
+fixture (`eod_history.json`, 372 real sessions × 41 NSE large caps) contains four genuine corporate
+actions:
+
+| Symbol | Date | Move | Implied ratio |
+|---|---|---|---|
+| HDFCBANK | 2025-08-26 | −50.4% | ≈1:2 |
+| BAJFINANCE | 2025-06-16 | −89.9% | ≈1:10 |
+| TATAMOTORS | 2025-10-14 | −40.2% | ≈1:1.7 |
+| KOTAKBANK | 2026-01-14 | −80.3% | ≈1:5 |
+
+A bar like that is not a market event, and it silently corrupts every indicator computed over a
+window spanning it. The app **cannot fix this without adjusted prices**, and it does not try:
+rewriting stored history to look continuous would be fabricating data, and plan.md §5.1's write-once
+guarantee means a correction could never be accepted afterwards. So the bars are left exactly as
+published and the reader is **told**, per plan.md §1.4 rule 3 and §8.3.
+
+`CorporateActionDetector` (in `:domain`, so it is a plain JVM test) flags a single-bar move of
+**±25%** between near-adjacent sessions. The threshold is chosen, not guessed: Indian daily moves of
+±10% are ordinary, so anything low enough to catch a 1:1.5 consolidation would fire constantly and
+train the reader to ignore it; 25% sits above routine volatility and below the smallest split ratio
+in common use (1:2 = 50%). It is symmetric in sign, because a demerger or reverse split can re-rate a
+price *upward* and a silently broken series misleads exactly as much as a falling one. Near-adjacency
+is required (a 1–4 day gap) because a change across a long gap says nothing about the interval — and
+it must over-accept, since Indian markets are shut at weekends, so **every** real split straddles one.
+
+The note reaches the screen below the chart, because its effect *is* the chart. It renders in the
+tertiary container rather than the error container: nothing has failed, and a red card would imply
+the app is broken rather than that the source is unadjusted.
+
+**Not done, deliberately:** adjusted prices. InvestAssistant gets them from Yahoo `auto_adjust`, but
+Yahoo returns HTTP 429 from this machine and from many Indian networks, so no adjusted fetch could be
+verified before shipping. Raw-plus-flagging is the honest fallback; adjusted is the later upgrade.
+
 ---
 
 ## 6. Test inventory
 
 | Area | Tests | Notable |
 |---|---|---|
-| `domain/technical` | 198 | hand-computed golden values, NaN-free invariants, ADX warm-up |
+| `domain/technical` | 216 | hand-computed golden values, NaN-free invariants, ADX warm-up, corporate-action detection |
 | `domain/pattern` (core) | 108 | zigzag properties, three scoring fixtures, **P7 gate** |
 | `domain/pattern/detectors` | 173 | synthetic formations, near-misses, polarity, real-data rates, a pinned flag-rejection census |
 | `domain/redflag` | 191 | fires/quiet/cannot-evaluate, sector overrides, evidence completeness |
@@ -328,4 +410,11 @@ A button that cannot work teaches the reader to distrust buttons, which is why
 | `data/fundamentals` | 131 | five golden pages, both landmines, robots compliance |
 | `data/symbols` | 126 | resolution ladder, TATAMOTORS end-to-end, reconciliation counts |
 | `data/history` + `data/aggregate` | 150 | handshake sequencing, five §5.1 rows, 5.00/5.01 boundary |
-| **Total** | **1,337** | **0 failures** |
+| **Total** | **1,355** | **0 failures** |
+
+`:android-data`'s 14 tests are **not** in this total, and never have been: `:android-data` has still
+never been compiled on this machine (no Android SDK), so its count is a source count, not a run
+result. That is also where the two `CandleRepository` threshold guards live — including the
+regression guard for the batch ceiling — so those two specific assertions are exactly the ones the
+Google AI Studio run has to execute for this fix to be verified. Nothing in `:domain` or `:data`
+was modified, so the 1,337 previously-run tests are unaffected by this work.

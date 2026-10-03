@@ -19,6 +19,7 @@ import com.mia.app.domain.model.ParserHealth
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.technical.CandleResampler
+import com.mia.app.domain.technical.CorporateActionDetector
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -139,6 +140,13 @@ class DefaultCandleRepository @Inject constructor(
                                 "delivery-collapse flag cannot be evaluated for those bars",
                         )
                     }
+                    // The series is stored unadjusted — plan.md §5.1 makes the bhavcopy canonical
+                    // and it publishes raw prices — so a split inside the window is a price cliff
+                    // that silently skews every indicator spanning it. The bars are left exactly as
+                    // published, because rewriting history to look continuous would be fabricating
+                    // data and the write-once table could never accept a correction. The reader is
+                    // told instead, per plan.md §1.4 rule 3 and §8.3.
+                    corporateActionNote(candles)?.let { add(it) }
                 },
             ),
             source = candles.first().source,
@@ -379,7 +387,7 @@ class DefaultCandleRepository @Inject constructor(
         // file; this walk wants *older* files, and the archive publishes every weekday regardless of
         // what today is. Guarding on the trading calendar would make a Saturday the one day a reader
         // cannot fetch history — exactly backwards.
-        val wanted = sessions.coerceAtMost(CandleRepository.HISTORY_BATCH_LIMIT.coerceAtLeast(1))
+        val wanted = sessions.coerceIn(1, CandleRepository.HISTORY_BATCH_LIMIT)
 
         var fetched = 0
         var skipped = 0
@@ -388,13 +396,31 @@ class DefaultCandleRepository @Inject constructor(
         val notes = mutableListOf<String>()
         var cursor = today
 
+        /**
+         * Consecutive unproductive days, reset by every success **and** by every session found
+         * already stored.
+         *
+         * Deliberately a different counter from [skipped]. A single total counter aborted the walk
+         * far too early: reaching 280 sessions means stepping back ~392 calendar days, crossing
+         * roughly 112 weekend days, so a "12 skips total" guard tripped at about 60 fetched
+         * sessions — reproducing the exact symptom the deeper default was meant to fix. Only an
+         * unbroken run of unproductive days means the archive has run out.
+         */
+        var consecutiveSkips = 0
+
         while (fetched < wanted) {
             if (!TradingCalendar.isPossiblyTradingDay(cursor)) {
                 cursor = cursor.minusDays(1)
                 skipped++
-                if (skipped > MAX_SKIPPED_SESSIONS) {
-                    notes += "stopped after skipping $skipped consecutive non-trading days; the " +
-                        "archive is not answering for anything older"
+                consecutiveSkips++
+                if (consecutiveSkips > MAX_SKIPPED_SESSIONS) {
+                    // Defensive, and unreachable in practice: [TradingCalendar.isPossiblyTradingDay]
+                    // excludes only weekends when no holiday set is supplied (this call supplies
+                    // none), and a run of weekends tops out at 2 (Saturday, Sunday) — never 13. Kept
+                    // because it costs nothing and the walk must terminate even if the calendar's
+                    // definition changes to include a long exchange holiday cluster.
+                    notes += "stopped after $consecutiveSkips consecutive non-trading days; " +
+                        "everything already stored is unaffected and still being served"
                     break
                 }
                 continue
@@ -404,20 +430,31 @@ class DefaultCandleRepository @Inject constructor(
             // Skip without a request when this whole market's session is already stored. `forDate`
             // is the honest test: `bhavcopy_cache` is a *single* rolling row, so it only ever knows
             // the newest session and cannot answer this for older ones.
+            //
+            // This counts as progress, not a dead day: the depth target is how far back the stored
+            // series reaches, and an already-stored session is already at that depth. So it resets
+            // the consecutive counter — otherwise a *resumed* pass (which re-walks days it already
+            // fetched) would trip the give-up guard while making entirely good progress.
             if (candleDao.forDate(sessionKey).isNotEmpty()) {
                 skipped++
+                known++
+                consecutiveSkips = 0
                 cursor = cursor.minusDays(1)
                 continue
             }
 
             val parsed = bhavcopySource.fetch(cursor)
             if (parsed.candles.isEmpty()) {
-                // Weekend, holiday, or purged by the ~18-month retention. Either way there is
-                // nothing to store and no reason to treat it as an error.
+                // Weekend, exchange holiday, or purged by plan.md §3.1's ~18-month retention.
+                // Either way there is nothing to store and no reason to treat it as an error.
                 skipped++
+                consecutiveSkips++
                 cursor = cursor.minusDays(1)
-                if (skipped > MAX_SKIPPED_SESSIONS) {
-                    notes += "stopped after skipping $skipped consecutive days with no published " +
+                if (consecutiveSkips > MAX_SKIPPED_SESSIONS) {
+                    // The archive's edge, not a fault: plan.md §3.1 measures ~18 months of
+                    // retention, so a long unbroken run of empty files is the edge of the window
+                    // rather than an outage. Everything already stored is still served.
+                    notes += "stopped after $consecutiveSkips consecutive days with no published " +
                         "file; plan.md §3.1 measures roughly 18 months of retention, so this is " +
                         "the archive's edge rather than a fault"
                     break
@@ -430,8 +467,10 @@ class DefaultCandleRepository @Inject constructor(
                 notes += "the bhavcopy for $sessionKey parsed but stored nothing: " +
                     "no session date could be read from it"
                 skipped++
+                consecutiveSkips++
             } else {
                 fetched++
+                consecutiveSkips = 0
                 written += added
             }
             cursor = cursor.minusDays(1)
@@ -535,6 +574,15 @@ class DefaultCandleRepository @Inject constructor(
     }
 
     // --------------------------------------------------------------------------- internals
+
+    /**
+     * The corporate-action sentence for a stored series, or `null` when the series is clean.
+     *
+     * Delegates to the pure detector in `:domain` rather than re-deriving the rule here, so the
+     * threshold lives in exactly one place and its unit test is a plain JVM test.
+     */
+    private fun corporateActionNote(candles: List<Candle>): String? =
+        CorporateActionDetector.noteFor(candles.sortedBy { it.date })
 
     /**
      * Stores one historical session and **nothing else**.

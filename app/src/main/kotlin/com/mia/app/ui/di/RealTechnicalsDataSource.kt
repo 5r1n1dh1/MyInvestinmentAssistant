@@ -88,6 +88,16 @@ class RealTechnicalsDataSource @Inject constructor(
     override suspend fun candles(symbol: String, timeframe: Timeframe): List<Candle> =
         candleRepository.storedSeries(symbol, timeframe).barsOrEmpty()
 
+    /**
+     * Series-level notes, passed through verbatim.
+     *
+     * Read with the same tolerant accessor as [candles]: a series that could not be read at all has
+     * no notes either, and the tab already renders its absence for that case — so an honest absence
+     * yields an empty list rather than a second, competing error.
+     */
+    override suspend fun seriesNotes(symbol: String, timeframe: Timeframe): List<String> =
+        candleRepository.storedSeries(symbol, timeframe).valueOrNull()?.notes.orEmpty()
+
     override suspend fun redFlags(symbol: String, timeframe: Timeframe): TechnicalsRedFlags {
         val view = redFlagRepository.technicalFlags(symbol, timeframe).orThrowTyped()
         return TechnicalsRedFlags(

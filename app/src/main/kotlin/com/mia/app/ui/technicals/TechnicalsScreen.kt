@@ -181,6 +181,13 @@ fun TechnicalsScreen(
 
             item(key = CHART_KEY) { ChartSection(state) }
 
+            // A suspected unadjusted corporate action inside the window. Shown immediately below the
+            // chart because its effect *is* the chart: a 1:2 split makes an unbroken price look
+            // broken, and a reader who is not told will read the cliff as a market event.
+            state.seriesNotes.takeIf { it.isNotEmpty() }?.let { notes ->
+                item(key = SERIES_NOTES_KEY) { SeriesNotesSection(notes) }
+            }
+
             state.snapshot?.let { snapshot ->
                 item(key = INDICATORS_KEY) { IndicatorSection(state = state, snapshot = snapshot) }
                 item(key = TREND_KEY) { TrendSection(state = state) }
@@ -813,6 +820,38 @@ private fun FlagCoverageSection(state: TechnicalsUiState, modifier: Modifier = M
     }
 }
 
+/**
+ * Facts about the stored series that change how its numbers should be read.
+ *
+ * Currently one: a suspected corporate action inside the window. The series is stored unadjusted,
+ * so a split shows up as a price cliff, and every indicator spanning it is skewed. The copy is
+ * generated in `:domain` (one rule, one JVM test) and passed through untouched — the screen adds no
+ * interpretation of its own, so there is no second place for the wording to drift.
+ *
+ * Rendered in the tertiary container rather than the error container: nothing has failed, and a
+ * red card would imply the app is broken rather than that the source is unadjusted.
+ */
+@Composable
+private fun SeriesNotesSection(notes: List<String>, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+    ) {
+        Text(
+            text = SERIES_NOTES_TITLE,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+        notes.forEach { note ->
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+        }
+    }
+}
+
 // --------------------------------------------------------------------------- primitives
 
 /** Two readings side by side. A plain `Row`, not a `FlowRow`: the layout is fixed, not adaptive. */
@@ -966,6 +1005,10 @@ private const val PROJECTION_ONLY_KEY = "technicals.projection"
 private const val TRIGGER_KEY = "technicals.trigger"
 private const val TRACK_RECORD_KEY = "technicals.track_record"
 private const val FLAG_COVERAGE_KEY = "technicals.flag_coverage"
+private const val SERIES_NOTES_KEY = "technicals.series_notes"
+
+/** Heading for the series-quality section. Neutral wording: nothing has failed. */
+private const val SERIES_NOTES_TITLE = "About this series"
 private const val FOOTER_KEY = "technicals.footer"
 
 /**
