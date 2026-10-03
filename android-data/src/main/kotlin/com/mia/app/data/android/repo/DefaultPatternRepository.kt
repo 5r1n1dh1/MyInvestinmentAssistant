@@ -46,18 +46,52 @@ class DefaultPatternRepository @Inject constructor(
         symbol: String,
         timeframe: Timeframe,
     ): DataResult<PatternScan> = withContext(dispatcher) {
-        val rows = candleDao.all(symbol, Mappers.timeframeKey(timeframe))
+        val ticker = symbol.trim().uppercase()
+        val rows = candleDao.all(ticker, Mappers.timeframeKey(timeframe))
         if (rows.isEmpty()) {
-            return@withContext DataResult.unavailable(
-                failure = DataFailure(
-                    reason = DataFailureReason.NO_DATA_CACHED,
-                    message = "No ${timeframe.name} bars for $symbol are stored, so no pattern can be " +
-                        "detected. Refresh the stock or wait for the nightly refresh (plan.md §10).",
-                    detail = "symbol=$symbol timeframe=${timeframe.name}",
-                ),
-                source = Source.NSE_BHAVCOPY,
-                fetchedOn = todayInMarket(),
-            )
+            // Same three-way distinction as `DefaultCandleRepository.storedSeries`, because the two
+            // are read together on the same screen and disagreeing reasons would be worse than one
+            // vague reason: this tab must not say "refresh" for a ticker that has no published rows.
+            return@withContext when {
+                candleDao.symbols().isEmpty() -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NOT_ATTEMPTED,
+                        message = "No market data has been downloaded on this device yet, so no " +
+                            "pattern can be detected for $ticker. Detection needs at least " +
+                            "${minBarsFor(timeframe)} ${timeframe.name} bars — use Refresh, or " +
+                            "Settings → Refresh history to fetch a history deep enough to score.",
+                        detail = "symbol=$ticker timeframe=${timeframe.name} candlesTable=empty",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+
+                candleDao.count(ticker, Mappers.timeframeKey(Timeframe.D1)) == 0 &&
+                    candleDao.count(ticker, Mappers.timeframeKey(Timeframe.W1)) == 0 -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NO_ROWS_FOR_SYMBOL,
+                        message = "Market data is stored on this device, but the published files " +
+                            "contain no rows for $ticker, so no pattern can be detected. That usually " +
+                            "means it is not in the EQ/SM series the app keeps (plan.md §3.1), or it " +
+                            "was delisted or renamed — refreshing again will not change it.",
+                        detail = "symbol=$ticker timeframe=${timeframe.name}",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+
+                else -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NO_DATA_CACHED,
+                        message = "No ${timeframe.name} bars are stored for $ticker yet, though daily " +
+                            "data exists. The weekly series is derived from daily bars, so it appears " +
+                            "once the daily history has been deepened.",
+                        detail = "symbol=$ticker timeframe=${timeframe.name}",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+            }
         }
         val candles = rows.map { Mappers.toCandle(it) }.sortedBy { it.date }
         val minBars = minBarsFor(timeframe)
@@ -66,10 +100,12 @@ class DefaultPatternRepository @Inject constructor(
             return@withContext DataResult.unavailable(
                 failure = DataFailure(
                     reason = DataFailureReason.NOT_ENOUGH_HISTORY,
-                    message = "$symbol has ${candles.size} ${timeframe.name} bar(s); plan.md §6.4's hard " +
+                    message = "$ticker has ${candles.size} ${timeframe.name} bar(s); plan.md §6.4's hard " +
                         "gate is $minBars. The app says \"not enough history\" and emits no pattern " +
-                        "score from this series — a low score from too few bars would be noise.",
-                    detail = "symbol=$symbol bars=${candles.size} required=$minBars",
+                        "score from this series — a low score from too few bars would be noise. " +
+                        "The 19:00 IST refresh adds only one session a day, so use Settings → " +
+                        "Refresh history to walk the NSE archive; that pass is resumable.",
+                    detail = "symbol=$ticker bars=${candles.size} required=$minBars",
                 ),
                 source = Source.NSE_BHAVCOPY,
                 fetchedOn = todayInMarket(),

@@ -73,6 +73,18 @@ class RealTechnicalsDataSource @Inject constructor(
     private val accuracyRepository: AccuracyRepository,
 ) : TechnicalsDataSource {
 
+    /**
+     * Stale-only freshness check. See [TechnicalsDataSource.ensureFresh] for why it exists.
+     *
+     * The result is deliberately discarded: this method exists for its side effect (populating the
+     * cache), and its typed failure is already represented by the [candles] call that follows. A
+     * failure here therefore returns normally and the tab's empty state names the real reason,
+     * rather than collapsing "the network is down" and "no rows for this ticker" into one banner.
+     */
+    override suspend fun ensureFresh(symbol: String, timeframe: Timeframe) {
+        candleRepository.ensureData(symbol)
+    }
+
     override suspend fun candles(symbol: String, timeframe: Timeframe): List<Candle> =
         candleRepository.storedSeries(symbol, timeframe).barsOrEmpty()
 
@@ -174,9 +186,13 @@ class RealTechnicalsDataSource @Inject constructor(
      *
      * `CandleSeries.ordered()` is the documented accessor and it is what every indicator expects,
      * so the tab's list is always ascending: the chart indexes it and `Match.pivots` address bars
-     * by absolute index. A `NO_DATA_CACHED` result is an honest absence and becomes an empty list;
-     * every other failure throws this tab's typed exception, so an unreachable source can never be
-     * mistaken for an empty chart.
+     * by absolute index. An honest absence — `NOT_ATTEMPTED`, `NO_DATA_CACHED`,
+     * `NOT_ENOUGH_HISTORY`, `NO_ROWS_FOR_SYMBOL` — becomes an empty list; every other failure throws
+     * this tab's typed exception, so an unreachable source can never be mistaken for an empty chart.
+     *
+     * The four honest absences are deliberately kept apart by
+     * [DefaultCandleRepository.storedSeries] and by `DataFailure.isNothingStored`, because they
+     * call for different sentences on screen and only two of them are fixable by pressing a button.
      */
     private fun DataResult<CandleSeries>.barsOrEmpty(): List<Candle> = try {
         orNullWhenNothingStored()?.ordered().orEmpty()
@@ -188,10 +204,19 @@ class RealTechnicalsDataSource @Inject constructor(
     private fun <T : Any> DataResult<T>.orThrowTyped(): T =
         valueOrNull() ?: throw unavailable(failureOrNull()!!)
 
+    /**
+     * This tab's typed exception, built from a typed failure.
+     *
+     * [TechnicalsUnavailableException.isAbsence] is what separates "nothing to draw, and here is
+     * why" from "the read failed". An honest absence renders as an explained empty state — with a
+     * fetch button only when one can help — while a real failure renders as `ErrorState`. Collapsing
+     * the two is what made a fresh install look broken: an empty table was reported as an error.
+     */
     private fun unavailable(failure: DataFailure) = TechnicalsUnavailableException(
         reason = failure.userFacingReason(),
         isTransient = failure.isWorthRetrying(),
         isNotPublished = failure.isNotPublishedYet(),
+        isAbsence = failure.isNothingStored(),
     )
 
     private companion object {

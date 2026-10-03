@@ -35,6 +35,18 @@ import com.mia.app.domain.redflag.RuleSkip
  */
 interface PatternsDataSource {
 
+    /**
+     * Checks the symbol's bars are present and current enough to scan, **fetching only when the
+     * cache is stale**.
+     *
+     * Same contract as [com.mia.app.ui.technicals.TechnicalsDataSource.ensureFresh], and for the
+     * same reason: the tab reads the `candles` table, and nothing wrote to it until the nightly
+     * 19:00 IST worker, so a reader who opened this tab first saw a permanent "not enough history".
+     *
+     * Never throws for a failed fetch; the following [candles] call reports the real reason.
+     */
+    suspend fun ensureFresh(symbol: String, timeframe: Timeframe)
+
     /** Stored EOD bars for one symbol and timeframe, ascending by date. */
     suspend fun candles(symbol: String, timeframe: Timeframe): List<Candle>
 

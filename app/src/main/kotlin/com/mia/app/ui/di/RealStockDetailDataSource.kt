@@ -48,6 +48,16 @@ class RealStockDetailDataSource @Inject constructor(
     override suspend fun header(symbol: String): StockHeader = onBackground {
         val ticker = symbol.trim().uppercase()
         try {
+            // Stale-only freshness check before reading the cache.
+            //
+            // The header is where a reader is closest to wanting a price — they have just searched
+            // and tapped through — so it is the natural place to notice the table is behind. It
+            // fetches only when the newest stored session predates the newest expected one, so
+            // re-opening a stock from a warm cache costs nothing. Its failure is deliberately ignored:
+            // the `storedSeries` read below then reports the real reason, which is more useful than
+            // collapsing "the network is down" into "the header could not be built".
+            runCatching { candleRepository.ensureData(ticker) }
+
             // `record` fails with `NOTHING_TO_DO` for a ticker in neither the master nor the
             // database. That is not a failed read of the header — it is the absence of a *name*.
             // Any other reason it reports (a missing bundled master) is a real failure and is

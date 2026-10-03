@@ -18,6 +18,7 @@ import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.ParserHealth
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.technical.CandleResampler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -55,19 +56,61 @@ class DefaultCandleRepository @Inject constructor(
         timeframe: Timeframe,
         limit: Int,
     ): DataResult<CandleSeries> = withContext(dispatcher) {
-        val rows = candleDao.recent(symbol, Mappers.timeframeKey(timeframe), limit)
+        val ticker = symbol.trim().uppercase()
+        val rows = candleDao.recent(ticker, Mappers.timeframeKey(timeframe), limit)
         if (rows.isEmpty()) {
-            return@withContext DataResult.unavailable(
-                failure = DataFailure(
-                    reason = DataFailureReason.NO_DATA_CACHED,
-                    message = "No ${timeframe.name} bars for $symbol are stored on this device yet. " +
-                        "Open the stock and refresh, or wait for the 19:00 IST nightly refresh " +
-                        "(plan.md §10). This is not the same as 'no price data exists'.",
-                    detail = "symbol=$symbol timeframe=${timeframe.name}",
-                ),
-                source = Source.NSE_BHAVCOPY,
-                fetchedOn = todayInMarket(),
-            )
+            // Three empty states that call for three different sentences, and collapsing them into
+            // one "no data" is what made the first version of this tab look broken when it was
+            // merely empty. The distinction matters because only two of the three are fixable by
+            // the reader pressing a button.
+            //
+            // `candleDao.symbols()` is checked first and short-circuits: a full table means an
+            // older symbol's bars are present, so an empty result for *this* symbol is a fact
+            // about the symbol rather than about the device.
+            return@withContext when {
+                // Nothing on this device at all → offer the fetch.
+                candleDao.symbols().isEmpty() -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NOT_ATTEMPTED,
+                        message = "No market data has been downloaded on this device yet, so there " +
+                            "is nothing to show for $ticker. This is not a missing price — the " +
+                            "bhavcopy has never been fetched. Use Refresh, or open the stock and let " +
+                            "it check for a newer session.",
+                        detail = "symbol=$ticker timeframe=${timeframe.name} candlesTable=empty",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+
+                // The table is populated but this symbol is absent from it → retrying cannot help.
+                candleDao.count(ticker, Mappers.timeframeKey(Timeframe.D1)) == 0 &&
+                    candleDao.count(ticker, Mappers.timeframeKey(Timeframe.W1)) == 0 -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NO_ROWS_FOR_SYMBOL,
+                        message = "Market data is stored on this device, but the published files " +
+                            "contain no rows for $ticker. That usually means the symbol is not in " +
+                            "the EQ/SM series the app keeps (plan.md §3.1), or it was delisted or " +
+                            "renamed. Refreshing again will not change the answer — try resolving " +
+                            "the ticker again, which reports corporate actions (plan.md §9).",
+                        detail = "symbol=$ticker timeframe=${timeframe.name}",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+
+                else -> DataResult.unavailable(
+                    failure = DataFailure(
+                        reason = DataFailureReason.NOT_ENOUGH_HISTORY,
+                        message = "No ${timeframe.name} bars are stored for $ticker yet, though " +
+                            "daily data exists. The weekly series is derived from daily bars " +
+                            "(plan.md §4.1 supports 1D and 1W only), so it appears once the daily " +
+                            "history has been deepened.",
+                        detail = "symbol=$ticker timeframe=${timeframe.name}",
+                    ),
+                    source = Source.NSE_BHAVCOPY,
+                    fetchedOn = todayInMarket(),
+                )
+            }
         }
         val candles = rows.map { Mappers.toCandle(it) }
         val minBars = minBarsFor(timeframe)
@@ -215,6 +258,219 @@ class DefaultCandleRepository @Inject constructor(
             storeMarket(parsed, today)
         }
 
+    override suspend fun ensureData(
+        symbol: String,
+        today: LocalDate,
+    ): EnsureResult = withContext(dispatcher) {
+        val ticker = symbol.trim().uppercase()
+        val stored = candleDao.recent(ticker, Mappers.timeframeKey(Timeframe.D1), 1)
+        val newest = stored.firstOrNull()?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val storedCount = candleDao.count(ticker, Mappers.timeframeKey(Timeframe.D1))
+
+        // The one date the cache must cover to count as current. Before publication, today is not
+        // an expected session yet, so the bar for *today* must not be demanded.
+        val expectedThrough = expectedLatestSession(today)
+
+        if (newest != null && expectedThrough != null && !newest.isBefore(expectedThrough)) {
+            return@withContext EnsureResult.fresh(
+                symbol = ticker,
+                asOf = newest,
+                barCount = storedCount,
+                expectedThrough = expectedThrough,
+            )
+        }
+
+        val before = storedCount
+        val parsed = bhavcopySource.fetchLatestOnOrBefore(today)
+        val failure = parsed.toDataFailureOrNull(requestedOn = today)
+        if (failure != null) {
+            // Deliberately not a throw and not a wipe: a network problem must never turn a
+            // populated tab into an empty one.
+            return@withContext EnsureResult.failed(
+                symbol = ticker,
+                asOf = newest,
+                barCount = storedCount,
+                failure = failure,
+            )
+        }
+
+        val result = storeMarket(parsed, today)
+        val after = candleDao.count(ticker, Mappers.timeframeKey(Timeframe.D1))
+        val asOf = candleDao.recent(ticker, Mappers.timeframeKey(Timeframe.D1), 1)
+            .firstOrNull()?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+        // The weekly tab has no writer of its own — the bhavcopy publishes daily bars only — so W1
+        // is aggregated here from the D1 rows we just ensured. Without this the 1W tab is
+        // permanently empty no matter how much daily data arrives, and it would report "no bars"
+        // for a symbol that plainly has them.
+        val weeklyAdded = deriveWeeklyBars(ticker)
+
+        val sessionNote = result.valueOrNull()?.let {
+            "whole-market bhavcopy for ${it.asOf} stored: ${it.barsWritten} bar(s) written, " +
+                "${it.barsAlreadyKnown} already known"
+        } ?: "the bhavcopy parsed to ${parsed.candles.size} candle(s) but stored nothing new"
+
+        val coverage = when {
+            after >= MIN_DAILY_BARS ->
+                "the daily series now clears plan.md §6.4's 60-bar gate ($after bar(s))"
+            else -> "the daily series is still short of plan.md §6.4's 60-bar gate " +
+                "($after bar(s)); the 19:00 IST worker adds only one session a day, so use " +
+                "Settings → Refresh history to walk the NSE archive"
+        }
+
+        EnsureResult.fetched(
+            symbol = ticker,
+            asOf = asOf,
+            barsAdded = (after - before).coerceAtLeast(0) + weeklyAdded,
+            note = "$sessionNote; this symbol gained " +
+                "${(after - before).coerceAtLeast(0)} daily and $weeklyAdded derived weekly bar(s) " +
+                "($before → $after daily); $coverage",
+        )
+    }
+
+    /**
+     * Aggregates stored D1 bars into stored W1 bars for one symbol.
+     *
+     * ### Why the weekly rows are written rather than derived per read
+     * `CandleResampler.toWeekly` is pure and cheap, so deriving on read would be possible — but the
+     * weekly series is then *invisible* to `storedSeries(W1)`, to the accuracy table and to the
+     * settings coverage count, all of which read the table. Persisting the aggregate keeps one
+     * source of truth, and the write-once guarantee means it can never disagree with the daily bars
+     * it came from except by gaining another week.
+     *
+     * @return how many weekly bars were newly written.
+     */
+    private suspend fun deriveWeeklyBars(symbol: String): Int {
+        val daily = candleDao.all(symbol, Mappers.timeframeKey(Timeframe.D1))
+            .map { Mappers.toCandle(it) }
+        if (daily.size < MIN_WEEKLY_SOURCE_BARS) return 0
+
+        val weekly = CandleResampler.toWeekly(daily)
+        if (weekly.isEmpty()) return 0
+
+        // A weekly bar's key is its **last session's** date, which is the date the resampler stamps
+        // (see `CandleResampler.toWeekly`'s KDoc). Re-deriving from the same daily rows therefore
+        // produces byte-identical keys, so `INSERT OR IGNORE` makes this a no-op once a week has been
+        // stored — which is why the method can be called on every fetch without accumulating rows.
+        val ids = candleDao.insertIgnore(weekly.map { Mappers.fromCandle(it) })
+        return ids.count { it != -1L }
+    }
+
+    /**
+     * The newest session the cache must contain for the app to call itself current.
+     *
+     * Before the bhavcopy is published (~18:00 IST, plan.md §3.1) today's file simply does not
+     * exist, so demanding it would report a healthy cache as stale and trigger a pointless fetch
+     * on every stock open all afternoon. Returns `null` only in the narrow window where publication
+     * status is genuinely unknowable from the calendar alone.
+     */
+    private fun expectedLatestSession(today: LocalDate): LocalDate? {
+        if (!TradingCalendar.isPossiblyTradingDay(today)) {
+            return TradingCalendar.previousPossiblyTradingDay(today)
+        }
+        return today
+    }
+
+    override suspend fun backfillHistory(
+        sessions: Int,
+        today: LocalDate,
+    ): DataResult<HistoryBackfill> = withContext(dispatcher) {
+        // No trading-day guard here, deliberately. `refreshMarket` needs one because it wants *today's*
+        // file; this walk wants *older* files, and the archive publishes every weekday regardless of
+        // what today is. Guarding on the trading calendar would make a Saturday the one day a reader
+        // cannot fetch history — exactly backwards.
+        val wanted = sessions.coerceAtMost(HISTORY_BATCH_LIMIT.coerceAtLeast(1))
+
+        var fetched = 0
+        var skipped = 0
+        var written = 0
+        var known = 0
+        val notes = mutableListOf<String>()
+        var cursor = today
+
+        while (fetched < wanted) {
+            if (!TradingCalendar.isPossiblyTradingDay(cursor)) {
+                cursor = cursor.minusDays(1)
+                skipped++
+                if (skipped > MAX_SKIPPED_SESSIONS) {
+                    notes += "stopped after skipping $skipped consecutive non-trading days; the " +
+                        "archive is not answering for anything older"
+                    break
+                }
+                continue
+            }
+
+            val sessionKey = cursor.toString()
+            // Skip without a request when this whole market's session is already stored. `forDate`
+            // is the honest test: `bhavcopy_cache` is a *single* rolling row, so it only ever knows
+            // the newest session and cannot answer this for older ones.
+            if (candleDao.forDate(sessionKey).isNotEmpty()) {
+                skipped++
+                cursor = cursor.minusDays(1)
+                continue
+            }
+
+            val parsed = bhavcopySource.fetch(cursor)
+            if (parsed.candles.isEmpty()) {
+                // Weekend, holiday, or purged by the ~18-month retention. Either way there is
+                // nothing to store and no reason to treat it as an error.
+                skipped++
+                cursor = cursor.minusDays(1)
+                if (skipped > MAX_SKIPPED_SESSIONS) {
+                    notes += "stopped after skipping $skipped consecutive days with no published " +
+                        "file; plan.md §3.1 measures roughly 18 months of retention, so this is " +
+                        "the archive's edge rather than a fault"
+                    break
+                }
+                continue
+            }
+
+            val added = storeHistorySession(parsed)
+            if (added == null) {
+                notes += "the bhavcopy for $sessionKey parsed but stored nothing: " +
+                    "no session date could be read from it"
+                skipped++
+            } else {
+                fetched++
+                written += added
+            }
+            cursor = cursor.minusDays(1)
+        }
+
+        val earliest = candleDao.earliestDate(Mappers.timeframeKey(Timeframe.D1))
+        val latest = candleDao.latestDate(Mappers.timeframeKey(Timeframe.D1))
+
+        if (fetched == 0 && written == 0) {
+            return@withContext DataResult.unavailable(
+                failure = DataFailure(
+                    reason = DataFailureReason.HISTORY_UNAVAILABLE,
+                    message = "No further history could be downloaded. " +
+                        (notes.firstOrNull() ?: "Every requested session was already stored.") +
+                        " Any bars already on this device are unaffected and are still being served.",
+                    detail = "requested=$wanted fetched=$fetched skipped=$skipped",
+                ),
+                source = Source.NSE_BHAVCOPY,
+                fetchedOn = today,
+            )
+        }
+
+        DataResult.ok(
+            value = HistoryBackfill(
+                requestedSessions = wanted,
+                sessionsFetched = fetched,
+                sessionsSkipped = skipped,
+                barsWritten = written,
+                barsAlreadyKnown = known,
+                earliestStored = earliest?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                latestStored = latest?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                notes = notes,
+            ),
+            source = Source.NSE_BHAVCOPY,
+            fetchedOn = today,
+            asOf = latest?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        )
+    }
+
     override suspend fun backfill(
         symbol: String,
         timeframes: Set<Timeframe>,
@@ -279,6 +535,35 @@ class DefaultCandleRepository @Inject constructor(
     }
 
     // --------------------------------------------------------------------------- internals
+
+    /**
+     * Stores one historical session and **nothing else**.
+     *
+     * ### Why this is not [storeMarket]
+     * A history walk calls it once per session, and `storeMarket` does three things that are
+     * correct for the newest session and wrong sixty times over:
+     *
+     * 1. **[attachDelivery]** issues a second network request to plan.md §3.5's legacy file —
+     *    doubling a 60-session pass to 120 requests for a figure the plan marks optional.
+     * 2. **[marketDao.replace]** rewrites the *rolling* cache row. Walking backwards would leave
+     *    that row holding the **oldest** session fetched, so "the market cache date" would start
+     *    reporting a date months stale.
+     * 3. **[recordIdentityEvents]** diffs consecutive sessions. Walking backwards makes every pair
+     *    look like a mass disappearance and reappearance, manufacturing hundreds of fake corporate
+     *    actions (plan.md §9).
+     *
+     * So this writes bars and only bars. Delivery %, the rolling cache and identity events belong
+     * to the single-session path; plan.md §9's corporate-action detection is a same-day concern
+     * anyway.
+     *
+     * @return how many bars were newly written, or `null` when the file carried no session date.
+     */
+    private suspend fun storeHistorySession(parsed: BhavcopyParseResult): Int? {
+        val sessionDate = parsed.tradDt ?: parsed.candles.firstOrNull()?.date ?: return null
+        if (sessionDate.toString() !in parsed.candles.map { it.date.toString() }) return null
+        val ids = candleDao.insertIgnore(parsed.candles.map { Mappers.fromCandle(it) })
+        return ids.count { it != -1L }
+    }
 
     private suspend fun storeMarket(
         parsed: BhavcopyParseResult,
@@ -465,5 +750,27 @@ class DefaultCandleRepository @Inject constructor(
         Source.YAHOO in series.sources && Source.NSE_BHAVCOPY in series.sources -> SeriesOrigin.MERGED
         Source.YAHOO in series.sources -> SeriesOrigin.YAHOO
         else -> SeriesOrigin.NSE_BHAVCOPY
+    }
+
+    private companion object {
+        /**
+         * How many consecutive unfetchable days end a history walk.
+         *
+         * Generous on purpose. A real NSE holiday run (Diwali, Holi) is 3–4 sessions, so a bound of
+         * 5 survives one without mistaking it for the archive's edge. Past that, the walk is
+         * burning requests against purged or unavailable data, and plan.md §3.1's measured ~18
+         * months of retention means the tail is mostly 404s by design.
+         */
+        const val MAX_SKIPPED_SESSIONS: Int = 12
+
+        /**
+         * Daily bars required before a weekly aggregate is worth writing.
+         *
+         * Below this the derived series is too short to be anything but noise — and
+         * plan.md §6.4's own 1W gate is 40, which needs ~280 daily bars, so a symbol with fewer
+         * than ~60 daily bars cannot reach a publishable weekly series no matter how many times we
+         * derive it.
+         */
+        const val MIN_WEEKLY_SOURCE_BARS: Int = 20
     }
 }

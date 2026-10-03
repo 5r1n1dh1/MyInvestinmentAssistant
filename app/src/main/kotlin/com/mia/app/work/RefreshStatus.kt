@@ -173,6 +173,24 @@ enum class RefreshTask(
         description = "Re-runs the detectors over the tracked symbols, evaluates the breakout " +
             "conditions and settles any outcome whose evaluation window has closed.",
     ),
+
+    /**
+     * The NSE-archive history walk (`HistoryBackfillWorker`).
+     *
+     * A third task, not a flag on [EOD_REFRESH], because it answers a different question at a very
+     * different cost: one whole-market file versus dozens. The nightly refresh adds **one bar a
+     * day**, which can never satisfy plan.md §6.4's 60-bar gate — so without this the pattern engine
+     * stays permanently below its own threshold and every pattern tab says "not enough history"
+     * forever. It is also what a reader needs after a fresh install, when the database has exactly
+     * one session in it.
+     */
+    HISTORY_BACKFILL(
+        uniqueWorkName = "mia.history_backfill",
+        label = "History refresh",
+        description = "Walks backwards through the NSE archive to store enough daily bars for " +
+            "pattern detection. Sessions already stored are skipped, so it resumes rather than " +
+            "starting over.",
+    ),
 }
 
 /**

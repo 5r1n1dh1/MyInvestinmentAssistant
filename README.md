@@ -157,6 +157,21 @@ saying why*. A permanent gap that reports itself beats a blank that reads as a v
 Exponential backoff (min 30 min), `CONNECTED` + `requiresBatteryNotLow`, last success/failure
 persisted. Only the **watchlist** is scanned nightly; everything else runs on demand.
 
+### Data arrives without waiting for 19:00
+
+The schedule above alone left a fresh install useless: nothing is fetched until the 19:00 run, so
+every tab reported "no bars stored" for the rest of the day. Three things changed:
+
+| | Before | Now |
+|---|---|---|
+| Opening a stock | reads the cache only | **fetches if the cache is stale** — never if it already covers the newest session |
+| First run | waits for 19:00 IST | primes in the background on launch |
+| Settings → Refresh | re-planned the schedule | enqueues a real one-off run |
+
+A nightly refresh alone adds **one bar a day**, which can never reach the 60-bar detection gate, so
+there is also a bounded **history walk** that pulls older sessions from the same archive — resumable,
+and shared across every symbol, since each file contains the whole market.
+
 ---
 
 ## Repo layout

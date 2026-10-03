@@ -545,11 +545,20 @@ private fun RefreshTaskCard(
                 else MaterialTheme.colorScheme.onSurface,
             )
             Text(text = detail, style = MaterialTheme.typography.labelSmall)
-            OutlinedButton(
-                onClick = onRefreshNow,
-                enabled = !isActionRunning && status?.isBusy != true,
-            ) {
-                Text(text = REFRESH_NOW)
+
+            // The pattern scan is derived work: it reads bars the price refresh stores, so a button
+            // on it could only re-read the existing cache. It keeps its status card — a reader needs
+            // to see when the last scan ran — but is not given an action that cannot do anything.
+            if (task != RefreshTask.PATTERN_SCAN) {
+                OutlinedButton(
+                    onClick = onRefreshNow,
+                    enabled = !isActionRunning && status?.isBusy != true,
+                    modifier = Modifier.testTag("refresh_now_${task.name}"),
+                ) {
+                    Text(
+                        text = if (task == RefreshTask.HISTORY_BACKFILL) REFRESH_HISTORY else REFRESH_NOW,
+                    )
+                }
             }
         }
     }
@@ -715,7 +724,23 @@ private const val SPEECH_NEVER_CERTAIN =
 private const val SECTION_REFRESH = "Background refresh"
 private const val REFRESH_SUBTITLE =
     "What the nightly jobs last did. A job that has never run says so; it is not reported as current."
+
+/**
+ * The button on the price-refresh card.
+ *
+ * "Refresh now" because it queues a run immediately rather than rescheduling the nightly job —
+ * a button that silently only re-plans would leave a reader on an empty app still waiting for
+ * 19:00 IST.
+ */
 private const val REFRESH_NOW = "Refresh now"
+
+/**
+ * The button on the history card.
+ *
+ * Named for what it actually does, because it costs tens of megabytes of download against one
+ * ~208 KB session file, and a reader deserves to know which button they are about to press.
+ */
+private const val REFRESH_HISTORY = "Fetch more history"
 private const val UNKNOWN_STATUS =
     "No status has been read for this job on this device yet."
 

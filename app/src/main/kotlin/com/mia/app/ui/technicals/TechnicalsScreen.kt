@@ -161,6 +161,24 @@ fun TechnicalsScreen(
                 }
             }
 
+            // An honest absence is **not** an error banner. "Nothing has been downloaded yet" and
+            // "the published files contain no rows for this ticker" both leave the tab empty, but
+            // only the first is fixable by pressing a button — so the button is shown only for that
+            // one, because a button that cannot work teaches the reader to distrust it.
+            state.absenceReason?.let { reason ->
+                item(key = ABSENCE_KEY) {
+                    EmptyState(
+                        title = if (state.absenceOffersFetch) {
+                            UiStrings.NO_DATA_DOWNLOADED
+                        } else {
+                            UiStrings.NO_DATA_FOR_SYMBOL
+                        },
+                        body = reason,
+                        modifier = Modifier,
+                    )
+                }
+            }
+
             item(key = CHART_KEY) { ChartSection(state) }
 
             state.snapshot?.let { snapshot ->
@@ -938,6 +956,7 @@ private const val HEADER_KEY = "technicals.header"
 private const val TIMEFRAME_KEY = "technicals.timeframe"
 private const val LOADING_KEY = "technicals.loading"
 private const val ERROR_KEY = "technicals.error"
+private const val ABSENCE_KEY = "technicals.absence"
 private const val CHART_KEY = "technicals.chart"
 private const val INDICATORS_KEY = "technicals.indicators"
 private const val TREND_KEY = "technicals.trend"

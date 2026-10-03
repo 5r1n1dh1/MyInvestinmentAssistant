@@ -71,13 +71,32 @@ class EodRefreshWorker @AssistedInject constructor(
         return when {
             result.isOk -> {
                 val refresh = result.orThrow()
+
+                // "Fetch history" mode: the newest session alone is one bar, and plan.md §6.4 needs
+                // 60, so a reader who asked for history and got only today's bar has been ignored.
+                // Deepening here keeps one tap and one `work_state` row describing the whole outcome.
+                val historySummary = if (inputData.getBoolean(KEY_FORCE_BACKFILL, false)) {
+                    candles.backfillHistory(
+                        sessions = CandleRepository.DEFAULT_HISTORY_SESSIONS,
+                        today = today,
+                    ).let { backfill ->
+                        when {
+                            backfill.isOk -> " · history: ${backfill.orThrow().summary()}"
+                            else -> " · history could not be deepened: " +
+                                (backfill.failure?.message ?: "unknown reason")
+                        }
+                    }
+                } else {
+                    ""
+                }
+
                 workState.recordSuccess(
                     taskId = WorkStateRecorder.Tasks.EOD_REFRESH,
                     status = STATUS_OK,
                 )
                 Result.success(
                     workDataOf(
-                        STATUS_OK to refresh.summary(today),
+                        STATUS_OK to refresh.summary(today) + historySummary,
                         KEY_AS_OF to refresh.asOf.toString(),
                         KEY_BARS_WRITTEN to refresh.barsWritten.toString(),
                         KEY_SYMBOLS to refresh.symbolsInFile.toString(),
@@ -138,6 +157,16 @@ class EodRefreshWorker @AssistedInject constructor(
         const val KEY_AS_OF: String = "asOf"
         const val KEY_BARS_WRITTEN: String = "barsWritten"
         const val KEY_SYMBOLS: String = "symbols"
+
+        /**
+         * Input flag: after storing the newest session, also deepen history in this same run.
+         *
+         * Set by `RefreshWorkScheduler.refreshNow(force = true)`, which is what Settings' "fetch
+         * history" action uses. Folding it into the existing worker rather than chaining a second
+         * one means the reader's single tap produces one `work_state` row describing the whole
+         * outcome, instead of two runs that must be correlated afterwards.
+         */
+        const val KEY_FORCE_BACKFILL: String = "forceBackfill"
 
         /** Bounds the summary so `Data` stays under WorkManager's 10 KB payload limit. */
         const val MAX_NOTES: Int = 3

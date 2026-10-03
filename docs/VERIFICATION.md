@@ -254,6 +254,64 @@ Each is a visible sentence in the UI, not a silent no-op.
 - **P4** — `:app` compile, plus the P12 low-RAM device test (2GB-RAM hardware, cold offline
   launch on the watchlist screen).
 
+### The price layer had no write path — found by running the app, not by a test
+
+The most important defect found after the build was handed over, and **no unit test could have
+found it**. Every read path was correct; both write paths were unreachable:
+
+```
+TechnicalsScreen → storedSeries() → candleDao.recent() → EMPTY
+                                 ↑ no writer ever reached this table
+```
+
+`refreshMarket()` was called from exactly one place (`EodRefreshWorker`); `backfill()` was called
+from **zero** places — implemented, tested, unreachable. So the database filled only if the nightly
+job ran, and `RefreshSchedule` targets 19:00 IST. A reader who installed at 10:00 saw *"No D1 bars
+for RELIANCE are stored on this device yet"* until evening — and then forever, because one session
+a day cannot satisfy plan.md §6.4's 60-bar gate. That is three months.
+
+The `1W` tab had the same defect with **no write path at all**: the bhavcopy publishes daily bars
+only, so nothing ever produced weekly rows, and the tab reported "no bars" for a symbol that plainly
+had them.
+
+Fixed by adding a real write path plus a **stale-only** freshness check. The rule: fetch when, and
+only when, the newest stored bar predates the newest session that should exist. A cache already
+covering that date is served with no request, so opening ten stocks costs one fetch rather than ten.
+It is wired into Technicals, Patterns and the stock-detail header, and a first-run chain in
+`MiaApplication` primes the data instead of waiting for 19:00 IST.
+
+Two deliberate design points:
+
+- **Market-wide, not per symbol.** Every bhavcopy file contains every instrument, so one pass of 60
+  sessions gives all ~3,050 symbols the same depth. Fetching per symbol would spend identical
+  requests on one stock while 3,000 others gained nothing — the opposite of plan.md §13's CGNAT
+  mitigation.
+- **`storeHistorySession` is deliberately not `storeMarket`.** The walk calls its store path once per
+  session, and `storeMarket` does three things that are right for the newest session and wrong
+  sixty times over: it issues a *second* network request for plan.md §3.5's legacy delivery file
+  (doubling a 60-session pass to 120 requests for an optional figure), it rewrites the *rolling*
+  cache row (so walking backwards would leave that row reporting a months-stale date), and it diffs
+  consecutive sessions (walking backwards makes every pair look like a mass disappearance,
+  manufacturing hundreds of fake corporate actions). So the walk writes bars and only bars.
+
+`EnsureResult` is a separate type from `DataResult` on purpose. A `DataResult` models "a value or a
+typed failure", but a freshness check must stay reportable **even when the fetch failed** — that is
+the case where "your 12 stored bars are still being shown unchanged" is the most useful sentence in
+the app. Reusing `DataResult` would have forced that to be expressed as a failure.
+
+The honest words are separated too. `NO_DATA_CACHED` conflated four different facts and the tab
+rendered all four as one dead end:
+
+| Reason | What the reader is now told |
+|---|---|
+| `NOT_ATTEMPTED` | "No market data has been downloaded yet" — **and a fetch button**, because one tap fixes it |
+| `NO_ROWS_FOR_SYMBOL` | "No published data for this symbol" — **no button**, because re-downloading cannot invent a row |
+| `NOT_ENOUGH_HISTORY` | counts attached: "12 of 60 required bars", plus where to get more |
+| `SOURCE_UNAVAILABLE` | retry offered, and the existing bars stay on screen |
+
+A button that cannot work teaches the reader to distrust buttons, which is why
+`DataFailure.isWorthRetrying` returns `false` for the no-rows case.
+
 ---
 
 ## 6. Test inventory

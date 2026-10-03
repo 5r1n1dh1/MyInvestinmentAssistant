@@ -95,15 +95,50 @@ class RealRefreshStatusSource @Inject constructor(
     }
 
     /**
-     * One sentence, and it never promises an immediate result.
+     * Queues a real one-off run, and says exactly what was queued.
      *
-     * plan.md §10 makes the constraints part of the contract: a confirmation that said "done" would be
-     * a claim the scheduler cannot make, and one that said "in a moment" would be a claim it cannot
-     * make either.
+     * ### Why this now does something
+     * It previously returned "a one-off run cannot be queued from this screen in this build", which
+     * was true and useless: the reader who pressed Refresh on an empty app was told the app could
+     * not do the one thing they asked, with no alternative. `RefreshWorkScheduler` now exposes
+     * [RefreshWorkScheduler.refreshNow] and [RefreshWorkScheduler.backfillHistoryNow], so the button
+     * enqueues real work.
+     *
+     * ### Why the two tasks map to different calls
+     * [RefreshTask.EOD_REFRESH] is one whole-market file (~208 KB) and answers "is the newest session
+     * in?". [RefreshTask.HISTORY_BACKFILL] walks the archive and answers "is there enough history to
+     * score anything?". They are not the same cost and not the same question, so one button must not
+     * silently do the other — a reader who wanted a current price should not download tens of MB.
+     *
+     * ### What it deliberately does not claim
+     * Not "done". WorkManager has not run yet, and plan.md §10 makes the network constraint part of
+     * the contract: offline, this is queued and will run when a connection appears. The sentence says
+     * "queued", never "fetched".
      */
-    override suspend fun refreshNow(task: RefreshTask): String =
-        "A one-off ${task.label.lowercase()} run cannot be queued from this screen in this build. " +
-            "The scheduled job runs on its own: ${describeSchedule(task)}"
+    override suspend fun refreshNow(task: RefreshTask): String = when (task) {
+        RefreshTask.EOD_REFRESH -> {
+            // `force = true` so one tap satisfies both halves of what a reader on an empty app
+            // needs: a current price *and* enough history to detect anything. Pressing the button
+            // once and getting a price but no patterns would read as the button half-working.
+            scheduler.refreshNow(force = true)
+            "Queued: today's session plus a history pass, to run as soon as there is a connection. " +
+                "It continues from whatever is already stored rather than starting over."
+        }
+
+        RefreshTask.HISTORY_BACKFILL -> {
+            scheduler.backfillHistoryNow()
+            "Queued a history pass to run as soon as there is a connection. Each session already " +
+                "stored is skipped, so this continues where the last one stopped."
+        }
+
+        // The pattern scan is derived work — it reads bars the EOD refresh stores — so re-running it
+        // on its own would only re-read the existing cache. Saying so is more useful than a button
+        // that appears to do something.
+        RefreshTask.PATTERN_SCAN ->
+            "The pattern scan reads bars the end-of-day refresh stores, so there is nothing for it " +
+                "to fetch on its own. Refresh prices or history first, then it runs on its own. " +
+                describeSchedule(task)
+    }
 
     /**
      * The schedule, from the same pure arithmetic the scheduler enqueues with.
@@ -188,6 +223,9 @@ class RealRefreshStatusSource @Inject constructor(
     private fun targetFor(task: RefreshTask, now: ZonedDateTime): ZonedDateTime = when (task) {
         RefreshTask.EOD_REFRESH -> RefreshSchedule.eodTarget(now)
         RefreshTask.PATTERN_SCAN -> RefreshSchedule.patternScanTarget(now)
+        // The history walk is on-demand, never scheduled, so there is no recurring target to
+        // describe. Reusing the EOD slot would state a schedule that does not exist.
+        RefreshTask.HISTORY_BACKFILL -> RefreshSchedule.eodTarget(now)
     }
 
     /**
@@ -202,6 +240,7 @@ class RealRefreshStatusSource @Inject constructor(
     private fun workStateTaskId(task: RefreshTask): String = when (task) {
         RefreshTask.EOD_REFRESH -> WorkStateRecorder.Tasks.EOD_REFRESH
         RefreshTask.PATTERN_SCAN -> WorkStateRecorder.Tasks.PATTERN_SCAN
+        RefreshTask.HISTORY_BACKFILL -> WorkStateRecorder.Tasks.HISTORY_BACKFILL
     }
 
     /**

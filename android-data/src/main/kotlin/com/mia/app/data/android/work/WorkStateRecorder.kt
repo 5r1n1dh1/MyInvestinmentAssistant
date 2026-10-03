@@ -38,6 +38,15 @@ class WorkStateRecorder @Inject constructor(
     object Tasks {
         const val EOD_REFRESH: String = "eod_refresh"
         const val PATTERN_SCAN: String = "pattern_scan"
+
+        /**
+         * The NSE-archive history walk (`HistoryBackfillWorker`).
+         *
+         * Its own row because it answers a different question from the nightly refresh — "is there
+         * enough history to score?" rather than "is today in yet?" — and a reader who sees one
+         * succeed while the other never runs needs to be able to tell which one is stuck.
+         */
+        const val HISTORY_BACKFILL: String = "history_backfill"
     }
 
     suspend fun recordSuccess(taskId: String, status: String) {

@@ -38,6 +38,26 @@ import com.mia.app.domain.technical.IndicatorSnapshot
 interface TechnicalsDataSource {
 
     /**
+     * Checks the symbol's bars are present and current enough to render, **fetching only when the
+     * cache is stale**.
+     *
+     * ### Why this is on the interface at all
+     * Without it the read path had no write path behind it: nothing populated the `candles` table
+     * until the 19:00 IST nightly worker, so on a fresh install this tab reported "no bars stored"
+     * for the rest of the day with nothing on screen able to change that. The repository now owns a
+     * real write path; this method is how the UI reaches it.
+     *
+     * ### Contract
+     * * **Stale-only.** A cache that already covers the newest expected session is served with **no
+     *   request at all**, so opening ten stocks from a warm cache costs nothing.
+     * * **Never throws for a failed fetch.** A network problem returns normally and the cache is
+     *   left exactly as it was — the subsequent [candles] call then reports the real reason.
+     * * **Never overwrites.** All writes are write-once (`INSERT OR IGNORE`).
+     * * Safe to call on every load; it is idempotent.
+     */
+    suspend fun ensureFresh(symbol: String, timeframe: Timeframe)
+
+    /**
      * Stored EOD bars for one symbol and timeframe, ascending by date.
      *
      * Empty when nothing has been fetched yet. The tab then shows "not enough history" with the
@@ -146,6 +166,16 @@ class TechnicalsUnavailableException(
     val reason: String,
     val isTransient: Boolean = true,
     val isNotPublished: Boolean = false,
+    /**
+     * `true` when the empty tab is a fact rather than a failure, so it belongs in an explained
+     * empty state instead of a red banner.
+     *
+     * Set for the honest absences — nothing ever downloaded, no rows published for this ticker, or a
+     * series below plan.md §6.4's bar gate. Without it the tab cannot tell "the network is down"
+     * from "this device has never downloaded a bar", and both render as a red error, which is what
+     * made a merely-empty tab look broken on a fresh install.
+     */
+    val isAbsence: Boolean = false,
 ) : RuntimeException(reason)
 
 /**

@@ -63,6 +63,26 @@ object UiStrings {
     fun notEnoughHistoryDetail(have: Int, need: Int): String =
         "$NOT_ENOUGH_HISTORY to draw this timeframe: $have of $need bars stored."
 
+    // ------------------------------------------------------------- empty-price-layer titles
+
+    /**
+     * Nothing has been downloaded on this device yet.
+     *
+     * Distinct from [NOT_ENOUGH_HISTORY] and from a red error banner on purpose: those say a series
+     * is *short*, and an error says a read *failed*. This says neither — the device simply has no
+     * data yet — which is the honest description of a fresh install and the state a fetch fixes.
+     */
+    const val NO_DATA_DOWNLOADED: String = "No market data downloaded yet"
+
+    /**
+     * The published files contain no rows for this ticker.
+     *
+     * Worth its own title because the remedy is completely different: re-downloading the same files
+     * cannot invent a row, so this is usually a symbol outside the EQ/SM series the app keeps
+     * (plan.md §3.1), or one that has been delisted or renamed (plan.md §9).
+     */
+    const val NO_DATA_FOR_SYMBOL: String = "No published data for this symbol"
+
     /** Reading the crosshair off a bar that has no OHLC (a gap in the series). */
     const val NO_BAR_SELECTED: String = "Touch a bar to read its OHLC"
 

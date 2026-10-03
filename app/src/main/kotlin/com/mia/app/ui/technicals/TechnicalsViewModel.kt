@@ -43,6 +43,31 @@ data class TechnicalsUiState(
     val isLoading: Boolean = false,
     /** The sentence to show in `ErrorState`, or `null` when there is nothing wrong. */
     val errorReason: String? = null,
+
+    /**
+     * Why this tab is empty, when emptiness is a *fact about the device or the symbol* rather than
+     * a failure.
+     *
+     * ### Why this is separate from [errorReason]
+     * "No bars stored" and "the network is down" both leave the tab with nothing to draw, but they
+     * are different claims and only one of them is fixable by pressing a button. Collapsing them
+     * into one red banner is what made a merely-empty tab look broken — the reader was told the read
+     * failed when in truth nothing had ever been downloaded. This field carries the honest absence
+     * and [TechnicalsUiState.absenceOffersFetch] says whether a retry can help, so the screen can
+     * choose between an explanation with an action and an explanation without one.
+     *
+     * `null` when bars exist, or when [errorReason] is set — the two are never both set.
+     */
+    val absenceReason: String? = null,
+
+    /**
+     * Whether a fetch button can actually fix the current absence.
+     *
+     * `true` for "nothing has ever been downloaded" and for a retryable source failure. `false`
+     * for a symbol the published files contain no rows for — re-downloading the same files cannot
+     * invent a row, so a button there would be a lie.
+     */
+    val absenceOffersFetch: Boolean = false,
     /**
      * Set when the data is fine but today's file is not out yet (plan.md §3.1). Distinct from
      * [errorReason]: the tab still shows the last successful session, with its as-of date, and no
@@ -186,7 +211,13 @@ class TechnicalsViewModel @Inject constructor(
             // Keep the previous candles on screen while the new timeframe loads: the tab then shows
             // a spinner over stale data rather than flashing an empty chart, which reads as "this
             // stock has no history".
-            current.copy(timeframe = timeframe, isLoading = true, errorReason = null)
+            current.copy(
+                timeframe = timeframe,
+                isLoading = true,
+                errorReason = null,
+                absenceReason = null,
+                absenceOffersFetch = false,
+            )
         }
         loadJob = viewModelScope.launch {
             try {
@@ -196,6 +227,8 @@ class TechnicalsViewModel @Inject constructor(
                         timeframe = timeframe,
                         isLoading = false,
                         errorReason = null,
+                        absenceReason = null,
+                        absenceOffersFetch = false,
                         notPublishedNote = null,
                         candles = loaded.candles,
                         snapshot = loaded.snapshot,
@@ -221,7 +254,24 @@ class TechnicalsViewModel @Inject constructor(
                             timeframe = timeframe,
                             isLoading = false,
                             errorReason = null,
+                            absenceReason = null,
+                            absenceOffersFetch = false,
                             notPublishedNote = unavailable.reason,
+                        )
+                    }
+                } else if (unavailable.isAbsence) {
+                    // Nothing to draw, but nothing has gone wrong either: an explained empty state
+                    // with a fetch button when a fetch can help. `isTransient` is the right test —
+                    // "never downloaded" and an unreachable source are both worth retrying, whereas
+                    // a ticker the published files contain no rows for is not, and offering a button
+                    // that cannot work teaches the reader to distrust it.
+                    _uiState.update { current ->
+                        current.copy(
+                            timeframe = timeframe,
+                            isLoading = false,
+                            errorReason = null,
+                            absenceReason = unavailable.reason,
+                            absenceOffersFetch = unavailable.isTransient,
                         )
                     }
                 } else {
@@ -230,6 +280,8 @@ class TechnicalsViewModel @Inject constructor(
                             timeframe = timeframe,
                             isLoading = false,
                             errorReason = unavailable.reason,
+                            absenceReason = null,
+                            absenceOffersFetch = false,
                         )
                     }
                 }
@@ -239,6 +291,8 @@ class TechnicalsViewModel @Inject constructor(
                         timeframe = timeframe,
                         isLoading = false,
                         errorReason = unexpected.message ?: UNEXPECTED_FAILURE,
+                        absenceReason = null,
+                        absenceOffersFetch = false,
                     )
                 }
             }
@@ -251,8 +305,23 @@ class TechnicalsViewModel @Inject constructor(
      * Ordered cheapest-first so a failure in an early step does not pay for the later ones: bars
      * must exist before indicators can be computed, and indicators must exist before a match's
      * regime gate can be applied.
+     *
+     * ### Why [ensureFresh] runs first, and why it is stale-only
+     * This tab is the app's main reason the price table exists, so it is the natural place to notice
+     * the table is behind. [TechnicalsDataSource.ensureFresh] fetches **only when the newest stored
+     * session predates the newest expected session**, which is why opening ten stocks from a cache
+     * fetched an hour ago costs one request rather than ten.
+     *
+     * It is a `try`-and-ignore on purpose. Its failure modes are already represented downstream: if
+     * it cannot fetch, the subsequent `candles` call reports `NOT_ATTEMPTED` and the tab renders its
+     * empty state with a fetch button; if it fetched and there is still nothing, the adapter's
+     * typed exception carries the real reason. Letting the ensure's own exception escape instead
+     * would collapse "the network is down" and "there are no bars for this ticker" into one
+     * red banner, which is exactly the conflation the typed failures exist to prevent.
      */
     private suspend fun fetch(timeframe: Timeframe): TechnicalsLoad {
+        runCatching { dataSource.ensureFresh(symbol, timeframe) }
+
         val candles = dataSource.candles(symbol, timeframe)
 
         // One indicator pass per load, shared by the render gate and by the screen's read-outs.

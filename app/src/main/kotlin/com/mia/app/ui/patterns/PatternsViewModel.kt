@@ -272,6 +272,11 @@ class PatternsViewModel @Inject constructor(
      * record about a suppressed pattern would produce a table row for something the user never saw.
      */
     private suspend fun fetch(timeframe: Timeframe): PatternsUiState {
+        // Stale-only, and non-throwing: this tab is the app's clearest consumer of price history, so
+        // it is the natural place to notice the cache is behind. A failure returns normally and the
+        // `candles` call below reports the real reason.
+        runCatching { dataSource.ensureFresh(symbol, timeframe) }
+
         val candles = dataSource.candles(symbol, timeframe)
         val scan = dataSource.scan(symbol, timeframe)
         val redFlags = dataSource.redFlags(symbol, timeframe)

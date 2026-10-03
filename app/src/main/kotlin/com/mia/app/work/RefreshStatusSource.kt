@@ -33,10 +33,18 @@ interface RefreshStatusSource {
     /**
      * Enqueues a one-off run of [task], replacing nothing.
      *
-     * The returned sentence is rendered as a confirmation, e.g. "Queued a one-off daily price
-     * refresh. It runs when the device is on a network and the battery is not low." It must state
-     * the constraint rather than promise an immediate result — plan.md §10 makes the constraints
-     * part of the contract, and a promise the constraints can break is a small lie.
+     * ### Why this maps to two different operations
+     * `EodRefresh` is one whole-market file (~208 KB) and answers "is the newest session in?".
+     * `HistoryBackfill` walks the NSE archive and answers "is there enough history to score
+     * anything?". They are not the same question and not the same cost, so one button must not
+     * silently do the other — a reader who wanted a current price should not download tens of
+     * megabytes. `PatternScan` is the third case and has no action at all: it reads bars the price
+     * refresh stores, so there is nothing for it to fetch on its own.
+     *
+     * ### What the returned sentence must and must not say
+     * Rendered verbatim as a confirmation. It may say "queued". It must **not** say "done" or
+     * "fetched": WorkManager has not run yet, and plan.md §10 makes the network constraint part of
+     * the contract — a promise the constraints can break is a small lie.
      */
     suspend fun refreshNow(task: RefreshTask): String
 

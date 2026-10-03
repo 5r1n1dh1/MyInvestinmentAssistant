@@ -25,11 +25,42 @@ enum class DataFailureReason {
     /** Nothing cached locally and no fetch was attempted or allowed. */
     NO_DATA_CACHED,
 
+    /**
+     * Nothing is cached **because no fetch has ever been attempted on this device**.
+     *
+     * Distinct from [NO_DATA_CACHED] because the two call for different words on screen. Before
+     * the first successful refresh the honest sentence is "nothing has been downloaded yet —
+     * fetch now", not "no data is stored on this device", which reads as a permanent condition
+     * the user cannot act on. A missing first run was indistinguishable from a dead source; this
+     * value is what lets the UI tell them apart and offer the fetch.
+     */
+    NOT_ATTEMPTED,
+
+    /**
+     * A fetch succeeded but the published files contained **no bars for this symbol**.
+     *
+     * Also distinct on purpose: this is a fact about the symbol (delisted, newly listed, series
+     * filtered out by plan.md §3.1's `EQ`/`SM` rule), and retrying will not change it. Rendering
+     * it as "not stored" would send the user to a refresh button that cannot help.
+     */
+    NO_ROWS_FOR_SYMBOL,
+
     /** The symbol master is not bundled, so search and resolution cannot run. */
     SYMBOL_BOOK_UNAVAILABLE,
 
-    /** plan.md §6.4: fewer bars than the detection hard gate. A stated refusal, not an error. */
+    /**
+     * A fetch succeeded and bars were stored, but the series is still shorter than plan.md §6.4's
+     * hard gate (1D ≥ 60, 1W ≥ 40), so no pattern may be scored.
+     *
+     * A stated refusal, not an error. Kept separate from [NOT_ENOUGH_HISTORY] so the tab can say
+     * *how many* bars it has and *why* there are not more — the answer is nearly always "the
+     * archive we can reach only goes back N sessions", which the user can act on by understanding
+     * it rather than by tapping refresh again.
+     */
     NOT_ENOUGH_HISTORY,
+
+    /** History could not be deepened: every host unreachable, or the archive has no more days. */
+    HISTORY_UNAVAILABLE,
 
     /** Today is not a trading day (plan.md §10's guard), so there is nothing new to fetch. */
     NOT_TRADING_DAY,
@@ -227,3 +258,87 @@ class DataUnavailableException(val failure: DataFailure) :
  * can never produce two different "as of" dates.
  */
 fun todayInMarket(): LocalDate = LocalDate.now(com.mia.app.domain.ratios.FreshnessPolicy.MARKET_ZONE)
+
+/**
+ * What an on-demand freshness check did, and what the caller should show.
+ *
+ * ### Why this is its own type and not a [DataResult]
+ * [DataResult] models *a read*, and its contract is "a value, or a typed failure". A freshness
+ * check is neither: it always has an honest answer — "the cache is current", "a fetch ran and
+ * wrote 3,051 bars", "the fetch failed but your existing bars are untouched" — and that answer
+ * must stay reportable **even when the fetch failed**. Reusing [DataResult] would force one of
+ * those situations to be expressed as a failure, which is precisely the conflation this type
+ * exists to prevent.
+ */
+data class EnsureResult(
+    val symbol: String,
+    /** Did this call perform a network fetch? `false` means the cache was served as-is. */
+    val fetched: Boolean,
+    /** Bars this call appended to the symbol's existing series. */
+    val barsAdded: Int = 0,
+    /** Newest stored bar's date after the check — the "as of" the tab should show. */
+    val asOf: LocalDate? = null,
+    /** Why no fetch was made, or why the fetch could not help. Never blank. */
+    val note: String,
+    /** Set when a fetch was attempted and failed. The cached series is still intact. */
+    val failure: DataFailure? = null,
+) {
+    /** True when the cache already covered the newest expected session, so nothing was fetched. */
+    val wasFresh: Boolean get() = !fetched
+
+    companion object {
+        /**
+         * The cache already holds the newest expected session, so no request was made.
+         *
+         * This is the common path and the reason the check is cheap: a user who opens ten stocks
+         * from a cache fetched an hour ago pays zero requests.
+         */
+        fun fresh(
+            symbol: String,
+            asOf: LocalDate?,
+            barCount: Int,
+            expectedThrough: LocalDate?,
+        ) = EnsureResult(
+            symbol = symbol,
+            fetched = false,
+            asOf = asOf,
+            note = buildString {
+                append("no download needed: the newest stored session is ")
+                append(asOf ?: "unknown")
+                if (expectedThrough != null) {
+                    append(", which covers the latest expected session ($expectedThrough)")
+                }
+                append("; ").append(barCount).append(" bar(s) served from the on-device cache")
+            },
+        )
+
+        /** A fetch ran and completed. [barsAdded] is this symbol's gain, not the market's. */
+        fun fetched(
+            symbol: String,
+            asOf: LocalDate?,
+            barsAdded: Int,
+            note: String,
+        ) = EnsureResult(
+            symbol = symbol,
+            fetched = true,
+            barsAdded = barsAdded,
+            asOf = asOf,
+            note = note,
+        )
+
+        /** A fetch was attempted and did not succeed. The cached series is untouched. */
+        fun failed(
+            symbol: String,
+            asOf: LocalDate?,
+            barCount: Int,
+            failure: DataFailure,
+        ) = EnsureResult(
+            symbol = symbol,
+            fetched = true,
+            asOf = asOf,
+            note = "the refresh did not succeed, so the ${barCount} already-stored bar(s) are " +
+                "being shown unchanged rather than replaced with nothing",
+            failure = failure,
+        )
+    }
+}

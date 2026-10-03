@@ -106,6 +106,43 @@ data class SeriesView(
 }
 
 /**
+ * What one history-deepening pass achieved.
+ *
+ * Reported so the UI can be specific about a short series: "280 of 60 required bars" and "the
+ * archive reached back to 2025-04-01" is a *bounded* answer a reader can reason about, whereas
+ * "not enough history" is a dead end that invites a refresh button which cannot help.
+ */
+data class HistoryBackfill(
+    /** Sessions requested to fetch. */
+    val requestedSessions: Int,
+    /** Sessions actually downloaded (excludes weekends, holidays and already-stored days). */
+    val sessionsFetched: Int,
+    /** Sessions that 404'd: weekends, holidays, or days the archive has purged. */
+    val sessionsSkipped: Int,
+    /** Bar rows written across all symbols (whole market per session). */
+    val barsWritten: Int,
+    /** Rows that already existed and were left alone (the write-once guarantee). */
+    val barsAlreadyKnown: Int,
+    /** Oldest session now stored. `null` when nothing was written. */
+    val earliestStored: LocalDate?,
+    /** Newest session now stored. */
+    val latestStored: LocalDate?,
+    /** Per-session failures worth reporting, e.g. a host that was unreachable throughout. */
+    val notes: List<String> = emptyList(),
+) {
+    /** A sentence for the settings/coverage panel. */
+    fun summary(): String = buildString {
+        append("$sessionsFetched session(s) fetched (")
+        append(sessionsSkipped).append(" not published or already stored), ")
+        append("$barsWritten bar(s) written across the whole market")
+        if (earliestStored != null && latestStored != null) {
+            append("; the stored history now spans ")
+            append(earliestStored).append(" to ").append(latestStored)
+        }
+    }
+}
+
+/**
  * The only way `:app` reaches price data.
  *
  * ### Contract
@@ -123,12 +160,64 @@ interface CandleRepository {
      *
      * Never fetches. `limit` bounds the read because plan.md §6.2 feeds the pattern engine 500
      * bars and a stock with three years of daily history has 750.
+     *
+     * `NOT_ATTEMPTED` is returned rather than `NO_DATA_CACHED` when nothing has ever been
+     * downloaded on this device, so the caller can offer a fetch instead of a dead end.
      */
     suspend fun storedSeries(
         symbol: String,
         timeframe: Timeframe,
         limit: Int = DEFAULT_SERIES_LIMIT,
     ): DataResult<CandleSeries>
+
+    /**
+     * Makes sure the symbol's bars are present and current enough to render — **fetching only
+     * when the cache is stale**.
+     *
+     * ### The staleness rule
+     * A fetch happens when, and only when, the newest stored bar is **older than the newest
+     * session that should exist**: the last trading day, or today once today's bhavcopy has been
+     * published. A cache that already covers that date is served without a request, so opening
+     * ten stocks in a row costs one fetch, not ten.
+     *
+     * ### Why this method exists at all
+     * The nightly worker alone left the app unusable on a fresh install: nothing is ever fetched
+     * until the 19:00 IST run, so every tab said "no bars stored" and stayed that way for the
+     * rest of the day. A read path with no write path behind it is a table that stays empty.
+     *
+     * ### Contract
+     * * **Never throws.** A failed fetch returns [EnsureResult.failed] and leaves the cache
+     *   exactly as it was — a network problem must never turn a working tab into an empty one.
+     * * **Never overwrites.** All writes go through `INSERT OR IGNORE`.
+     * * **Idempotent.** Calling it twice in a row performs one fetch.
+     * * Does **not** deepen history; that is [backfillHistory]'s job. Fetching the whole market
+     *   is one request, whereas history is many, so they are separate decisions.
+     */
+    suspend fun ensureData(
+        symbol: String,
+        today: LocalDate = todayInMarket(),
+    ): EnsureResult
+
+    /**
+     * Deepens the price cache by walking backwards through the NSE archive, one whole-market
+     * bhavcopy per session.
+     *
+     * ### Why this is market-wide rather than per symbol
+     * Every bhavcopy file contains **every** instrument (plan.md §3.1: 3,712 rows, one fetch is
+     * the whole market). So one pass of `sessions` requests yields `sessions` bars for *all*
+     * ~3,050 retained symbols, not for one. Fetching 280 sessions to give RELIANCE 280 bars while
+     * 2,999 other symbols get nothing would waste the single property that makes this source free.
+     *
+     * Yahoo is the plan's intended deep-history source (plan.md §3.2), but it answers 429 from
+     * some networks, so the archive is the fallback that always works. [backfill] still runs and
+     * still wins when Yahoo is reachable — this only fills what Yahoo could not.
+     *
+     * Already-known sessions are skipped without a request, so a re-run is nearly free.
+     */
+    suspend fun backfillHistory(
+        sessions: Int = DEFAULT_HISTORY_SESSIONS,
+        today: LocalDate = todayInMarket(),
+    ): DataResult<HistoryBackfill>
 
     /**
      * What the 1D and 1W tabs should render, merged per field (plan.md §5.1).
@@ -173,6 +262,28 @@ interface CandleRepository {
 
         /** plan.md §6.4: 40 weekly bars. */
         const val MIN_WEEKLY_BARS: Int = 40
+
+        /**
+         * How far back a first-run history pass walks.
+         *
+         * 280 sessions is chosen by arithmetic, not taste:
+         * * it clears plan.md §6.4's 1D gate of 60 with a wide margin, so every symbol can be
+         *   scored immediately;
+         * * 280 daily bars aggregate to **~56 weekly bars**, which clears the W1 gate of 40 — the
+         *   reason it is 280 and not the minimum that would satisfy the daily gate;
+         * * it stays inside plan.md §3.1's measured retention of "roughly 18 months", so the walk
+         *   is not mostly 404s at the tail;
+         * * at ~208 KB per whole-market session that is ~58 MB, once, in the background.
+         */
+        const val DEFAULT_HISTORY_SESSIONS: Int = 280
+
+        /**
+         * Sessions to try in one history pass before yielding.
+         *
+         * Bounds one `WorkManager` run so a partially-completed pass still ends cleanly and can be
+         * resumed — a pass is resumable because every stored session is skipped without a request.
+         */
+        const val HISTORY_BATCH_LIMIT: Int = 60
     }
 }
 

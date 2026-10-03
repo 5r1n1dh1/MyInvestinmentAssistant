@@ -77,6 +77,19 @@ class RealPatternsDataSource @Inject constructor(
     @MiaBackgroundDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : PatternsDataSource {
 
+    /**
+     * Stale-only freshness check. See [PatternsDataSource.ensureFresh] for why it exists.
+     *
+     * The result is discarded on purpose: a failed fetch returns normally so the following [candles]
+     * call names the real reason, instead of collapsing "the network is down" and "no rows for this
+     * ticker" into a single banner.
+     */
+    override suspend fun ensureFresh(symbol: String, timeframe: Timeframe) {
+        withContext(backgroundDispatcher) {
+            candleRepository.ensureData(symbol.trim().uppercase())
+        }
+    }
+
     override suspend fun candles(symbol: String, timeframe: Timeframe): List<Candle> =
         withContext(backgroundDispatcher) {
             candleRepository.storedSeries(symbol, timeframe).barsOrEmpty()

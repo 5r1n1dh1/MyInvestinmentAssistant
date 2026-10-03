@@ -32,19 +32,46 @@ import com.mia.app.data.android.repo.DataResult
 /**
  * `true` when this failure means "there is genuinely nothing here yet".
  *
- * Both reasons are absences the screens already have a designed state for, so they must never
+ * All four reasons are absences the screens already have a designed state for, so they must never
  * reach `ErrorState`:
- * * [DataFailureReason.NO_DATA_CACHED] — nothing has been fetched on this device.
- * * [DataFailureReason.NOT_ENOUGH_HISTORY] — plan.md §6.4's hard gate is unmet, so no score may
- *   be emitted. The engine and the screens both render that as a stated refusal.
+ * * [DataFailureReason.NOT_ATTEMPTED] — nothing has ever been fetched on this device. The tab shows
+ *   "no data downloaded yet" and offers the fetch, which is the whole reason this is a distinct
+ *   value rather than a flavour of `NO_DATA_CACHED`.
+ * * [DataFailureReason.NO_DATA_CACHED] — a fetch has happened but the newest expected session is
+ *   still missing.
+ * * [DataFailureReason.NOT_ENOUGH_HISTORY] — plan.md §6.4's hard gate is unmet, so no score may be
+ *   emitted. The engine and the screens both render that as a stated refusal.
+ * * [DataFailureReason.NO_ROWS_FOR_SYMBOL] — the published files contain nothing for this ticker.
+ *   Rendering it as an empty chart would assert the stock has no history, which is a different and
+ *   much stronger claim.
  */
 fun DataFailure.isNothingStored(): Boolean = when (reason) {
+    DataFailureReason.NOT_ATTEMPTED,
     DataFailureReason.NO_DATA_CACHED,
     DataFailureReason.NOT_ENOUGH_HISTORY,
+    DataFailureReason.NO_ROWS_FOR_SYMBOL,
     -> true
 
     else -> false
 }
+
+/**
+ * `true` when the reader is looking at a device that has never downloaded anything.
+ *
+ * The distinction from [DataFailure.isNothingStored] is actionable: this is the *only* one of the
+ * four absences that a single tap can fix, so it is what the Technicals tab's empty state keys its
+ * "fetch now" affordance on. Rendering the same button for a delisted ticker or an unmet bar gate
+ * teaches the reader that the button does nothing.
+ */
+fun DataFailure.neverAttempted(): Boolean = reason == DataFailureReason.NOT_ATTEMPTED
+
+/**
+ * `true` when the symbols *are* right but the series is too short — so the reader needs more
+ * history, not a different symbol.
+ */
+fun DataFailure.needsMoreHistory(): Boolean =
+    reason == DataFailureReason.NOT_ENOUGH_HISTORY ||
+        reason == DataFailureReason.HISTORY_UNAVAILABLE
 
 /**
  * `true` when this failure is plan.md §3.1's "the file is not out yet".
@@ -75,6 +102,12 @@ fun DataFailure.isWorthRetrying(): Boolean = when (reason) {
     DataFailureReason.UNPARSEABLE,
     DataFailureReason.UNEXPECTED,
     DataFailureReason.PERMISSION_DENIED,
+    // Worth retrying because the reader can fix it with a tap: nothing has been downloaded yet, so
+    // the whole point is to offer the fetch.
+    DataFailureReason.NOT_ATTEMPTED,
+    // The history walk is resumable and its failures are usually the network, so another pass is
+    // the documented remedy rather than a dead end.
+    DataFailureReason.HISTORY_UNAVAILABLE,
     -> true
 
     DataFailureReason.NOT_PUBLISHED,
@@ -82,6 +115,9 @@ fun DataFailure.isWorthRetrying(): Boolean = when (reason) {
     DataFailureReason.NO_DATA_CACHED,
     DataFailureReason.SYMBOL_BOOK_UNAVAILABLE,
     DataFailureReason.NOT_ENOUGH_HISTORY,
+    // Deliberately **not** worth retrying: the published files contain no rows for this ticker, and
+    // re-downloading the same files will not invent any. A retry button here would be a lie.
+    DataFailureReason.NO_ROWS_FOR_SYMBOL,
     DataFailureReason.NOTHING_TO_DO,
     -> false
 }
