@@ -119,6 +119,15 @@ fun PatternsScreen(
         EvidenceDialog(flag = flag, onDismissRequest = { evidenceFlag = null })
     }
 
+    // The Explorer's glossary. Hosted here rather than inside the section so it survives the section
+    // being recomposed when the window changes underneath it.
+    state.glossaryFor?.let { patternName ->
+        PatternGlossaryDialog(
+            patternName = patternName,
+            onDismiss = { viewModel.onGlossaryToggled(null) },
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -157,6 +166,25 @@ fun PatternsScreen(
                     selected = state.timeframe,
                     onSelect = viewModel::onTimeframeSelected,
                 )
+            }
+
+            // The Explorer sits directly under the timeframe toggle, before the chart, because it is
+            // what the reader came for: the gate's verdict on every pattern, named. The chart and the
+            // existing match list follow as the detail.
+            state.evaluation?.let { evaluation ->
+                item(key = WINDOW_KEY) {
+                    WindowSelector(
+                        state = state,
+                        onSelect = viewModel::onWindowSelected,
+                    )
+                }
+                item(key = EXPLORER_KEY) {
+                    PatternExplorerSection(
+                        state = state,
+                        evaluation = evaluation,
+                        onGlossaryClick = viewModel::onGlossaryToggled,
+                    )
+                }
             }
 
             if (state.isLoading && state.barCount == 0) {

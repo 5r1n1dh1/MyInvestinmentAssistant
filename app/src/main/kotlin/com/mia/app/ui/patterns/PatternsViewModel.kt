@@ -9,6 +9,8 @@ import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.EvaluationOutcome
+import com.mia.app.domain.pattern.PatternEvaluation
 import com.mia.app.domain.pattern.SuppressedMatch
 import com.mia.app.domain.redflag.RuleSkip
 import com.mia.app.ui.nav.ARG_SYMBOL
@@ -73,6 +75,40 @@ data class PatternsUiState(
     val trackRecordForSymbol: HitRate? = null,
     /** The last bar's date: the chart's and the header's "as of". */
     val asOf: LocalDate? = null,
+
+    // -------------------------------------------------------------- Pattern Explorer (windowed)
+
+    /**
+     * Bars the Explorer is analysing, or `null` for the whole stored series.
+     *
+     * The score is only true of the slice that produced it, so this is carried in state and shown
+     * on screen: a reader comparing two windows is comparing two different series.
+     *
+     * `null` means the canonical scan, which is also the only one whose results may be recorded.
+     */
+    val windowBars: Int? = null,
+
+    /**
+     * One outcome per catalogue pattern for the current window.
+     *
+     * `null` until the first evaluation completes, and deliberately kept separate from [matches]:
+     * [matches] is what the engine kept, this is what it said about *everything* — which is the only
+     * way to tell "scored below the gate" from "the app never looked for this".
+     */
+    val evaluation: PatternEvaluation? = null,
+
+    /**
+     * `true` when the chosen window was too short for a full pivot pass and the zigzag fell back to
+     * a shallower depth.
+     *
+     * Surfaced because it is a quality signal invisible on the chart: the formations being found
+     * are structurally shallower, so a match at 60 bars is not the same claim as one at 250.
+     * Measured over 20 real large caps — 17 of 20 used the fallback at 60 bars, 0 of 20 at 372.
+     */
+    val usedFallbackPivots: Boolean = false,
+
+    /** The pattern whose glossary is open, or `null`. */
+    val glossaryFor: String? = null,
 ) {
     /** Bars currently stored. */
     val barCount: Int get() = candles.size
@@ -121,6 +157,35 @@ data class PatternsUiState(
 
     /** The threshold a match must clear to be projected at all. */
     val projectThreshold: Int get() = MatchScorePolicy.PROJECT_THRESHOLD
+
+    // --------------------------------------------------------- Pattern Explorer, derived
+
+    /** Every catalogue pattern's outcome for the current window, or empty before the first one. */
+    val outcomes: List<EvaluationOutcome>
+        get() = evaluation?.outcomes.orEmpty()
+
+    /** Patterns that cleared the render gate, best first. */
+    val matchedOutcomes: List<EvaluationOutcome.Matched>
+        get() = evaluation?.matched().orEmpty()
+
+    /** Patterns that were scored and held back, best first. */
+    val nearMisses: List<EvaluationOutcome.NearMiss>
+        get() = evaluation?.nearMisses().orEmpty()
+
+    /**
+     * Window chips offered for this timeframe, from the measured sweep in
+     * `WindowSizingMeasurementTest`.
+     *
+     * Every value is at or above [MatchScorePolicy.minBars] for the timeframe, because a shorter
+     * window yields nothing at all: measured, a 30- or 40-bar daily window produced **zero** kept
+     * matches and zero suppressed candidates on all 20 large caps. The last entry means "the whole
+     * stored series", which is the canonical scan.
+     */
+    fun windowOptions(timeframe: Timeframe, totalBars: Int): List<Int?> {
+        val gate = MatchScorePolicy.minBars(timeframe)
+        val chips = listOf(60, 120, 250).filter { it >= gate && it < totalBars }
+        return chips + null
+    }
 
     companion object {
         /** The state before the first load completes. */
@@ -179,6 +244,9 @@ class PatternsViewModel @Inject constructor(
     val uiState: StateFlow<PatternsUiState> = _uiState.asStateFlow()
 
     private var loadJob: Job? = null
+
+    /** The Explorer's window re-scan. Cancelled on every chip tap so taps cannot queue up. */
+    private var windowJob: Job? = null
 
     init {
         load(requestedTimeframe)
@@ -281,6 +349,15 @@ class PatternsViewModel @Inject constructor(
         val scan = dataSource.scan(symbol, timeframe)
         val redFlags = dataSource.redFlags(symbol, timeframe)
 
+        // The Explorer's per-pattern view, in the **same** background hop as the scan. It is a second
+        // pass over the same bars, so folding it in here costs one thread hop rather than two — and
+        // `evaluate` is what makes "no match" explainable.
+        //
+        // The canonical scan (windowBars = null) is deliberate for the initial load: it is the whole
+        // stored series, which is what the other tabs quote, so the reader comparing tabs sees one
+        // set of numbers rather than two.
+        val evaluation = runCatching { dataSource.evaluate(symbol, timeframe, null) }.getOrNull()
+
         val trackRecords = LinkedHashMap<String, HitRate>(scan.matches.size)
         scan.matches.forEach { match ->
             dataSource.trackRecord(symbol, match.name)?.let { rate -> trackRecords[match.name] = rate }
@@ -305,7 +382,67 @@ class PatternsViewModel @Inject constructor(
             trackRecords = trackRecords,
             trackRecordForSymbol = forSymbol,
             asOf = candles.lastOrNull()?.date,
+            windowBars = null,
+            evaluation = evaluation,
+            usedFallbackPivots = evaluation?.usedFallbackPivots ?: false,
         )
+    }
+
+    /**
+     * Re-analyses a chosen window and publishes the per-pattern outcomes.
+     *
+     * **Non-canonical**: the data source marks this scan so it can never reach the accuracy table.
+     * `PatternIds` keys on the pattern name, so the same pattern has the same id at every window —
+     * recording these would make the app's hit rate depend on which chip was tapped last.
+     *
+     * The in-flight job is cancelled first, so tapping three chips quickly runs one scan, not three.
+     * Bars, matches and the chart are left untouched: a window change re-evaluates, it does not
+     * reload, because the series did not change.
+     */
+    fun onWindowSelected(windowBars: Int?) {
+        if (_uiState.value.windowBars == windowBars) return
+        windowJob?.cancel()
+        _uiState.update { it.copy(windowBars = windowBars, isLoading = true) }
+        val timeframe = _uiState.value.timeframe
+        windowJob = viewModelScope.launch {
+            try {
+                val evaluated = withContext(backgroundDispatcher) {
+                    dataSource.evaluate(symbol, timeframe, windowBars)
+                }
+                _uiState.update { current ->
+                    // Ignore a result that arrived after the reader moved on.
+                    if (current.windowBars != windowBars) {
+                        current
+                    } else {
+                        current.copy(
+                            isLoading = false,
+                            evaluation = evaluated,
+                            usedFallbackPivots = evaluated.usedFallbackPivots,
+                        )
+                    }
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                // A failed window re-analysis leaves the previous outcomes on screen with a reason,
+                // rather than blanking the list the reader was reading.
+                _uiState.update { current ->
+                    if (current.windowBars != windowBars) {
+                        current
+                    } else {
+                        current.copy(
+                            isLoading = false,
+                            errorReason = failure.message ?: UNEXPECTED_FAILURE,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** Opens the glossary for [patternName], or closes it when `null`. */
+    fun onGlossaryToggled(patternName: String?) {
+        _uiState.update { it.copy(glossaryFor = patternName) }
     }
 
     /**

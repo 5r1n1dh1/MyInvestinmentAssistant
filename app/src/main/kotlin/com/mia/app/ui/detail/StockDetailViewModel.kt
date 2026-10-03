@@ -247,8 +247,13 @@ class StockDetailViewModel @Inject constructor(
         /** plan.md §8.3: fundamentals first, because a red flag can be on either tab. */
         const val FUNDAMENTALS_TAB: Int = 0
 
-        /** Number of tabs the host renders. Read by [onTabSelected] to validate a restored index. */
-        const val TAB_COUNT: Int = 2
+        /**
+         * Number of tabs the host renders. Read by [onTabSelected] to validate a restored index.
+         *
+         * Was 2. The Pattern Explorer is the third tab, and raising this is what makes a restored
+         * index from an older build (0 or 1) still land on a valid tab rather than being rejected.
+         */
+        const val TAB_COUNT: Int = 3
 
         /** Shown only when an exception carried no message of its own. */
         const val UNEXPECTED_FAILURE: String = "the data layer failed without a reason"

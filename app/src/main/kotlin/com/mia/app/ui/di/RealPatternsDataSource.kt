@@ -14,7 +14,11 @@ import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.BreakoutEvaluator
+import com.mia.app.domain.pattern.EvaluationOutcome
+import com.mia.app.domain.pattern.PatternCatalog
 import com.mia.app.domain.pattern.PatternEngine
+import com.mia.app.domain.pattern.PatternEvaluation
+import com.mia.app.domain.pattern.PatternExplorer
 import com.mia.app.domain.pattern.PatternScanOptions
 import com.mia.app.domain.pattern.PatternScanResult
 import com.mia.app.domain.pattern.PivotSet
@@ -134,6 +138,79 @@ class RealPatternsDataSource @Inject constructor(
                 ),
             )
         }
+
+    /**
+     * The Explorer's per-pattern evaluation.
+     *
+     * `windowBars == null` analyses the whole stored series and is the **canonical** scan, so its
+     * results may be recorded. A windowed call analyses only the last `windowBars` bars and is
+     * marked non-canonical — necessary, not precautionary: `PatternIds.of` keys on the pattern
+     * *name*, so the same pattern carries the same id at every window, and recording a window scan
+     * would make the accuracy table depend on which chip the reader tapped last.
+     *
+     * With no bars stored there is nothing to scan, so every pattern is reported as blocked rather
+     * than returning an empty list — "the app looked and found nothing" and "the app could not look"
+     * must not look alike.
+     */
+    override suspend fun evaluate(
+        symbol: String,
+        timeframe: Timeframe,
+        windowBars: Int?,
+    ): PatternEvaluation = withContext(backgroundDispatcher) {
+        val ticker = symbol.trim().uppercase()
+        val stored = candleRepository.storedSeries(ticker, timeframe).barsOrEmpty()
+        val required = MatchScorePolicy.minBars(timeframe)
+
+        if (stored.isEmpty()) {
+            return@withContext PatternEvaluation(
+                symbol = ticker,
+                timeframe = timeframe,
+                windowBars = windowBars ?: 0,
+                usedFallbackPivots = false,
+                outcomes = PatternCatalog.all.map { spec ->
+                    if (spec.isEvaluated) {
+                        EvaluationOutcome.CannotEvaluate(
+                            name = spec.name,
+                            reason = "No ${spec.name} check ran: no $timeframe bars are stored on " +
+                                "this device. Refresh the stock, or wait for the nightly scan " +
+                                "(plan.md §10).",
+                            blocker = EvaluationOutcome.Blocker.NO_DATA,
+                        )
+                    } else {
+                        EvaluationOutcome.NotEvaluated(spec.name)
+                    }
+                },
+            )
+        }
+
+        if (windowBars == null) {
+            // Canonical: the whole stored series.
+            val result = PatternEngine.run(
+                candles = stored,
+                timeframe = timeframe,
+                detectors = detectorRegistry.all(),
+                options = PatternScanOptions(
+                    symbol = ticker,
+                    isCanonicalScan = true,
+                ),
+            )
+            return@withContext PatternExplorer.evaluate(result, ticker, timeframe, stored.size)
+        }
+
+        // Exploratory: a window, with its own pivot computation and no recording.
+        PatternExplorer.scanWindow(
+            candles = stored.takeLast(windowBars),
+            timeframe = timeframe,
+            detectors = detectorRegistry.all(),
+            symbol = ticker,
+            windowBars = minOf(windowBars, stored.size),
+        ).also {
+            if (stored.size < required) {
+                // Reported by the evaluation itself; nothing to add. The window cannot clear the
+                // gate and the screen says so with the two numbers.
+            }
+        }
+    }
 
     override suspend fun projections(
         symbol: String,

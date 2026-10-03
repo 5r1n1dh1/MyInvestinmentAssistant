@@ -8,6 +8,7 @@ import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.PatternEvaluation
 import com.mia.app.domain.pattern.PatternScanResult
 import com.mia.app.domain.redflag.RuleSkip
 
@@ -64,6 +65,25 @@ interface PatternsDataSource {
      * history".
      */
     suspend fun scan(symbol: String, timeframe: Timeframe): PatternScanResult
+
+    /**
+     * The Pattern Explorer's per-pattern view: one outcome per catalogue pattern.
+     *
+     * Added because `scan` alone cannot answer "why did nothing match?". It returns matches and
+     * suppressed candidates but the screen had no way to ask about the 28 patterns the app names
+     * and does not evaluate — so a reader saw "no match" and could not tell whether the app looked
+     * and found nothing, or never looked.
+     *
+     * [windowBars] selects how much of the stored series to analyse. `null` means the whole series,
+     * which is the canonical scan and the only one whose results may be recorded — the Explorer
+     * passes a bar count, and the implementation marks that scan non-canonical so a window tap can
+     * never overwrite a projection in the accuracy table.
+     */
+    suspend fun evaluate(
+        symbol: String,
+        timeframe: Timeframe,
+        windowBars: Int?,
+    ): PatternEvaluation
 
     /**
      * The three projection outputs for one match (plan.md §6.6), kept as three fields.

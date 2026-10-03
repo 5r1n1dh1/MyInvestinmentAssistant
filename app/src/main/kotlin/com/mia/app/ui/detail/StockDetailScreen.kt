@@ -263,6 +263,8 @@ private fun DetailSlot(tab: Int, modifier: Modifier = Modifier) {
 
         TECHNICALS_TAB -> TechnicalsScreen(modifier = modifier)
 
+        PATTERNS_TAB -> PatternsScreen(modifier = modifier)
+
         else -> LoadingState(label = UNKNOWN_TAB_LABEL)
     }
 }
@@ -278,13 +280,24 @@ private fun DetailSlot(tab: Int, modifier: Modifier = Modifier) {
 private val TAB_LABELS: List<String> = listOf(
     FUNDAMENTALS_LABEL,
     TECHNICALS_LABEL,
+    PATTERNS_LABEL,
 )
 
 /** Index of the Technicals tab, matching its position in [TAB_LABELS]. */
 private const val TECHNICALS_TAB: Int = 1
 
+/**
+ * Index of the Patterns tab, matching its position in [TAB_LABELS].
+ *
+ * The Pattern Explorer. `PatternsScreen` reads `ARG_SYMBOL` and `ARG_TIMEFRAME` from the route's
+ * `SavedStateHandle`, which it inherits from **this** screen's destination — the same way the
+ * Technicals tab already does — so it needed no route of its own and no signature change.
+ */
+private const val PATTERNS_TAB: Int = 2
+
 private const val FUNDAMENTALS_LABEL: String = "Fundamentals"
 private const val TECHNICALS_LABEL: String = "Technicals"
+private const val PATTERNS_LABEL: String = "Patterns"
 
 private const val LAST_CLOSE_LABEL: String = "Last close "
 private const val NO_CLOSE_REASON: String =
