@@ -1,6 +1,7 @@
 package com.mia.app.data.history
 
 import com.mia.app.data.http.HttpRequest
+import com.mia.app.data.http.HttpTransport
 import com.mia.app.data.http.HttpResponse
 import com.mia.app.domain.model.Timeframe
 import kotlinx.coroutines.test.runTest
@@ -367,6 +368,79 @@ class YahooCrumbHandshakeTest {
 
         assertEquals(YahooFailureReason.HANDSHAKE_FAILED, error.reason)
         assertTrue(error.message!!.contains("no route to host"), error.message!!)
+    }
+
+    @Test
+    fun `the crumb agent is tried in order and the working one is recorded`() = runTest {
+        // The measurement behind this: from one machine, with the same session cookie and the
+        // same URL, `getcrumb` answers 429 for a mobile Chrome agent and returns a token for the
+        // desktop one. So the walk must vary the agent, not only the host.
+        val desktop = YahooEndpoints.DESKTOP_USER_AGENT
+        val mobile = YahooEndpoints.MOBILE_USER_AGENT
+        // No permanent getcrumb rule: `FakeYahooTransport` gives `permanent` rules precedence over
+        // one-shot rules, so an `alwaysStatus(..., 429)` here would shadow the success below and
+        // the test would pass for the wrong reason.
+        val transport = FakeYahooTransport()
+            .alwaysCookies(YahooEndpoints.SESSION_URL, listOf("A3=cookievalue"))
+            .alwaysText("getcrumb", "AbCdEf123", code = 200)
+        // Refuse the **second** agent at the crumb step, to prove the walk is agent-aware.
+        val seen = mutableListOf<HttpRequest>()
+        val agentAware = object : HttpTransport {
+            override suspend fun execute(request: HttpRequest): HttpResponse {
+                seen += request
+                if (request.url.contains("getcrumb") &&
+                    request.headers["User-Agent"] == mobile
+                ) {
+                    return HttpResponse(code = 429, body = "Too Many Requests".toByteArray())
+                }
+                return transport.execute(request)
+            }
+        }
+
+        val session = YahooCrumbHandshake(agentAware, sleeper = { }).session()
+
+        assertEquals(desktop, session.userAgent, "the desktop agent should have been reached first")
+        assertTrue(
+            seen.none { it.url.contains("getcrumb") && it.headers["User-Agent"] == mobile },
+            "the mobile agent must not be tried once the desktop one succeeds",
+        )
+    }
+
+    @Test
+    fun `step three presents the same agent the crumb was minted for`() = runTest {
+        // A crumb issued to one agent and spent by another is a different request, and it fails
+        // as if the crumb had expired — which would send the next person hunting for a clock bug.
+        val session = YahooSession(
+            cookies = mapOf("A3" to "abc123"),
+            crumb = "AbCdEf123",
+            host = YahooHost.QUERY1,
+            userAgent = YahooEndpoints.MOBILE_USER_AGENT,
+        )
+        assertEquals(
+            YahooEndpoints.MOBILE_USER_AGENT,
+            session.chartHeaders()["User-Agent"],
+        )
+    }
+
+    @Test
+    fun `a refused agent is named in the failure`() = runTest {
+        val transport = FakeYahooTransport()
+            .alwaysCookies(YahooEndpoints.SESSION_URL, listOf("A3=cookievalue"))
+            .alwaysStatus("getcrumb", 429)
+
+        val error = assertFailsWith<YahooHistoryException> {
+            YahooCrumbHandshake(transport, sleeper = { }).session()
+        }
+        assertEquals(YahooFailureReason.HANDSHAKE_FAILED, error.reason)
+        assertTrue(
+            error.message!!.contains("user-agents"),
+            "the message must say both agents were tried: ${error.message}",
+        )
+        assertEquals(
+            YahooEndpoints.userAgents.size * YahooHost.FALLBACK_ORDER.size,
+            transport.requestsTo("getcrumb").size,
+            "every (agent, host) pair must be attempted before giving up",
+        )
     }
 
     @Test

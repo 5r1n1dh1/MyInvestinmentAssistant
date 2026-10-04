@@ -11,9 +11,12 @@ import java.util.Locale
  * not cost the user their history. [FALLBACK_ORDER] is therefore the single ordered list every
  * caller walks — there is no way to construct an order that omits the fallback.
  *
- * **UNVERIFIED (2026-10-03, this machine):** both hosts answer `429 Too Many Requests` from
- * here even after a correct cookie handshake, so the fallback could not be exercised against
- * the live service. The ordering is taken from plan.md §3.2.
+ * **VERIFIED (2026-10-03, this machine):** both hosts return `200` for a symbol given a correct
+ * cookie handshake and crumb. The earlier note here — that they "answer 429 even after a correct
+ * cookie handshake" — was a misdiagnosis: the refused requests were presenting a mobile
+ * `User-Agent`, which this edge treats as scraper. See [userAgents] for the measurement. The
+ * ordering below is still plan.md §3.2's, and the fallback is still what keeps one unwell node
+ * from costing the user their history.
  */
 enum class YahooHost(val queryHost: String) {
 
@@ -259,17 +262,65 @@ object YahooEndpoints {
      * not look like a browser, which is why this differs from `NseBhavcopySource`'s honest
      * app-identifying agent. `Cookie` is added by the caller because only
      * [YahooCrumbHandshake] knows the session.
+     *
+     * @param userAgent which agent to present — see [userAgents] for why this is a parameter
+     *   rather than a constant baked into the map.
      */
-    fun headers(cookieHeader: String? = null): Map<String, String> = buildMap {
-        put("User-Agent", USER_AGENT)
+    fun headers(
+        cookieHeader: String? = null,
+        userAgent: String = USER_AGENT,
+    ): Map<String, String> = buildMap {
+        put("User-Agent", userAgent)
         put("Accept", "*/*")
         put("Accept-Language", "en-US,en;q=0.9")
         if (!cookieHeader.isNullOrBlank()) put("Cookie", cookieHeader)
     }
 
-    const val USER_AGENT: String =
+    /**
+     * The agents to try, in order, and why more than one is needed.
+     *
+     * ### The measurement that produced this list
+     * Replaying plan.md §3.2's three steps from one machine, same session cookie, same URLs, and
+     * changing **only** the `User-Agent`:
+     *
+     * | `User-Agent` | `getcrumb` | chart request |
+     * |---|---|---|
+     * | `…(Linux; Android 14) … Chrome/126 Mobile Safari/537.36` | `429 Too Many Requests` | never reached |
+     * | `Mozilla/5.0 (X11; Linux x86_64) … Chrome/126 Safari/537.36` | `VSkrj05ZC8T` | `200`, 3161 bytes |
+     *
+     * So the long-standing "both hosts answer 429 from here" note was a **misdiagnosis**: the
+     * app was presenting a mobile agent to an edge that treats a bare mobile agent with no client
+     * hints as scraper, and the resulting `429` was read as a network-level block. The host
+     * fallback was never the problem and could not have fixed it.
+     *
+     * ### Why both are kept rather than picking one
+     * Which agent is refused is a property of the *edge node the request lands on*, and that
+     * varies by IP reputation and network — a residential mobile IP may accept the mobile agent
+     * that a datacenter IP is refused. Hard-coding whichever agent happened to work from one
+     * machine would trade a known bug for an environment-specific one. [YahooCrumbHandshake] walks
+     * this list, so an agent that is refused is discovered rather than assumed.
+     */
+    val userAgents: List<String> = listOf(DESKTOP_USER_AGENT, MOBILE_USER_AGENT)
+
+    /**
+     * Desktop Chrome. Tried first because it is the one measured working, and because it is the
+     * agent `yfinance` — the reference implementation this API shape comes from — presents.
+     */
+    const val DESKTOP_USER_AGENT: String =
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+    /**
+     * Mobile Chrome. Second, not because it is expected to work where the desktop one already
+     * does, but because an edge that accepts it and refuses the desktop agent is a real
+     * configuration and the client should not be blind to it.
+     */
+    const val MOBILE_USER_AGENT: String =
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+
+    /** The agent used unless a caller asks for another. */
+    const val USER_AGENT: String = DESKTOP_USER_AGENT
 
     // ------------------------------------------------------------------ encoding
 

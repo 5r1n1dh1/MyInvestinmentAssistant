@@ -81,6 +81,15 @@ data class YahooSession(
     val crumb: String,
     /** Which query host answered the crumb request. */
     val host: YahooHost,
+    /**
+     * The agent that got the crumb.
+     *
+     * Carried rather than assumed, because the crumb was issued to one agent and step 3 must
+     * present the **same** one: a crumb minted for a mobile agent and spent by a desktop agent is
+     * a different request, and the failure would look like an expired crumb rather than a mismatch.
+     * Defaults to the preferred agent so a hand-built session in a test stays valid.
+     */
+    val userAgent: String = YahooEndpoints.USER_AGENT,
 ) {
     init {
         require(cookies.isNotEmpty()) {
@@ -95,8 +104,14 @@ data class YahooSession(
     val cookieHeader: String
         get() = cookies.entries.joinToString("; ") { (name, value) -> "$name=$value" }
 
-    /** Header map for step 3: the browser agent **and** the session cookie. */
-    fun chartHeaders(): Map<String, String> = YahooEndpoints.headers(cookieHeader)
+    /**
+     * Header map for step 3: the agent the crumb was minted for **and** the session cookie.
+     *
+     * Both must match the handshake, which is why this reads [userAgent] off the session instead
+     * of taking the default.
+     */
+    fun chartHeaders(): Map<String, String> =
+        YahooEndpoints.headers(cookieHeader, userAgent = userAgent)
 }
 
 /**
@@ -175,9 +190,13 @@ object YahooCookies {
  * and retries the chart request exactly once. A stale session is the usual cause of a `429`
  * after a few hours, and the crumb expires.
  *
- * **UNVERIFIED (2026-10-03, this machine):** the whole sequence could not be exercised live —
- * `getcrumb` answers `429` here even with a valid-looking `d=` cookie. Everything below is
- * written to plan.md §3.2's contract and proven with a hand-written transport.
+ * ### The agent is part of the handshake, not a constant
+ * The walk is over `(user-agent, host)` pairs rather than hosts alone. `429` from `getcrumb` used
+ * to be read as "Yahoo is blocking us", and the note here recorded that as unverifiable from this
+ * machine — but the cause was the agent the app presented. Same session cookie, same URL, and
+ * `getcrumb` answers `429` for the mobile Chrome agent while returning a crumb for the desktop one.
+ * The client now tries each agent in turn, and the winning agent travels on [YahooSession] so step
+ * 3 presents the same identity that step 2 was served.
  */
 class YahooCrumbHandshake(
     private val transport: HttpTransport,
@@ -234,9 +253,33 @@ class YahooCrumbHandshake(
     private suspend fun handshake(): YahooSession {
         val problems = mutableListOf<String>()
 
-        // ---- step 1: the session cookie
-        val cookieResponse = try {
-            transport.execute(HttpRequest(url = YahooEndpoints.SESSION_URL, headers = YahooEndpoints.headers()))
+        // ---- step 1: the session cookie, fetched once with the preferred agent.
+        //
+        // Not per agent, and the exception from this request is deliberately **not** caught: a
+        // transport that cannot reach `fc.yahoo.com` has no network, so trying the second agent
+        // would repeat the identical request and report the same failure twice. The cookie is a
+        // session identifier, not part of the identity under test — the agent is, and that is
+        // tested at step 2, which is where a refusal actually appears.
+        val cookies = try {
+            val response = transport.execute(
+                HttpRequest(
+                    url = YahooEndpoints.SESSION_URL,
+                    headers = YahooEndpoints.headers(userAgent = YahooEndpoints.USER_AGENT),
+                ),
+            )
+            val set = YahooCookies.of(response)
+            if (set.isEmpty()) {
+                // A 404 here is survivable; a 404 *with no cookie* is not — see the class KDoc.
+                throw YahooHistoryException(
+                    YahooFailureReason.HANDSHAKE_FAILED,
+                    "Yahoo session request to ${YahooEndpoints.SESSION_URL} answered HTTP " +
+                        "${response.code} and set no cookie, so no crumb can be obtained " +
+                        "(plan.md §3.2 requires the cookie before the crumb)",
+                )
+            }
+            set
+        } catch (e: YahooHistoryException) {
+            throw e
         } catch (e: Exception) {
             throw YahooHistoryException(
                 YahooFailureReason.HANDSHAKE_FAILED,
@@ -245,57 +288,73 @@ class YahooCrumbHandshake(
                 e,
             )
         }
-        val cookies = YahooCookies.of(cookieResponse)
-        if (cookies.isEmpty()) {
-            // A 404 here is survivable; a 404 *with no cookie* is not — see the class KDoc.
-            throw YahooHistoryException(
-                YahooFailureReason.HANDSHAKE_FAILED,
-                "Yahoo session request to ${YahooEndpoints.SESSION_URL} answered HTTP " +
-                    "${cookieResponse.code} and set no cookie, so no crumb can be obtained " +
-                    "(plan.md §3.2 requires the cookie before the crumb)",
-            )
-        }
 
-        // ---- step 2: the crumb, query1 then query2
-        for (host in YahooHost.FALLBACK_ORDER) {
-            val url = YahooEndpoints.crumbUrl(host)
-            val response = try {
-                transport.execute(
-                    HttpRequest(
-                        url = url,
-                        headers = YahooEndpoints.headers(YahooCookies.headerOf(cookies)),
-                    ),
-                )
-            } catch (e: Exception) {
-                problems += "$url → transport error ${e.javaClass.simpleName}: ${e.message}"
-                continue
-            }
+        // ---- step 2: the crumb, over every agent and both hosts.
+        //
+        // Agent first, then host: the agent is the thing being varied deliberately, so it is the
+        // outer loop and the failure message names the agent that was refused. Swapping the loops
+        // would still find a working combination but would report it as a host problem, which is
+        // the misdiagnosis this whole change exists to correct.
+        for (agent in YahooEndpoints.userAgents) {
+            val shortAgent = agent.take(24) + "…"
 
-            when {
-                response.code == 429 -> {
-                    problems += "$url → HTTP 429 (rate limited; Retry-After: " +
-                        "${response.header("Retry-After") ?: "absent"})"
-                    sleeper(retryAfterMillis(response))
+            // ---- step 2: the crumb, query1 then query2, under this agent.
+            for (host in YahooHost.FALLBACK_ORDER) {
+                val url = YahooEndpoints.crumbUrl(host)
+                val response = try {
+                    transport.execute(
+                        HttpRequest(
+                            url = url,
+                            headers = YahooEndpoints.headers(
+                                cookieHeader = YahooCookies.headerOf(cookies),
+                                userAgent = agent,
+                            ),
+                        ),
+                    )
+                } catch (e: Exception) {
+                    problems += "$url (${shortAgent}) → transport error " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+                    continue
                 }
 
-                !response.isSuccess -> problems += "$url → HTTP ${response.code}"
-
-                else -> {
-                    val body = response.text.trim()
-                    if (YahooEndpoints.isValidCrumb(body)) {
-                        handshakeCount++
-                        return YahooSession(cookies = cookies, crumb = body, host = host)
+                when {
+                    response.code == 429 -> {
+                        problems += "$url (${shortAgent}) → HTTP 429 (rate limited; Retry-After: " +
+                            "${response.header("Retry-After") ?: "absent"})"
+                        // No backoff here. The next thing tried is a different *agent*, not the
+                        // same request again, so waiting would delay the fix rather than enable
+                        // it. Backoff belongs to the chart-level retry, which does repeat an
+                        // identical request.
                     }
-                    // An HTML error page or a JSON error body served with 200. Not a crumb.
-                    problems += "$url → HTTP ${response.code} but the body is not a crumb token " +
-                        "(${body.length} chars, starts '${body.take(40).replace('\n', ' ')}')"
+
+                    !response.isSuccess ->
+                        problems += "$url (${shortAgent}) → HTTP ${response.code}"
+
+                    else -> {
+                        val body = response.text.trim()
+                        if (YahooEndpoints.isValidCrumb(body)) {
+                            handshakeCount++
+                            return YahooSession(
+                                cookies = cookies,
+                                crumb = body,
+                                host = host,
+                                // Step 3 must present the agent the crumb was minted for.
+                                userAgent = agent,
+                            )
+                        }
+                        // An HTML error page or a JSON error body served with 200. Not a crumb.
+                        problems += "$url (${shortAgent}) → HTTP ${response.code} but the body is " +
+                            "not a crumb token (${body.length} chars, " +
+                            "starts '${body.take(40).replace('\n', ' ')}')"
+                    }
                 }
             }
         }
 
         throw YahooHistoryException(
             YahooFailureReason.HANDSHAKE_FAILED,
-            "no Yahoo crumb from ${YahooHost.FALLBACK_ORDER.joinToString(" then ") { it.queryHost }}: " +
+            "no Yahoo crumb from ${YahooHost.FALLBACK_ORDER.joinToString(" then ") { it.queryHost }} " +
+                "under any of ${YahooEndpoints.userAgents.size} user-agents: " +
                 problems.joinToString("; "),
         )
     }
