@@ -35,8 +35,9 @@ class MiaConverters {
  * The one database — plan.md §5.2.
  *
  * ### Version and migrations
- * * [DATABASE_VERSION] is `2`. v1 was the plan.md §5.2 table set; v2 adds
- *   `statement_rows`, `derived_metrics` and `watchlist` (see `DatabaseMigrations`).
+ * * [DATABASE_VERSION] is `3`. v1 was the plan.md §5.2 table set; v2 adds
+ *   `statement_rows`, `derived_metrics` and `watchlist`; v3 adds `ratios.industry`, the
+ *   screener.in classification that sector resolution needs (see `DatabaseMigrations`).
  * * **`fallbackToDestructiveMigration()` is never called, anywhere.** The `candles` table is
  *   write-once: its 500 daily bars per symbol cost a Yahoo round-trip per symbol to rebuild
  *   (plan.md §3.2, §13), and `outcomes` is the app's published track record (plan.md §6.1),
@@ -90,7 +91,7 @@ abstract class MiaDatabase : RoomDatabase() {
         const val DATABASE_NAME: String = "mia.db"
 
         /** plan.md §5.2 + the three extension tables documented on the entities. */
-        const val DATABASE_VERSION: Int = 2
+        const val DATABASE_VERSION: Int = 3
 
         /** Applied at open time; see the class KDoc. */
         val CALLBACK: Callback = object : Callback() {

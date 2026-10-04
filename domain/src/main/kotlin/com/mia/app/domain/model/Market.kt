@@ -139,6 +139,18 @@ data class Merged<T : Any>(
 data class Ratios(
     val symbol: String,
     val sector: Sector,
+    /**
+     * screener.in's own industry classification, e.g. `"Energy, Oil, Gas & Consumable Fuels, …"`.
+     *
+     * Carried on [Ratios] rather than only on `FundamentalsSnapshot` because **the ratios row is
+     * what survives the cache**: the snapshot is rebuilt from it on every read, so anything kept
+     * only on the snapshot is lost the moment a row is cached. `SectorResolver`'s highest-precedence
+     * input is this text, so losing it silently downgraded every cached symbol to name-only matching.
+     *
+     * `null` is legal and means "this source published no industry classification", which the
+     * resolver reports honestly rather than treating as a failure.
+     */
+    val industry: String? = null,
     val asOf: LocalDate,
     val source: Source,
     val confidence: Confidence,

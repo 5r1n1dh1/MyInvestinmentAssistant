@@ -140,6 +140,9 @@ object FundamentalsParserFacade {
             profitLoss = profitLoss,
             shareholding = shareholding,
             sector = resolution.sector,
+            // Carried through to the ratios row, because that is what the cache restores. Keeping
+            // it on the snapshot alone loses it on every cached read.
+            industry = industry,
         )
 
         val health = health(topRatios, quarters, tables, ratiosCard, derived.notes, asOf)

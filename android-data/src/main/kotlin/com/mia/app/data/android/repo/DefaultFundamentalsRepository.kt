@@ -52,7 +52,12 @@ class DefaultFundamentalsRepository @Inject constructor(
         val cached = read(symbol)
         if (cached != null) {
             val age = cached.asOf?.let { ChronoUnit.DAYS.between(it, todayInMarket()) } ?: Long.MAX_VALUE
-            if (age <= maxAgeDays) return@withContext cached
+            // A row cached before `ratios.industry` existed carries no industry text, so sector
+            // resolution falls back to the company name and can stay unresolved for the full seven
+            // days even though the source would classify it correctly. Treating that as stale is
+            // what lets a corrected classification reach the device without a reinstall — the
+            // alternative was a bug that looked permanent to the reader.
+            if (age <= maxAgeDays && !cached.needsSectorRefresh()) return@withContext cached
         }
         if (!allowFetch) {
             return@withContext cached ?: noCache(symbol)
@@ -62,6 +67,19 @@ class DefaultFundamentalsRepository @Inject constructor(
         val refreshed = refresh(symbol)
         if (refreshed.isOk) return@withContext refreshed
         cached ?: refreshed
+    }
+
+    /**
+     * `true` when a cached view was stored with no industry text and an unresolved sector.
+     *
+     * Only that exact combination. A view that resolved its sector from the name is left alone —
+     * the name matched a keyword, so the classification is as good as the industry text would have
+     * been, and refetching it every screen entry would spend a screener.in request for nothing.
+     */
+    private fun FundamentalsView.needsSectorRefresh(): Boolean {
+        val ratios = this.ratios
+        return ratios.industry.isNullOrBlank() &&
+            ratios.sector == com.mia.app.domain.model.Sector.OTHER
     }
 
     override suspend fun refresh(symbol: String): DataResult<FundamentalsView> =
@@ -172,6 +190,11 @@ class DefaultFundamentalsRepository @Inject constructor(
             sector = ratios.sector,
             // plan.md §1.4 rule 8: an unresolved sector is OTHER, and OTHER *is* unresolved.
             sectorResolved = ratios.sector != com.mia.app.domain.model.Sector.OTHER,
+            // From the ratios row, which is what the cache restores. This was the bug behind
+            // "sector could not be resolved" persisting after the resolver was fixed: the industry
+            // text lived only on the in-memory parse, so a cached read produced `null` here and the
+            // resolver silently fell back to name-only matching.
+            industry = ratios.industry,
             ratios = ratiosWithFreshness,
             health = health,
             quarters = quarters,

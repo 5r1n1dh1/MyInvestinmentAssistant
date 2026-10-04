@@ -114,6 +114,17 @@ data class RatiosEntity(
     /** ISO-8601. plan.md §10: the UI must always be able to show this. */
     @ColumnInfo(name = "asOf") val asOf: String,
     @ColumnInfo(name = "sector") val sector: String,
+    /**
+     * screener.in's own industry classification, e.g. `"Energy, Oil, Gas & Consumable Fuels, …"`.
+     *
+     * Stored because `SectorResolver`'s highest-precedence input is this text, not the company's
+     * name. It was previously carried only on the in-memory parse, so **every cached read** rebuilt
+     * a snapshot with `industry == null` and sector resolution fell back to matching words in the
+     * name — which is why a company whose page says `Energy` still read "could not resolve" once
+     * cached. Nullable so rows written before v3 are legal rather than a migration failure; a null
+     * here simply means "re-resolve from the name, or refetch".
+     */
+    @ColumnInfo(name = "industry") val industry: String?,
     @ColumnInfo(name = "source") val source: String,
     @ColumnInfo(name = "confidence") val confidence: String,
     @ColumnInfo(name = "roce") val roce: Double?,

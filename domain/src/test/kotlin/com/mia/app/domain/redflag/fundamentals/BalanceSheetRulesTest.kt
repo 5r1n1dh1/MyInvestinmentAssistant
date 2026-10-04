@@ -379,8 +379,13 @@ class BalanceSheetRulesTest {
             testContext(
                 derived = Golden.relianceDerived.copy(promoterPledgePercent = 4.5),
                 ratios = Ratios(
-                    "RELIANCE", Sector.OTHER, LocalDate.of(2026, 10, 1), Source.SCREENER_IN,
-                    Confidence.SINGLE,
+                    symbol = "RELIANCE",
+                    sector = Sector.OTHER,
+                    industry = "Energy, Oil, Gas & Consumable Fuels, Petroleum Products, " +
+                        "Refineries & Marketing",
+                    asOf = LocalDate.of(2026, 10, 1),
+                    source = Source.SCREENER_IN,
+                    confidence = Confidence.SINGLE,
                 ),
             ),
         ).single()

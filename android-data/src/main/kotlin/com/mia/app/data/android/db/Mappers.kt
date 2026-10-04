@@ -147,6 +147,7 @@ object Mappers {
     fun toRatios(entity: RatiosEntity): Ratios = Ratios(
         symbol = entity.symbol,
         sector = sectorOrDefault(entity.sector),
+        industry = entity.industry,
         asOf = LocalDate.parse(entity.asOf),
         source = sourceOrDefault(entity.source),
         confidence = confidenceOrDefault(entity.confidence),
@@ -173,6 +174,7 @@ object Mappers {
         symbol = ratios.symbol,
         asOf = ratios.asOf.toString(),
         sector = sectorKey(ratios.sector),
+        industry = ratios.industry,
         source = sourceKey(ratios.source),
         confidence = confidenceKey(ratios.confidence),
         roce = ratios.roce,

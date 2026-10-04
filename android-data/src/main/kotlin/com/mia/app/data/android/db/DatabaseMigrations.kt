@@ -88,14 +88,39 @@ object DatabaseMigrations {
     }
 
     /**
+     * 2 → 3.
+     *
+     * Adds `ratios.industry`, the screener.in classification `SectorResolver` needs as its
+     * highest-precedence input.
+     *
+     * ### Why `ALTER TABLE` and not a rewrite
+     * The column is nullable and the table holds one row per `(symbol, asOf)`. Adding it in place
+     * preserves every cached ratio the device already has, which matters on a 2 GB phone where a
+     * full refetch is the expensive path. `IF NOT EXISTS` is not valid on `ADD COLUMN` in every
+     * SQLite build, so idempotency comes from Room's own migration bookkeeping instead — a
+     * partially applied 2 → 3 cannot occur, because the statement is a single atomic `ALTER`.
+     *
+     * ### What the existing rows say
+     * Rows written before v3 carry `industry = NULL`, which the resolver reads honestly: it falls
+     * back to matching the company's name and says so. They are not silently wrong, and
+     * `DefaultFundamentalsRepository` treats `sector = OTHER AND industry IS NULL` as worth a
+     * refetch so a corrected classification reaches the device without waiting the 7-day window.
+     */
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `ratios` ADD COLUMN `industry` TEXT")
+        }
+    }
+
+    /**
      * Every migration, in order. `DatabaseModule` passes exactly this list to Room, which is
      * what makes "the migration exists" and "the migration is registered" the same fact.
      */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
     /**
-     * A path from [MiaDatabase.DATABASE_VERSION] back down to [target] does not exist: v2 is a
-     * superset of v1 and no column was dropped, so a downgrade is a reinstall, not a migration.
+     * A path from [MiaDatabase.DATABASE_VERSION] back down to [target] does not exist: v3 is a
+     * superset of v2 and no column was dropped, so a downgrade is a reinstall, not a migration.
      * Named so a future developer adding a destructive step has to delete this and think again.
      */
     const val DOWNGRADE_NOT_SUPPORTED: String =

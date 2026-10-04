@@ -68,6 +68,7 @@ object RatioMapper {
         profitLoss: ParsedTable?,
         shareholding: ParsedTable?,
         sector: Sector = Sector.OTHER,
+        industry: String? = null,
     ): Ratios {
         val years = derived.revenueByYear.keys + derived.patByYear.keys
         val latest = years.maxOrNull()
@@ -82,6 +83,7 @@ object RatioMapper {
         return Ratios(
             symbol = symbol,
             sector = sector,
+        industry = industry,
             asOf = asOf,
             source = Source.SCREENER_IN,
             confidence = Confidence.SINGLE,
