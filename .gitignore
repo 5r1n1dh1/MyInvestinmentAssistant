@@ -46,3 +46,7 @@ Thumbs.db
 # Binary build output that must stay out is already covered by build/ and
 # .gradle/ above.
 # ---------------------------------------------------------------------------
+# CI failure logs: uploaded from GitHub Actions for debugging. Never committed.
+logs_*/
+*.zip
+!gradle/wrapper/*.zip

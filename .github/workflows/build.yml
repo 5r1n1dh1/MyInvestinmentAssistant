@@ -5,7 +5,7 @@
 # changes this project needs. Each is called out at the step that implements it, because every one
 # of them is a difference a reviewer should be able to check.
 #
-#   1. The pure-JVM test suites run first. This repo's engine (853 domain tests + 484 data tests)
+#   1. The pure-JVM test suites run first. This repo's engine (932 domain tests + 487 data tests)
 #      needs no Android SDK, so it is the cheapest signal available and it does not depend on the
 #      SDK install succeeding.
 #   2. The Android SDK is installed explicitly. Gradle's `com.android.*` plugins cannot resolve
@@ -115,12 +115,21 @@ jobs:
             sh ./gradlew --version
           fi
 
-      # CHANGE 1 (this repo only): the engine's 1,337 JVM tests need no Android SDK, so they run
+      # CHANGE 1 (this repo only): the engine's JVM tests need no Android SDK, so they run
       # before the SDK install and fail fast. On a broken parser or detector this step fails in
       # ~1 minute instead of after a full SDK download, and it is the part of the build that has
       # actually been run before (docs/VERIFICATION.md).
+      #
+      # `-PskipAndroid` is REQUIRED here, not an optimisation. GitHub-hosted runners
+      # pre-set ANDROID_SDK_ROOT, so settings.gradle.kts's SDK check evaluated true, :app and
+      # :android-data were included, and AGP was applied during this step. It then failed with:
+      #     Plugin 'com.android.internal.library' relies on
+      #     'org.gradle.api.problems.internal.InternalProblems', a Gradle internal API that was
+      #     removed in Gradle 9.6.0
+      # before any engine test ran. Passing -PskipAndroid makes the claim in the paragraph above
+      # actually true.
       - name: Run pure-JVM test suites
-        run: ./gradlew :domain:test :data:test --no-daemon --stacktrace
+        run: ./gradlew :domain:test :data:test -PskipAndroid --no-daemon --stacktrace
 
       # CHANGE 2 (this repo only): `settings.gradle.kts` includes :android-data and :app ONLY when
       # an SDK is detectable, so one must exist before ANY Gradle task that touches them. Detected

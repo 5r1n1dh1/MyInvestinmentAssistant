@@ -5,6 +5,17 @@ coroutines = "1.11.0"
 serialization = "1.9.0"
 jsoup = "1.23.2"
 junit = "5.11.4"
+# Pinned explicitly, and it must track `junit` exactly.
+#
+# JUnit's aligned versioning ties the Jupiter engine (5.x) and the Platform (1.x) together:
+# jupiter 5.11.4 <-> platform 1.11.4. `junit-platform-launcher` used to be declared with no
+# version at all, leaving Gradle to align it against whatever platform version it happened to
+# embed. That worked on Gradle 9.8.0 and broke on 9.5.1 with
+#     "TestEngine with ID 'junit-jupiter' failed to discover tests"
+# because the launcher on the test runtime classpath no longer matched the engine. Pinning it
+# makes the test runtime identical on every Gradle version, so a Gradle upgrade or downgrade
+# can never silently change which JUnit runs the suite.
+junit-platform = "1.11.4"
 
 # Android side (only resolved when an Android SDK is present).
 agp = "8.13.2"
@@ -34,7 +45,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
