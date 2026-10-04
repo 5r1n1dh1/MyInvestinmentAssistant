@@ -247,6 +247,21 @@ interface CandleRepository {
      *
      * Never overwrites an existing bar: the cache is write-once, so a re-run of this method
      * writes only what is missing.
+     *
+     * ### Why this is the per-symbol path and [backfillHistory] is not
+     * [backfillHistory] walks the NSE archive, one **whole-market** bhavcopy per session, so it
+     * deepens every symbol at once and costs one request per session. That is the cheap path and it
+     * is the right one for the first run. But it is bounded by the archive walk's own cadence, and
+     * it cannot be aimed at one ticker.
+     *
+     * This is the aimed path: Yahoo, one symbol, up to [DEFAULT_SERIES_LIMIT] bars, and it answers
+     * only for the symbol named. A reader who has just opened a stock and wants *that* stock
+     * analysed now should not have to wait for the nightly worker to reach it — which is what
+     * makes this the method behind the manual "fetch history for this stock" action.
+     *
+     * Both exist because the sources fail differently. The archive always works but is
+     * market-wide and slow to deepen; Yahoo is fast and precise but answers `429` from some
+     * networks. The caller is expected to try this first and fall back, not to choose one.
      */
     suspend fun backfill(
         symbol: String,

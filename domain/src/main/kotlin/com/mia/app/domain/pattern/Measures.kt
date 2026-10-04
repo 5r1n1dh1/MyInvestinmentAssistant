@@ -126,7 +126,8 @@ enum class PenaltyId(val points: Int) {
  *
  * **How stability is achieved.** The fourteen canonical v1 pattern names
  * (`patterns-spec.md` §20, including the two two-direction families) own fixed constants
- * `1..14`. Lookup is exact first, then on a *normalised* name — lowercase, alphanumerics only —
+ * `1..14`, and those constants are **permanent**: see [RETIRED_CANONICAL_NAMES] for the six the
+ * catalogue stopped claiming to evaluate while keeping their ids. Lookup is exact first, then on a *normalised* name — lowercase, alphanumerics only —
  * so a cosmetic rename of the display string ("Head and Shoulders" vs "Head & Shoulders") still
  * resolves to the same id. Anything else gets a 64-bit FNV-1a digest of the same normalised
  * name, forced into `>= 2^62` so it can never collide with a canonical id.
@@ -163,7 +164,45 @@ object PatternIds {
     /** Canonical display names, in id order. */
     val CANONICAL_NAMES: List<String> = CANONICAL.keys.toList()
 
-    /** `true` when [name] is one of the fourteen v1 pattern names. */
+    /**
+     * The six canonical names the catalogue no longer claims to evaluate — ids `1..6`, the
+     * candlestick family.
+     *
+     * ### Why the ids stay and the rows move
+     * `PatternOutcome.patternId` is a stored column, and an accuracy history has to survive this
+     * decision: a candle detected under id `3` last month must still join to its own row today. So
+     * the ids are **not** renumbered and the names are **not** removed from [CANONICAL_NAMES] —
+     * renumbering would silently re-point every stored outcome at a different pattern, which is the
+     * one failure a stability contract exists to prevent.
+     *
+     * What changed is the *claim*, not the *identity*: these rows moved from the catalogue's
+     * evaluated list to its not-evaluated list. [CANONICAL_NAMES] therefore no longer equals the
+     * evaluated set, and the difference is this list — so the two can still be reconciled instead
+     * of drifting apart unnoticed.
+     *
+     * A detector for any of these would keep its existing id. Reinstating one is a catalogue-row
+     * change and nothing more.
+     */
+    val RETIRED_CANONICAL_NAMES: List<String> = listOf(
+        "Bullish Engulfing",
+        "Bearish Engulfing",
+        "Hammer",
+        "Shooting Star",
+        "Morning Star",
+        "Evening Star",
+    )
+
+    /**
+     * The canonical names the catalogue currently claims to evaluate: ids `7..14`.
+     *
+     * Distinct from [CANONICAL_NAMES] on purpose. The full list is an *identity* contract and this
+     * is a *product* one, and conflating them is what would make the next retirement look like a
+     * breaking change rather than a labelling decision.
+     */
+    val EVALUATED_CANONICAL_NAMES: List<String> =
+        CANONICAL_NAMES.filterNot { it in RETIRED_CANONICAL_NAMES }
+
+    /** `true` when [name] is one of the fourteen v1 pattern names, evaluated or retired. */
     fun isCanonical(name: String): Boolean = normalise(name) in BY_NORMALISED
 
     /**

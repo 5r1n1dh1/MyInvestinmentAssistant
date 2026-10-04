@@ -16,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -35,25 +36,74 @@ class PatternCatalogTest {
     // ------------------------------------------------------------------ structure
 
     @Test
-    fun `the evaluated rows are exactly the fourteen canonical pattern names`() {
-        // The join between catalogue and scan results is by name, so the two vocabularies must be
-        // the same fourteen. If a detector were added without a catalogue row, its results would
-        // have nothing to render; if a row were added for an unevaluated name, it would claim the
-        // app looks for something it does not.
+    fun `the evaluated rows are the canonical names minus the retired ones`() {
+        // The join between catalogue and scan results is by name, so the two vocabularies must
+        // reconcile. They no longer have to be *equal*: six canonical names (the candlestick family)
+        // were moved to the not-evaluated list, so the contract is now that every canonical id still
+        // has a row and that the difference is exactly the named set.
+        //
+        // The union check is the part that still catches the original failure — a detector added
+        // without a catalogue row, whose results would then have nothing to render. Equality alone
+        // no longer would, which is why it was not simply left in place.
+        assertEquals(
+            PatternIds.EVALUATED_CANONICAL_NAMES.toSet(),
+            PatternCatalog.evaluated.map { it.name }.toSet(),
+            "the catalogue's evaluated rows and PatternIds.EVALUATED_CANONICAL_NAMES have drifted",
+        )
         assertEquals(
             PatternIds.CANONICAL_NAMES.toSet(),
-            PatternCatalog.evaluated.map { it.name }.toSet(),
-            "the catalogue's evaluated rows and PatternIds.CANONICAL_NAMES have drifted apart",
+            (PatternCatalog.evaluated.map { it.name } + PatternIds.RETIRED_CANONICAL_NAMES).toSet(),
+            "evaluated + retired must account for every canonical name, or an id has no row and " +
+                "stored outcomes pointing at it would render nothing",
         )
-        assertEquals(14, PatternCatalog.evaluatedCount, "the v1 detector set is twelve / fourteen names")
+        assertEquals(8, PatternCatalog.evaluatedCount, "the eight chart patterns the app evaluates")
     }
 
     @Test
-    fun `every canonical name resolves to an evaluated row`() {
+    fun `every retired canonical name has a row that admits it is not evaluated`() {
+        // The retired rows must be *present and labelled*, not deleted. Deleting them would make a
+        // reader's "what is a hammer?" unanswerable, and would also drop the stored ids 1..6 out of
+        // the catalogue that joins to them.
+        for (name in PatternIds.RETIRED_CANONICAL_NAMES) {
+            val row = assertNotNull(
+                PatternCatalog.byName(name),
+                "$name is a canonical pattern and must keep its catalogue row",
+            )
+            assertFalse(
+                row.isEvaluated,
+                "$name was retired from evaluation and must say so on its row",
+            )
+            assertEquals(
+                PatternShape.UNAVAILABLE,
+                row.shape,
+                "$name is no longer evaluated, so it must not carry an overlay shape: an overlay " +
+                    "beside data the app never scored invites exactly the comparison the shape " +
+                    "contract forbids",
+            )
+        }
+    }
+
+    @Test
+    fun `every canonical name resolves to a row, and an evaluated one only if it is evaluated`() {
+        // Note the deliberate weakening: this used to demand an *evaluated* row for all fourteen,
+        // which is exactly the claim that was withdrawn. The join itself is still checked — a
+        // canonical name with no row at all would break every stored outcome that points at it.
         for (name in PatternIds.CANONICAL_NAMES) {
             assertNotNull(
+                PatternCatalog.byName(name),
+                "$name is a canonical pattern but has no catalogue row",
+            )
+        }
+        for (name in PatternIds.EVALUATED_CANONICAL_NAMES) {
+            assertNotNull(
                 PatternCatalog.evaluatedByName(name),
-                "$name is a canonical pattern but has no evaluated catalogue row",
+                "$name is claimed as evaluated but has no evaluated row",
+            )
+        }
+        for (name in PatternIds.RETIRED_CANONICAL_NAMES) {
+            assertNull(
+                PatternCatalog.evaluatedByName(name),
+                "$name is retired, so evaluatedByName must not hand it back to a caller",
             )
         }
     }

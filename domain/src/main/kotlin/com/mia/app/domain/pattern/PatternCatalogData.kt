@@ -43,176 +43,10 @@ internal object PatternCatalogData {
      * itself enforces. An overlay that is tidier than reality would teach the wrong tolerance.
      */
     private val DETECTABLE: List<PatternSpec> = listOf(
-        // ---------------------------------------------------------------- candlestick (ids 1..6)
-        PatternSpec(
-            name = "Bullish Engulfing",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "A candle whose body engulfs the previous candle's body.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    // Prior bar: a small red body, upper half of the range.
-                    NormalisedCandle(bodyHigh = 0.70f, bodyLow = 0.60f, wickHigh = 0.85f, wickLow = 0.50f),
-                    // Engulfing bar: green body fully covering the prior body, with a lower wick
-                    // because the open gapped below the prior close.
-                    NormalisedCandle(bodyHigh = 0.80f, bodyLow = 0.55f, wickHigh = 0.85f, wickLow = 0.40f),
-                ),
-            ),
-            glossary = GlossaryEntry(
-                whatItIs = "A two-candle reversal formation: the second candle's real body " +
-                    "completely covers the first candle's real body.",
-                howItLooks = "The first bar is small and coloured one way; the next is larger and " +
-                    "the opposite colour, opening at or below the first close and closing at or " +
-                    "above the first open.",
-                textbookSays = "Associated with a change in the balance of buyers and sellers over " +
-                    "those two sessions.",
-                doesNotPredict = "It describes two sessions only, and says nothing about the days " +
-                    "around them. A textbook needs a downtrend before it for the reading to carry " +
-                    "its usual meaning, and the app measures that as a separate factor.",
-            ),
-        ),
-        PatternSpec(
-            name = "Bearish Engulfing",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "A candle whose body engulfs the previous candle's body, opposite way.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    NormalisedCandle(
-                        bodyHigh = 0.40f, bodyLow = 0.30f,
-                        wickHigh = 0.50f, wickLow = 0.15f,
-                    ),
-                    NormalisedCandle(
-                        bodyHigh = 0.45f, bodyLow = 0.20f,
-                        wickHigh = 0.60f, wickLow = 0.15f,
-                    ),
-                ),
-            ),
-glossary = GlossaryEntry(
-                whatItIs = "The bearish mirror of the bullish engulfing: the second candle's " +
-                    "real body completely covers the first.",
-                howItLooks = "The first bar is small; the next is larger and the opposite colour, " +
-                    "opening at or above the first close and closing at or below the first open.",
-                textbookSays = "Associated with a shift toward sellers over those two sessions.",
-                doesNotPredict = "It describes two sessions. Like its bullish mirror it carries no " +
-                    "information about the sessions that follow.",
-            ),
-        ),
-        PatternSpec(
-            name = "Hammer",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "A small body near the top with a long lower wick.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    // Declining context, shown at low prices so the hammer sits at the bottom.
-                    NormalisedCandle(bodyHigh = 0.45f, bodyLow = 0.38f, wickHigh = 0.55f, wickLow = 0.30f),
-                    // The hammer itself: tiny body at the top, wick more than twice the body.
-                    NormalisedCandle(bodyHigh = 0.32f, bodyLow = 0.28f, wickHigh = 0.38f, wickLow = 0.02f),
-                ),
-            ),
-            glossary = GlossaryEntry(
-                whatItIs = "A single candle with a small real body in the upper third of its " +
-                    "range and a lower wick at least twice the body's length.",
-                howItLooks = "Long shadow beneath, little above, and the body near the high of the " +
-                    "session's range.",
-                textbookSays = "Associated with rejection of lower prices during that session, and " +
-                    "read as a possible end to a decline.",
-                doesNotPredict = "One candle cannot confirm anything on its own. The textbook " +
-                    "requires it to follow a decline, and a confirmation candle; the app scores " +
-                    "both as separate factors rather than assuming them.",
-            ),
-        ),
-        PatternSpec(
-            name = "Shooting Star",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "A small body near the bottom with a long upper wick.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    NormalisedCandle(
-                        bodyHigh = 0.62f, bodyLow = 0.55f,
-                        wickHigh = 0.70f, wickLow = 0.45f,
-                    ),
-                    NormalisedCandle(
-                        bodyHigh = 0.72f, bodyLow = 0.68f,
-                        wickHigh = 0.98f, wickLow = 0.62f,
-                    ),
-                ),
-            ),
-glossary = GlossaryEntry(
-                whatItIs = "The hammer's mirror image, at the top of a range: small body low in " +
-                    "the range, upper wick at least twice the body.",
-                howItLooks = "Long shadow above, little below, body near the low of the session.",
-                textbookSays = "Associated with rejection of higher prices, and read as a possible " +
-                    "end to a rise.",
-                doesNotPredict = "As with the hammer, a single candle is not a signal on its own " +
-                    "and says nothing about later sessions.",
-            ),
-        ),
-        PatternSpec(
-            name = "Morning Star",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "Three candles: a long one down, a small one, then a long one up.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    NormalisedCandle(bodyHigh = 0.85f, bodyLow = 0.55f, wickHigh = 0.90f, wickLow = 0.50f),
-                    // The star: small body, and it must not penetrate far into the first body.
-                    NormalisedCandle(bodyHigh = 0.55f, bodyLow = 0.50f, wickHigh = 0.60f, wickLow = 0.44f),
-                    NormalisedCandle(bodyHigh = 0.80f, bodyLow = 0.55f, wickHigh = 0.85f, wickLow = 0.52f),
-                ),
-            ),
-            glossary = GlossaryEntry(
-                whatItIs = "A three-candle reversal at a bottom: a long down candle, a small " +
-                    "indecision candle that does not extend the fall, then a long up candle.",
-                howItLooks = "Three bars — long, small, long — with the third recovering at least " +
-                    "half of the first candle's body.",
-                textbookSays = "Associated with a bottoming process after a decline.",
-                doesNotPredict = "Three candles are still three sessions. It establishes neither a " +
-                    "level nor a duration, and the app measures the recovery as a fraction rather " +
-                    "than assuming it is complete.",
-            ),
-        ),
-        PatternSpec(
-            name = "Evening Star",
-            family = PatternFamily.CANDLESTICK,
-            detectionStatus = DETECTED,
-            minBars = 22,
-            shapeSummary = "Three candles: a long one up, a small one, then a long one down.",
-            shape = PatternShape.CandleLayout(
-                listOf(
-                    NormalisedCandle(
-                        bodyHigh = 0.45f, bodyLow = 0.15f,
-                        wickHigh = 0.50f, wickLow = 0.10f,
-                    ),
-                    NormalisedCandle(
-                        bodyHigh = 0.50f, bodyLow = 0.45f,
-                        wickHigh = 0.56f, wickLow = 0.40f,
-                    ),
-                    NormalisedCandle(
-                        bodyHigh = 0.45f, bodyLow = 0.20f,
-                        wickHigh = 0.48f, wickLow = 0.15f,
-                    ),
-                ),
-            ),
-glossary = GlossaryEntry(
-                whatItIs = "The morning star's mirror at a top: a long up candle, a small " +
-                    "indecision candle, then a long down candle.",
-                howItLooks = "Three bars — long, small, long — with the third giving back at least " +
-                    "half of the first candle's body.",
-                textbookSays = "Associated with a topping process after a rise.",
-                doesNotPredict = "As with the morning star, it covers three sessions and nothing " +
-                    "beyond them.",
-            ),
-        ),
-
         // ---------------------------------------------------------------- reversal (ids 7..10)
+        // The six candlestick rows that used to sit above this were moved to
+        // KNOWN_NOT_EVALUATED: the detectors still exist and still run, but the catalogue no longer
+        // claims the app evaluates them. See the note there.
         PatternSpec(
             name = "Head & Shoulders",
             family = PatternFamily.REVERSAL,
@@ -507,11 +341,22 @@ glossary = GlossaryEntry(
     )
 
     /**
-     * The textbook patterns this app names honestly but does not yet evaluate.
+     * The textbook patterns this app names honestly but does not evaluate.
      *
      * Each still carries a real shape summary and a full glossary entry, because a reader asking
-     * "what is a cup and handle?" should be answered. The only thing missing is a detector, and
-     * [PatternSpec.detectionStatus] says so on the row rather than the row being absent.
+     * "what is a cup and handle?" should be answered. [PatternSpec.detectionStatus] says so on the
+     * row rather than the row being absent.
+     *
+     * ### Two different reasons to be on this list
+     * Most rows here are **not written yet** — the Rising Wedge has no detector at all. The six
+     * candlestick rows are different: a detector exists and runs, and the row is here because
+     * evaluating them would claim something the app cannot deliver. Those rows carry a
+     * `detectionStatus` of `NOT_IMPLEMENTED` too, because from the reader's side the two are the
+     * same fact — "the app did not evaluate this" — and pretending otherwise for a subset would
+     * mean a second status whose only job was to be more accurate than the user.
+     *
+     * The distinction is kept in the comment above the candlestick block rather than in a new enum
+     * value, because nothing downstream behaves differently on it.
      */
     private val KNOWN_NOT_EVALUATED: List<PatternSpec> = listOf(
         // ------------------------------------------------------------------------- reversal
@@ -939,6 +784,127 @@ glossary = GlossaryEntry(
                     "alone.",
             ),
         ),
+        // ------------------------------------------------------------ candlestick (ids 1..6)
+        //
+        // Moved out of DETECTABLE. These six rows used to be marked `DETECTED` and the app did
+        // score them — but two facts made the claim misleading, and both are measured rather than
+        // argued:
+        //
+        // * **None can enter the track record.** `OutcomeTracker.rejectionReason` refuses any match
+        //   whose `measuredMove` is null, and every candlestick detector emits null (spec DD-14: a
+        //   candle formation has no height to project). A walk-forward census over 17 large caps ×
+        //   372 bars found 121 candlestick matches and every one was correctly untrackable. So the
+        //   row said "evaluated" and the app could never say whether any of it worked.
+        // * **The score is a 3-bar shape scored on 20 bars of context.** A hammer is two candles
+        //   wide; the factors behind its score reach back 20. The number is real but it is not a
+        //   formation measurement in the way a double top's is.
+        //
+        // The detectors are deliberately **not** deleted. They still run for the Explorer's
+        // near-miss view and the red-flag engine reads the same signals, so removing them would
+        // change scoring behaviour rather than documentation. This is a labelling correction.
+        PatternSpec(
+            name = "Bullish Engulfing",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "A candle whose body engulfs the previous candle's body.",
+                        glossary = GlossaryEntry(
+                whatItIs = "A two-candle reversal formation: the second candle's real body " +
+                    "completely covers the first candle's real body.",
+                howItLooks = "The first bar is small and coloured one way; the next is larger and " +
+                    "the opposite colour, opening at or below the first close and closing at or " +
+                    "above the first open.",
+                textbookSays = "Associated with a change in the balance of buyers and sellers over " +
+                    "those two sessions.",
+                doesNotPredict = "It describes two sessions only, and says nothing about the days " +
+                    "around them. A textbook needs a downtrend before it for the reading to carry " +
+                    "its usual meaning, and the app measures that as a separate factor.",
+            ),
+        ),
+        PatternSpec(
+            name = "Bearish Engulfing",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "A candle whose body engulfs the previous candle's body, opposite way.",
+            glossary = GlossaryEntry(
+                whatItIs = "The bearish mirror of the bullish engulfing: the second candle's " +
+                    "real body completely covers the first.",
+                howItLooks = "The first bar is small; the next is larger and the opposite colour, " +
+                    "opening at or above the first close and closing at or below the first open.",
+                textbookSays = "Associated with a shift toward sellers over those two sessions.",
+                doesNotPredict = "It describes two sessions. Like its bullish mirror it carries no " +
+                    "information about the sessions that follow.",
+            ),
+        ),
+        PatternSpec(
+            name = "Hammer",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "A small body near the top with a long lower wick.",
+                        glossary = GlossaryEntry(
+                whatItIs = "A single candle with a small real body in the upper third of its " +
+                    "range and a lower wick at least twice the body's length.",
+                howItLooks = "Long shadow beneath, little above, and the body near the high of the " +
+                    "session's range.",
+                textbookSays = "Associated with rejection of lower prices during that session, and " +
+                    "read as a possible end to a decline.",
+                doesNotPredict = "One candle cannot confirm anything on its own. The textbook " +
+                    "requires it to follow a decline, and a confirmation candle; the app scores " +
+                    "both as separate factors rather than assuming them.",
+            ),
+        ),
+        PatternSpec(
+            name = "Shooting Star",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "A small body near the bottom with a long upper wick.",
+            glossary = GlossaryEntry(
+                whatItIs = "The hammer's mirror image, at the top of a range: small body low in " +
+                    "the range, upper wick at least twice the body.",
+                howItLooks = "Long shadow above, little below, body near the low of the session.",
+                textbookSays = "Associated with rejection of higher prices, and read as a possible " +
+                    "end to a rise.",
+                doesNotPredict = "As with the hammer, a single candle is not a signal on its own " +
+                    "and says nothing about later sessions.",
+            ),
+        ),
+        PatternSpec(
+            name = "Morning Star",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "Three candles: a long one down, a small one, then a long one up.",
+                        glossary = GlossaryEntry(
+                whatItIs = "A three-candle reversal at a bottom: a long down candle, a small " +
+                    "indecision candle that does not extend the fall, then a long up candle.",
+                howItLooks = "Three bars — long, small, long — with the third recovering at least " +
+                    "half of the first candle's body.",
+                textbookSays = "Associated with a bottoming process after a decline.",
+                doesNotPredict = "Three candles are still three sessions. It establishes neither a " +
+                    "level nor a duration, and the app measures the recovery as a fraction rather " +
+                    "than assuming it is complete.",
+            ),
+        ),
+        PatternSpec(
+            name = "Evening Star",
+            family = PatternFamily.CANDLESTICK,
+            detectionStatus = NOT_IMPLEMENTED,
+            minBars = 22,
+            shapeSummary = "Three candles: a long one up, a small one, then a long one down.",
+            glossary = GlossaryEntry(
+                whatItIs = "The morning star's mirror at a top: a long up candle, a small " +
+                    "indecision candle, then a long down candle.",
+                howItLooks = "Three bars — long, small, long — with the third giving back at least " +
+                    "half of the first candle's body.",
+                textbookSays = "Associated with a topping process after a rise.",
+                doesNotPredict = "As with the morning star, it covers three sessions and nothing " +
+                    "beyond them.",
+            ),
+        ),
+
     )
 
     /** Every row: the evaluated patterns first, then the ones this app names but does not look for. */

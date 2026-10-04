@@ -110,6 +110,23 @@ data class PatternsUiState(
 
     /** The pattern whose glossary is open, or `null`. */
     val glossaryFor: String? = null,
+
+    /**
+     * `true` while a reader-triggered history fetch is in flight.
+     *
+     * Separate from [isLoading] because the two are not interchangeable: [isLoading] means "the
+     * screen is drawing a placeholder", and a placeholder over an existing chart would make a
+     * network fetch look like the tab lost its data. This one only drives a button's spinner.
+     */
+    val isFetchingHistory: Boolean = false,
+
+    /**
+     * What the last reader-triggered fetch achieved, or `null` if none has been pressed.
+     *
+     * `blocker != null` is the case that matters: it is the actionable sentence explaining why the
+     * stock still cannot be analysed, which is exactly what the tab could not say before.
+     */
+    val forceScan: ForceScanOutcome? = null,
 ) {
     /** Bars currently stored. */
     val barCount: Int get() = candles.size
@@ -249,6 +266,13 @@ class PatternsViewModel @Inject constructor(
     /** The Explorer's window re-scan. Cancelled on every chip tap so taps cannot queue up. */
     private var windowJob: Job? = null
 
+    /**
+     * The reader-triggered history fetch. A separate job from [windowJob] because it must not be
+     * cancelled by a window-chip tap: a fetch in progress is network work that a re-analysis cannot
+     * usefully abandon, and cancelling it half way would leave the stored depth unknown.
+     */
+    private var forceJob: Job? = null
+
     init {
         load(requestedTimeframe)
     }
@@ -297,7 +321,19 @@ class PatternsViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             try {
                 val loaded = withContext(backgroundDispatcher) { fetch(timeframe) }
-                _uiState.update { current -> loaded.copy(timeframe = timeframe, isLoading = false) }
+                _uiState.update { current ->
+                    // `fetch` builds a fresh state, which is what keeps a stale bar count or scan
+                    // note from surviving a reload — but it would also drop the outcome of a
+                    // reader-triggered fetch that has just finished, leaving the button's own
+                    // explanation of what it did on screen for a moment and then gone. Carried
+                    // across explicitly rather than by making `fetch` aware of them.
+                    loaded.copy(
+                        timeframe = timeframe,
+                        isLoading = false,
+                        forceScan = current.forceScan,
+                        isFetchingHistory = current.isFetchingHistory,
+                    )
+                }
                 val selected = loaded.selectedMatch ?: loaded.topMatch
                 if (selected != null) loadProjection(selected)
             } catch (cancellation: CancellationException) {
@@ -438,6 +474,47 @@ class PatternsViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The reader's "fetch this stock's history and analyse it now" action.
+     *
+     * ### Why the reload afterwards is unconditional
+     * [forceScan] writes bars and opens projections; it does not produce a screen. Re-running
+     * [fetch] is what turns those bars into a scan, an evaluation and a chart, and doing it only
+     * on success would leave the reader staring at "not enough history" next to a button that says
+     * it added 280 bars — which reads as a bug even when the fetch worked.
+     *
+     * The reload is also what picks up the projections the scan just opened, so the track record
+     * on screen is never one load behind the bars it is describing.
+     *
+     * Re-entrancy: a second press while one is in flight is ignored rather than queued, because
+     * two concurrent fetches of the same symbol would race on the write-once `candles` table and
+     * the loser would report zero bars added for work that did happen.
+     */
+    fun onForceScan() {
+        if (_uiState.value.isFetchingHistory) return
+        val timeframe = _uiState.value.timeframe
+        _uiState.update { it.copy(isFetchingHistory = true, forceScan = null) }
+        forceJob = viewModelScope.launch {
+            val outcome = try {
+                withContext(backgroundDispatcher) { dataSource.forceScan(symbol, timeframe) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                ForceScanOutcome(
+                    barsStored = 0,
+                    barsAdded = 0,
+                    projectionsOpened = 0,
+                    minBarsRequired = MatchScorePolicy.minBars(timeframe),
+                    blocker = failure.message ?: UNEXPECTED_FAILURE,
+                )
+            }
+            _uiState.update { it.copy(isFetchingHistory = false, forceScan = outcome) }
+            // Whether it worked or not, re-read: a partial fetch may still have changed the
+            // stored depth, and the screen must show the depth it actually has.
+            load(timeframe)
         }
     }
 

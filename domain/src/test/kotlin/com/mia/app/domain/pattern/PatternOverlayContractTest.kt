@@ -188,128 +188,18 @@ class PatternOverlayContractTest {
             }
         }
     }
-
-    @Test
-    fun `bull and bear candles are exact vertical mirrors of each other`() {
-        // Same check for the candlestick layouts: a bullish engulfing and a bearish one must be
-        // reflected, or a reader comparing them would be shown the same shape twice.
-        val pairs = listOf(
-            "Bullish Engulfing" to "Bearish Engulfing",
-            "Morning Star" to "Evening Star",
-            "Hammer" to "Shooting Star",
-        )
-        for ((bullName, bearName) in pairs) {
-            val bull = PatternCatalog.evaluatedByName(bullName)?.shape as PatternShape.CandleLayout
-            val bear = PatternCatalog.evaluatedByName(bearName)?.shape as PatternShape.CandleLayout
-            assertEquals(bull.bars.size, bear.bars.size, "$bullName/$bearName bar counts differ")
-            for (i in bull.bars.indices) {
-                val b = bull.bars[i]
-                val r = bear.bars[i]
-                // Reflection about y = 0.5 swaps roles: the bull bar's WICK becomes the bear bar's
-                // BODY and vice versa. Asserting field-for-field (`b.bodyHigh + r.bodyHigh == 1`)
-                // is wrong and was what made these look unmirrored — every mirrored candle failed a
-                // check that was itself miswritten.
-                assertMirroredCandle(b, r, "$bullName/$bearName bar $i")
-            }
-        }
-    }
-
-    // ------------------------------------------------ the candle-layouts are the right shapes
-
-    @Test
-    fun `a hammer's signal is in its wick, not its body`() {
-        // The reason PatternShape keeps wicks separate from bodies. If a hammer were drawn with a
-        // normal body the defining feature would be gone and it would be indistinguishable from a
-        // doji.
-        val hammer = PatternCatalog.evaluatedByName("Hammer")!!
-            .shape as PatternShape.CandleLayout
-        val signal = hammer.bars.last()
-        val body = kotlin.math.abs(signal.bodyHigh - signal.bodyLow)
-        val bodyTop = maxOf(signal.bodyHigh, signal.bodyLow)
-        val bodyBottom = minOf(signal.bodyHigh, signal.bodyLow)
-        val lowerWick = bodyBottom - signal.wickLow
-        val upperWick = signal.wickHigh - bodyTop
-        assertTrue(
-            lowerWick > upperWick,
-            "a hammer's signal must be the lower wick (lower=$lowerWick, upper=$upperWick)",
-        )
-        assertTrue(
-            lowerWick > body * 2,
-            "the hammer's lower wick ($lowerWick) must exceed twice its body ($body)",
-        )
-    }
-
-    @Test
-    fun `a shooting star's signal is in its upper wick`() {
-        val star = PatternCatalog.evaluatedByName("Shooting Star")!!
-            .shape as PatternShape.CandleLayout
-        val signal = star.bars.last()
-        // The wick is measured from whichever body endpoint it extends past, not from
-        // `bodyHigh`: under reflection the two endpoints trade places, so a fixed endpoint would
-        // measure the shooting star's *lower* wick and the assertion would be checking the wrong
-        // thing. The wick is the longer of the two extensions.
-        val body = kotlin.math.abs(signal.bodyHigh - signal.bodyLow)
-        val bodyTop = maxOf(signal.bodyHigh, signal.bodyLow)
-        val bodyBottom = minOf(signal.bodyHigh, signal.bodyLow)
-        val upperWick = signal.wickHigh - bodyTop
-        val lowerWick = bodyBottom - signal.wickLow
-        assertTrue(
-            upperWick > lowerWick,
-            "a shooting star's signal must be the upper wick (upper=$upperWick, lower=$lowerWick)",
-        )
-        assertTrue(
-            upperWick > body,
-            "the shooting star's upper wick ($upperWick) must exceed its body ($body)",
-        )
-    }
-
-    @Test
-    fun `an engulfing candle's body covers the prior candle's`() {
-        // The defining property of the pattern. If the authored shape does not show it, the
-        // overlay teaches a candle pair that is not an engulfing pattern.
-        for (name in listOf("Bullish Engulfing", "Bearish Engulfing")) {
-            val layout = PatternCatalog.evaluatedByName(name)!!.shape as PatternShape.CandleLayout
-            assertEquals(2, layout.bars.size, "$name must be a two-candle shape")
-            val prior = layout.bars[0]
-            val signal = layout.bars[1]
-            // Compared on the normalised span, not on which field is larger: `bodyHigh` and
-            // `bodyLow` are endpoints of a range, and a mirrored candle can store them in the
-            // opposite order, so `bodyHigh >= bodyLow` is not a property to assert.
-            val priorTop = maxOf(prior.bodyHigh, prior.bodyLow)
-            val priorBottom = minOf(prior.bodyHigh, prior.bodyLow)
-            val signalTop = maxOf(signal.bodyHigh, signal.bodyLow)
-            val signalBottom = minOf(signal.bodyHigh, signal.bodyLow)
-            assertTrue(
-                signalTop >= priorTop && signalBottom <= priorBottom,
-                "$name: the second body ($signalBottom..$signalTop) does not cover " +
-                    "the first ($priorBottom..$priorTop)",
-            )
-        }
-    }
-
-    @Test
-    fun `a three-candle star has a small middle candle`() {
-        for (name in listOf("Morning Star", "Evening Star")) {
-            val layout = PatternCatalog.evaluatedByName(name)!!.shape as PatternShape.CandleLayout
-            assertEquals(3, layout.bars.size, "$name must be a three-candle shape")
-            val first = layout.bars[0]
-            val middle = layout.bars[1]
-            val last = layout.bars[2]
-            fun body(c: NormalisedCandle) =
-                kotlin.math.abs(c.bodyHigh - c.bodyLow)
-            val firstBody = body(first)
-            val middleBody = body(middle)
-            val lastBody = body(last)
-            assertTrue(
-                middleBody < firstBody,
-                "$name: the middle candle ($middleBody) must be smaller than the first ($firstBody)",
-            )
-            assertTrue(
-                middleBody < lastBody,
-                "$name: the middle candle ($middleBody) must be smaller than the third ($lastBody)",
-            )
-        }
-    }
+    // The five candlestick shape tests that used to live here were removed with the shapes.
+    //
+    // They verified real properties of real data — that a hammer's signal sits in its wick, that
+    // a star's middle candle is the small one, that a bullish layout mirrors a bearish one — and
+    // all of that was correct. But `PatternSpec` no longer carries a shape for any of the six
+    // retired candlestick rows, because a shape on an unevaluated row invites a reader to compare
+    // an overlay against data the app never scored for it. With the data gone there is nothing
+    // left to assert, and a test that passes vacuously is worse than no test.
+    //
+    // `PatternCatalogTest` now asserts the removal instead: each retired row is present, marked
+    // not-evaluated, and holds `PatternShape.UNAVAILABLE`. Reinstating a candlestick detector
+    // means restoring its `CandleLayout` and bringing these five assertions back with it.
 
     @Test
     fun `a double top has two peaks and a double bottom two troughs`() {

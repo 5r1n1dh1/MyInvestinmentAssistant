@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -36,6 +38,7 @@ import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScoreLabels
 import com.mia.app.domain.model.MeasuredMove
+import com.mia.app.domain.model.OutcomeTrackerPolicy
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Source
@@ -201,6 +204,19 @@ fun PatternsScreen(
             item(key = CHART_KEY) { ChartSection(state) }
 
             item(key = GATE_KEY) { GateSection(state) }
+
+            // The manual fetch, placed with the gate it exists to satisfy. Shown only when the gate
+            // is unmet, because pressing it when there is already enough history buys a refresh the
+            // nightly worker does anyway — and a button that is always there is a button nobody
+            // reads.
+            if (!state.hasEnoughHistory) {
+                item(key = FETCH_KEY) {
+                    ForceScanSection(
+                        state = state,
+                        onFetch = viewModel::onForceScan,
+                    )
+                }
+            }
 
             item(key = MATCHES_KEY) { MatchListSection(state, viewModel::onMatchSelected) }
 
@@ -483,6 +499,92 @@ private fun GateSection(state: PatternsUiState, modifier: Modifier = Modifier) {
             body = UiStrings.noMatchesFound(state.renderThreshold) + ". " + RENDER_THRESHOLD_NOTE,
             modifier = modifier,
         )
+    }
+}
+
+/**
+ * The reader-triggered history fetch, with what the last attempt achieved.
+ *
+ * ### Why a button and not a retry
+ * `ErrorState(onRetry = …)` re-runs the load, which re-reads the cache and asks for the newest
+ * session. For a stock with *some* history that is the right control. For a stock with **none** —
+ * the case that produced a permanently unresolvable "not enough history" — a retry could never
+ * succeed, because nothing in that path deepens the series: `ensureData` adds the latest bar and
+ * `backfillHistory` walks the whole market on the nightly worker's schedule. This button calls the
+ * one path that is aimed at a single symbol.
+ *
+ * ### What it says afterwards
+ * The outcome, including the "you have N, you need M" sentence and the source's own reason when
+ * nothing arrived. A button that reports only success teaches the reader that it always works; a
+ * button that reports only failure teaches them not to press it. Both are shown.
+ *
+ * Projections are named separately from bars because they are a different consequence: bars make
+ * the stock analysable, and opening projections is what starts its track record. A reader who
+ * presses this once should be able to see that both happened.
+ */
+@Composable
+private fun ForceScanSection(
+    state: PatternsUiState,
+    onFetch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        FilledTonalButton(
+            onClick = onFetch,
+            enabled = !state.isFetchingHistory,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = if (state.isFetchingHistory) FETCHING_LABEL else FETCH_LABEL,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        // Below the gate and unpressable while a fetch runs, so the reason and the control never
+        // disagree about whether an attempt is in flight.
+        if (!state.hasEnoughHistory) {
+            Text(
+                text = UiStrings.notEnoughHistoryDetail(state.barCount, state.minimumBars),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        state.forceScan?.let { outcome ->
+            Text(
+                text = if (outcome.barsAdded > 0) {
+                    "$FETCH_ADDED_PREFIX ${outcome.barsAdded} bar(s) for ${state.symbol}; " +
+                        "${outcome.barsStored} stored in total."
+                } else {
+                    "$FETCH_NO_NEW_BARS ${state.symbol} already had " +
+                        "${outcome.barsStored} bar(s) stored, so nothing was added."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (outcome.projectionsOpened > 0) {
+                Text(
+                    // Named as pending, never as a result: a projection opened today cannot be
+                    // settled until its full horizon of sessions exists, so there is no hit rate yet.
+                    text = "$FETCH_OPENED_PREFIX ${outcome.projectionsOpened} projection(s) added to " +
+                        "the track record. Each is judged only after " +
+                        "${OutcomeTrackerPolicy.DEFAULT_HORIZON_BARS} later sessions, so no " +
+                        "figure is reported yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            outcome.blocker?.let { blocker ->
+                Text(
+                    text = blocker,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
     }
 }
 
@@ -1021,6 +1123,13 @@ private const val LOADING_KEY = "patterns.loading"
 private const val ERROR_KEY = "patterns.error"
 private const val CHART_KEY = "patterns.chart"
 private const val GATE_KEY = "patterns.gate"
+private const val FETCH_KEY = "patterns.fetch"
+
+private const val FETCH_LABEL = "Fetch this stock's history and analyse it now"
+private const val FETCHING_LABEL = "Fetching history…"
+private const val FETCH_ADDED_PREFIX = "Added"
+private const val FETCH_NO_NEW_BARS = "Nothing new for"
+private const val FETCH_OPENED_PREFIX = "Opened"
 private const val MATCHES_KEY = "patterns.matches"
 private const val GEOMETRY_KEY = "patterns.geometry"
 private const val PATH_KEY = "patterns.path"

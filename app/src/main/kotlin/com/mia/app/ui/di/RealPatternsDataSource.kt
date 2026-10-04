@@ -7,6 +7,7 @@ import com.mia.app.data.android.repo.DataFailure
 import com.mia.app.data.android.repo.DataResult
 import com.mia.app.data.android.repo.DetectorRegistry
 import com.mia.app.data.android.repo.RedFlagRepository
+import com.mia.app.data.android.repo.todayInMarket
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.FlagTab
 import com.mia.app.domain.model.HitRate
@@ -25,6 +26,7 @@ import com.mia.app.domain.pattern.PivotSet
 import com.mia.app.domain.pattern.ProjectionBuilder
 import com.mia.app.domain.redflag.RuleSkip
 import com.mia.app.domain.technical.IndicatorSnapshot
+import com.mia.app.ui.patterns.ForceScanOutcome
 import com.mia.app.ui.patterns.PatternsDataSource
 import com.mia.app.ui.patterns.PatternsProjection
 import com.mia.app.ui.patterns.PatternsRedFlags
@@ -262,6 +264,75 @@ class RealPatternsDataSource @Inject constructor(
         withContext(backgroundDispatcher) {
             TrackRecordReader(accuracyRepository, ::unavailable).hitRate(symbol, patternName)
         }
+
+    override suspend fun forceScan(symbol: String, timeframe: Timeframe): ForceScanOutcome =
+        withContext(backgroundDispatcher) {
+            val ticker = symbol.trim().uppercase()
+            val before = storedBarCount(ticker)
+            val gate = MatchScorePolicy.minBars(timeframe)
+
+            // ---- 1. the newest session, so the series is current even if deepening is refused.
+            //
+            // One whole-market bhavcopy. Cheap, never rate-limited, and it is what makes a symbol
+            // that has *some* history correct rather than merely old.
+            val ensured = candleRepository.ensureData(ticker).valueOrNull()
+
+            // ---- 2. deep history, aimed at this one symbol.
+            //
+            // `CandleRepository.backfill` was unreachable from any caller until this method: it is
+            // the per-symbol Yahoo path, and without it a stock the app had never analysed could
+            // only ever gain one bar per day from the market-wide bhavcopy, which never clears the
+            // 60-bar gate on its own. `ensureData` alone is why "not enough history" used to be a
+            // permanent state for a freshly opened stock.
+            val deepened = candleRepository.backfill(ticker)
+
+            val after = storedBarCount(ticker)
+
+            // ---- 3. only now, open projections for what became visible.
+            //
+            // Order matters. An outcome is judged against the bars *after* its projection date, so
+            // opening one before the history is in place would settle it against a window that
+            // exists only because the fetch had not finished.
+            val opened = if (after > 0) {
+                runCatching {
+                    accuracyRepository.recordProjections(ticker, timeframe, todayInMarket())
+                        .valueOrNull()?.recorded ?: 0
+                }.getOrDefault(0)
+            } else {
+                0
+            }
+
+            val blocker = when {
+                after >= gate -> null
+
+                after == 0 -> {
+                    val why = deepened.failureOrNull()?.userFacingReason()
+                        ?: ensured?.failure?.userFacingReason()
+                        ?: "the source returned no bars for $ticker"
+                    "$ticker has no stored $timeframe bars on this device, so no pattern can be " +
+                        "evaluated. $why"
+                }
+
+                else -> "$ticker now has $after stored $timeframe bar(s) and plan.md §6.4 requires " +
+                    "$gate before any pattern is scored, so the series is still short."
+            }
+
+            ForceScanOutcome(
+                barsStored = after,
+                // The delta, and only the delta. `ensureData` reports the whole series and
+                // `backfill` reports what it inserted, so adding the two would count the same bars
+                // twice; `after - before` is the one figure that is right without either side
+                // knowing what the other did.
+                barsAdded = (after - before).coerceAtLeast(0),
+                projectionsOpened = opened,
+                minBarsRequired = gate,
+                blocker = blocker,
+            )
+        }
+
+    /** Bars stored for [ticker] on its daily series — the count both timeframes are derived from. */
+    private suspend fun storedBarCount(ticker: String): Int =
+        candleRepository.storedSeries(ticker, Timeframe.D1).barsOrEmpty().size
 
     override suspend fun redFlags(symbol: String, timeframe: Timeframe): PatternsRedFlags =
         withContext(backgroundDispatcher) {

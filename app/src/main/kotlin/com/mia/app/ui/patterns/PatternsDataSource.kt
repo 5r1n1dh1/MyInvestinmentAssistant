@@ -113,11 +113,66 @@ interface PatternsDataSource {
     suspend fun trackRecord(symbol: String, patternName: String?): HitRate?
 
     /**
+     * The manual "analyse this stock now" action, behind a button the reader presses.
+     *
+     * ### Why this is not just [ensureFresh] again
+     * [ensureFresh] asks for the **newest** session and only when the cache is stale. That is
+     * correct for keeping a tab current and useless for a stock the app has never analysed: such a
+     * symbol has zero rows, so "is the cache stale?" is answered yes every time while the fetch it
+     * performs — one whole-market bhavcopy — still only ever adds the *latest* bar. The tab then
+     * reports 1 bar against a 60-bar gate, and no amount of waiting on that path fixes it. Deep
+     * history is a different request, and this is it.
+     *
+     * The order is deliberate: **deepen first, then record**. A projection is only trackable if the
+     * bars after it exist, and an outcome opened before the history is in place would be judged
+     * against an incomplete window. So history lands first, then the projections for what is now
+     * visible.
+     *
+     * Never throws: a failure is reported in [ForceScanOutcome], because the caller's job is to
+     * show the reason, not to unwind.
+     */
+    suspend fun forceScan(symbol: String, timeframe: Timeframe): ForceScanOutcome
+
+    /**
      * Red flags for this symbol, already ordered by `RedFlagReport`'s severity → tab → id rule.
      *
      * Flags whose [com.mia.app.domain.model.FlagTab] is `TECHNICALS` or `BOTH` belong here.
      */
     suspend fun redFlags(symbol: String, timeframe: Timeframe): PatternsRedFlags
+}
+
+/**
+ * What [PatternsDataSource.forceScan] did, in the reader's terms.
+ *
+ * ### Why this is a value and not a boolean
+ * "Failed" is not actionable, and the three ways this can come up short are genuinely different
+ * problems with different fixes:
+ *
+ * - no network → try again later, nothing is wrong
+ * - Yahoo refused → the NSE archive walk may still work, which the reader can trigger
+ * - history arrived but is still under the gate → the symbol genuinely does not have enough
+ *   trading history, and widening the window cannot help
+ *
+ * Collapsing those to `false` is what made the original "not enough history" state permanent: the
+ * screen said nothing, so nothing told the reader what to do.
+ */
+data class ForceScanOutcome(
+    /** Bars stored for the symbol after the attempt, across both timeframes. */
+    val barsStored: Int,
+    /** Bars this attempt added. `0` when nothing new was available. */
+    val barsAdded: Int,
+    /** Projections opened for the track record by this attempt. */
+    val projectionsOpened: Int,
+    /** Gate for [com.mia.app.domain.model.Timeframe], for the "you have N, you need M" sentence. */
+    val minBarsRequired: Int,
+    /**
+     * Why the attempt came up short, in a sentence the reader can act on. `null` when the symbol
+     * now clears the gate.
+     */
+    val blocker: String? = null,
+) {
+    /** `true` when the symbol can now be scanned. */
+    val isScannable: Boolean get() = blocker == null
 }
 
 /**
