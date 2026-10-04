@@ -28,6 +28,7 @@ import com.mia.app.ui.common.LoadingState
 import com.mia.app.ui.common.TimeframeToggle
 import com.mia.app.ui.common.formatPrice
 import com.mia.app.ui.fundamentals.FundamentalsScreen
+import com.mia.app.ui.patterns.PatternsScreen
 import com.mia.app.ui.technicals.TechnicalsScreen
 import com.mia.app.ui.theme.MiaSpacing
 

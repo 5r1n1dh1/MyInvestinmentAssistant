@@ -63,6 +63,8 @@ enum class ChartStyle {
 data class PatternOverlay(
     /** Polyline through the pattern's role points, in chart price units. */
     val points: List<Pair<Float, Float>>,
+    /** Additional polylines for multi-line shapes (boundaries, composites), in chart price units. */
+    val lines: List<List<Pair<Float, Float>>> = emptyList(),
     /** Idealised candle bars, in chart price units. At most one of [points] and [bars] is non-empty. */
     val bars: List<PatternOverlayBar> = emptyList(),
     /** Per-point labels, oldest first. Empty when the shape carries no role names. */
@@ -81,7 +83,7 @@ data class PatternOverlay(
      */
     val isAnchoredToDetectedGeometry: Boolean = false,
 ) {
-    val isEmpty: Boolean get() = points.isEmpty() && bars.isEmpty()
+    val isEmpty: Boolean get() = points.isEmpty() && lines.isEmpty() && bars.isEmpty()
 }
 
 /**

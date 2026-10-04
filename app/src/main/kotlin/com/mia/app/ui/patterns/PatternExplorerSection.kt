@@ -424,8 +424,6 @@ private fun windowSentence(state: PatternsUiState, evaluation: PatternEvaluation
     state.windowBars?.let { "$WINDOW_PREFIX last $it stored bars" }
         ?: "$WINDOW_PREFIX all ${evaluation.windowBars} stored bars"
 
-private const val WINDOW_KEY = "patterns.window"
-private const val EXPLORER_KEY = "patterns.explorer"
 private const val EXPLORER_TITLE = "Every pattern, on this stock"
 private const val WINDOW_LABEL = "Window"
 private const val ALL_BARS_LABEL = "All"

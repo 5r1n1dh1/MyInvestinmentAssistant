@@ -52,6 +52,16 @@ object PatternOverlayMapper {
         fun price(normalised: Float): Float = low + normalised * (high - low)
         fun index(normalised: Float): Int = (first + normalised * span).toInt().coerceIn(first, last)
 
+        fun mapLines(s: PatternShape): List<List<Pair<Float, Float>>> = when (s) {
+            is PatternShape.Polyline -> listOf(s.points.map { index(it.x).toFloat() to price(it.y) })
+            is PatternShape.Boundaries -> listOf(
+                s.upper.map { index(it.x).toFloat() to price(it.y) },
+                s.lower.map { index(it.x).toFloat() to price(it.y) },
+            )
+            is PatternShape.Composite -> s.parts.flatMap { mapLines(it) }
+            else -> emptyList()
+        }
+
         return when (shape) {
             is PatternShape.Polyline -> PatternOverlay(
                 points = shape.points.map { index(it.x).toFloat() to price(it.y) },
@@ -59,6 +69,29 @@ object PatternOverlayMapper {
                 closed = shape.closed,
                 isAnchoredToDetectedGeometry = false,
             )
+
+            is PatternShape.Boundaries -> {
+                val lines = listOf(
+                    shape.upper.map { index(it.x).toFloat() to price(it.y) },
+                    shape.lower.map { index(it.x).toFloat() to price(it.y) },
+                )
+                PatternOverlay(
+                    points = lines.firstOrNull().orEmpty(),
+                    lines = lines,
+                    closed = false,
+                    isAnchoredToDetectedGeometry = false,
+                )
+            }
+
+            is PatternShape.Composite -> {
+                val lines = mapLines(shape)
+                PatternOverlay(
+                    points = lines.firstOrNull().orEmpty(),
+                    lines = lines,
+                    closed = false,
+                    isAnchoredToDetectedGeometry = false,
+                )
+            }
 
             is PatternShape.CandleLayout -> {
                 // Bars are laid out at even spacing across the window rather than using the

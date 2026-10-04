@@ -1045,6 +1045,8 @@ private const val DASH_TRIGGER = "· · · · ·"
 // Lazy-list keys. Stable strings, so a rotation does not rebuild every row.
 private const val HEADER_KEY = "patterns.header"
 private const val TIMEFRAME_KEY = "patterns.timeframe"
+private const val WINDOW_KEY = "patterns.window"
+private const val EXPLORER_KEY = "patterns.explorer"
 private const val LOADING_KEY = "patterns.loading"
 private const val ERROR_KEY = "patterns.error"
 private const val CHART_KEY = "patterns.chart"

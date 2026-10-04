@@ -515,38 +515,40 @@ private fun DrawScope.drawPatternOverlay(
         )
     }
 
-    val points = overlay.points
-    if (points.size < 2) return
+    val allLines = if (overlay.lines.isNotEmpty()) overlay.lines else if (overlay.points.isNotEmpty()) listOf(overlay.points) else emptyList()
+    for (line in allLines) {
+        if (line.size < 2) continue
 
-    val drawn = ArrayList<Offset>(points.size)
-    for ((barIndex, price) in points) {
-        val relative = barIndex.toInt() - geometry.window.startBar
-        // Skip rather than clamp: a point outside the window means the shape extends beyond what
-        // is drawn, and clamping would place it at the edge as though the pivot were there.
-        if (relative < 0 || relative >= geometry.drawnCount) continue
-        val y = geometry.priceToY(price)
-        if (!y.isFinite() || y < geometry.plotTop || y > geometry.plotBottom) continue
-        drawn += Offset(geometry.barX[relative], y)
-    }
-    if (drawn.size < 2) return
+        val drawn = ArrayList<Offset>(line.size)
+        for ((barIndex, price) in line) {
+            val relative = barIndex.toInt() - geometry.window.startBar
+            // Skip rather than clamp: a point outside the window means the shape extends beyond what
+            // is drawn, and clamping would place it at the edge as though the pivot were there.
+            if (relative < 0 || relative >= geometry.drawnCount) continue
+            val y = geometry.priceToY(price)
+            if (!y.isFinite() || y < geometry.plotTop || y > geometry.plotBottom) continue
+            drawn += Offset(geometry.barX[relative], y)
+        }
+        if (drawn.size < 2) continue
 
-    for (i in 0 until drawn.size - 1) {
-        drawLine(
-            color = color,
-            start = drawn[i],
-            end = drawn[i + 1],
-            strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
-            pathEffect = PATTERN_OVERLAY_EFFECT,
-        )
-    }
-    if (overlay.closed && drawn.size >= 3) {
-        drawLine(
-            color = color,
-            start = drawn[drawn.size - 1],
-            end = drawn[0],
-            strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
-            pathEffect = PATTERN_OVERLAY_EFFECT,
-        )
+        for (i in 0 until drawn.size - 1) {
+            drawLine(
+                color = color,
+                start = drawn[i],
+                end = drawn[i + 1],
+                strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
+                pathEffect = PATTERN_OVERLAY_EFFECT,
+            )
+        }
+        if (overlay.closed && drawn.size >= 3) {
+            drawLine(
+                color = color,
+                start = drawn[drawn.size - 1],
+                end = drawn[0],
+                strokeWidth = PATTERN_OVERLAY_WIDTH_PX,
+                pathEffect = PATTERN_OVERLAY_EFFECT,
+            )
+        }
     }
 }
 
