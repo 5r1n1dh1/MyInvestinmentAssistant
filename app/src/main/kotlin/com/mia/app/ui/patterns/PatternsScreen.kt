@@ -201,22 +201,20 @@ fun PatternsScreen(
                 item(key = ERROR_KEY) { ErrorState(reason = reason, onRetry = viewModel::onRetry) }
             }
 
+            // The manual fetch, placed **above** the chart. It was below it at first, which was
+            // wrong twice over: a reader with no history saw an empty chart first, and a reader
+            // with history had to scroll past a full chart to reach a control that is most useful
+            // to them. Placed here it is visible in the same glance as the gate state it acts on.
+            item(key = FETCH_KEY) {
+                ForceScanSection(
+                    state = state,
+                    onFetch = viewModel::onForceScan,
+                )
+            }
+
             item(key = CHART_KEY) { ChartSection(state) }
 
             item(key = GATE_KEY) { GateSection(state) }
-
-            // The manual fetch, placed with the gate it exists to satisfy. Shown only when the gate
-            // is unmet, because pressing it when there is already enough history buys a refresh the
-            // nightly worker does anyway — and a button that is always there is a button nobody
-            // reads.
-            if (!state.hasEnoughHistory) {
-                item(key = FETCH_KEY) {
-                    ForceScanSection(
-                        state = state,
-                        onFetch = viewModel::onForceScan,
-                    )
-                }
-            }
 
             item(key = MATCHES_KEY) { MatchListSection(state, viewModel::onMatchSelected) }
 
@@ -532,27 +530,38 @@ private fun ForceScanSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
+        // Always shown, and it always does two things: it deepens the stored history when the
+        // series is short, and it opens projections for whatever is now visible. Gating the button
+        // on the short case was a mistake — it made the control invisible on every stock that
+        // already worked, which is exactly where a reader cannot tell whether pressing it would do
+        // anything. The second job is the one a reader with full history wants.
         FilledTonalButton(
             onClick = onFetch,
             enabled = !state.isFetchingHistory,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = if (state.isFetchingHistory) FETCHING_LABEL else FETCH_LABEL,
+                text = when {
+                    state.isFetchingHistory -> FETCHING_LABEL
+                    !state.hasEnoughHistory -> FETCH_DEEPEN_LABEL
+                    else -> FETCH_ANALYSE_LABEL
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
 
-        // Below the gate and unpressable while a fetch runs, so the reason and the control never
-        // disagree about whether an attempt is in flight.
-        if (!state.hasEnoughHistory) {
-            Text(
-                text = UiStrings.notEnoughHistoryDetail(state.barCount, state.minimumBars),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        // One line stating which of the two jobs this press will do, so the button is never a
+        // mystery. Below the gate it is stated first because it is the binding constraint.
+        Text(
+            text = if (state.hasEnoughHistory) {
+                FETCH_HINT_READY
+            } else {
+                UiStrings.notEnoughHistoryDetail(state.barCount, state.minimumBars)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         state.forceScan?.let { outcome ->
             Text(
@@ -1125,8 +1134,12 @@ private const val CHART_KEY = "patterns.chart"
 private const val GATE_KEY = "patterns.gate"
 private const val FETCH_KEY = "patterns.fetch"
 
-private const val FETCH_LABEL = "Fetch this stock's history and analyse it now"
+private const val FETCH_DEEPEN_LABEL = "Fetch this stock's history and analyse it"
+private const val FETCH_ANALYSE_LABEL = "Re-analyse now and record this projection"
 private const val FETCHING_LABEL = "Fetching history…"
+private const val FETCH_HINT_READY =
+    "History is deep enough to analyse. Pressing this re-scans on the newest bars and adds this " +
+        "stock's current formations to its track record."
 private const val FETCH_ADDED_PREFIX = "Added"
 private const val FETCH_NO_NEW_BARS = "Nothing new for"
 private const val FETCH_OPENED_PREFIX = "Opened"

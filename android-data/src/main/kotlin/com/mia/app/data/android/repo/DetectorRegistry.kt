@@ -11,6 +11,7 @@ import com.mia.app.domain.pattern.detectors.chart.DescendingTriangleDetector
 import com.mia.app.domain.pattern.detectors.chart.DoubleBottomDetector
 import com.mia.app.domain.pattern.detectors.chart.DoubleTopDetector
 import com.mia.app.domain.pattern.detectors.chart.FlagDetector
+import com.mia.app.domain.pattern.detectors.chart.RisingWedgeDetector
 import com.mia.app.domain.pattern.detectors.chart.HeadAndShouldersDetector
 import com.mia.app.domain.pattern.detectors.chart.InverseHeadAndShouldersDetector
 import javax.inject.Inject
@@ -54,10 +55,15 @@ class DetectorRegistry @Inject constructor() {
         InverseHeadAndShouldersDetector(),
         DoubleTopDetector(),
         DoubleBottomDetector(),
-        // 10–12: continuations [Ch.18-3, Ch.18-4, Ch.18-5].
+        // 10–13: continuations [Ch.18-3, Ch.18-4, Ch.18-5].
         AscendingTriangleDetector(),
         DescendingTriangleDetector(),
         FlagDetector(),
+        // 13: the wedge the triangle engine used to refuse (§16.2 S4 named it as "no v1
+        // detector"). Rising Wedge only — Falling Wedge stays educational until its own
+        // measurement exists, because registering an unmeasured detector would put a row in the
+        // Explorer that can only ever say "no candidate formed".
+        RisingWedgeDetector(),
     )
 
     /** How many detectors this build runs. Reported by `PatternRepository.storedCount`'s sibling. */

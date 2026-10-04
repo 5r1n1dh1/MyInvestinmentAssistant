@@ -11,6 +11,7 @@ import com.mia.app.domain.pattern.detectors.chart.DoubleBottomDetector
 import com.mia.app.domain.pattern.detectors.chart.DoubleTopDetector
 import com.mia.app.domain.pattern.detectors.chart.FlagDetector
 import com.mia.app.domain.pattern.detectors.chart.HeadAndShouldersDetector
+import com.mia.app.domain.pattern.detectors.chart.RisingWedgeDetector
 import com.mia.app.domain.pattern.detectors.chart.InverseHeadAndShouldersDetector
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,11 +53,13 @@ class PatternCatalogTest {
         )
         assertEquals(
             PatternIds.CANONICAL_NAMES.toSet(),
-            (PatternCatalog.evaluated.map { it.name } + PatternIds.RETIRED_CANONICAL_NAMES).toSet(),
-            "evaluated + retired must account for every canonical name, or an id has no row and " +
-                "stored outcomes pointing at it would render nothing",
+            (PatternCatalog.evaluated.map { it.name } + PatternIds.RETIRED_CANONICAL_NAMES)
+                .filter { it in PatternIds.CANONICAL_NAMES }
+                .toSet(),
+            "evaluated + retired must account for every v1 canonical name, or an id has no row " +
+                "and stored outcomes pointing at it would render nothing",
         )
-        assertEquals(8, PatternCatalog.evaluatedCount, "the eight chart patterns the app evaluates")
+        assertEquals(9, PatternCatalog.evaluatedCount, "nine patterns: the v1 chart eight plus Rising Wedge")
     }
 
     @Test
@@ -374,8 +377,12 @@ class PatternCatalogTest {
 
     private companion object {
         /**
-         * The twelve v1 detectors, in plan.md §6.5 order — the same list
-         * `PatternDiscriminationGateTest` and `WindowSizingMeasurementTest` use.
+         * The v1 detectors in plan.md §6.5 order, plus every post-v1 addition.
+         *
+         * The post-v1 entry is here rather than in a separate list because this map exists to answer
+         * "does a detector back this catalogue row?", and a row marked evaluated with no detector
+         * behind it is precisely the failure it is written to catch. `PatternDiscriminationGateTest`
+         * and `WindowSizingMeasurementTest` keep the v1 twelve, since they measure the v1 set.
          */
         val DETECTORS: List<com.mia.app.domain.model.PatternDetector> = listOf(
             BullishEngulfingDetector(),
@@ -390,6 +397,7 @@ class PatternCatalogTest {
             AscendingTriangleDetector(),
             DescendingTriangleDetector(),
             FlagDetector(),
+            RisingWedgeDetector(),
         )
 
         /**

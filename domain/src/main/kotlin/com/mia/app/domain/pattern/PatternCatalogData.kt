@@ -43,6 +43,51 @@ internal object PatternCatalogData {
      * itself enforces. An overlay that is tidier than reality would teach the wrong tolerance.
      */
     private val DETECTABLE: List<PatternSpec> = listOf(
+        // ------------------------------------------------------------------------- wedge (ids 15..)
+        //
+        // Rising Wedge is the detector the triangle engine used to refuse: §16.2 S4 states that a
+        // drifting side steeper than normal volatility "is a wedge, which has no v1 detector". That
+        // refusal was correct while there was no detector, and this is it.
+        //
+        // Falling Wedge deliberately stays in `KNOWN_NOT_EVALUATED`. The engine is written to take
+        // `rising` as a flag and the mirror is a two-line change, but shipping one wedge and not
+        // the other is a measurement decision, not a symmetry one: over 4 large caps the rising form
+        // produced 112 real candidates, and an unmeasured mirror is how a catalogue fills up with
+        // rows that can only ever say "no candidate formed".
+        PatternSpec(
+            name = "Rising Wedge",
+            family = PatternFamily.CONTINUATION,
+            detectionStatus = DETECTED,
+            minBars = 15,
+            shapeSummary = "Rising highs and rising lows, the highs rising more steeply.",
+            // Textbook-exact rather than flattering: the upper boundary converges on the lower, so
+            // the last point must sit **below** the first rather than level with it. An overlay
+            // whose lines merely looked parallel would teach the reader the wrong shape.
+            shape = PatternShape.Boundaries(
+                upper = listOf(
+                    NormalisedPoint(0f, 0.85f),   // first upper touch, wide
+                    NormalisedPoint(0.35f, 0.62f),
+                    NormalisedPoint(0.68f, 0.45f),
+                    NormalisedPoint(0.95f, 0.36f), // converging on the support
+                ),
+                lower = listOf(
+                    NormalisedPoint(0f, 0.30f),    // first lower touch, wide
+                    NormalisedPoint(0.35f, 0.34f),
+                    NormalisedPoint(0.68f, 0.37f),
+                    NormalisedPoint(0.95f, 0.34f), // support gives way here
+                ),
+            ),
+            glossary = GlossaryEntry(
+                whatItIs = "A formation bounded below by a rising support line and above by a " +
+                    "steeper line that converges toward it.",
+                howItLooks = "Higher highs and higher lows, narrowing as they go.",
+                textbookSays = "Associated with a slowing rise, and often read as a reversal once it " +
+                    "breaks the lower boundary.",
+                doesNotPredict = "A rising wedge can break either way; the narrowing is the " +
+                    "pattern, not a direction.",
+            ),
+        ),
+
         // ---------------------------------------------------------------- reversal (ids 7..10)
         // The six candlestick rows that used to sit above this were moved to
         // KNOWN_NOT_EVALUATED: the detectors still exist and still run, but the catalogue no longer
@@ -348,7 +393,8 @@ internal object PatternCatalogData {
      * row rather than the row being absent.
      *
      * ### Two different reasons to be on this list
-     * Most rows here are **not written yet** — the Rising Wedge has no detector at all. The six
+     * Most rows here are **not written yet** — Rising Wedge and Cup & Handle are the two this
+     * app most plausibly adds next, and both were deliberately measured before being written. The six
      * candlestick rows are different: a detector exists and runs, and the row is here because
      * evaluating them would claim something the app cannot deliver. Those rows carry a
      * `detectionStatus` of `NOT_IMPLEMENTED` too, because from the reader's side the two are the
@@ -463,22 +509,6 @@ internal object PatternCatalogData {
                     "ambiguous by nature that it is sometimes called a coil.",
                 doesNotPredict = "Its direction is genuinely undetermined until it breaks, so it is " +
                     "the clearest case of a pattern that names no outcome.",
-            ),
-        ),
-        PatternSpec(
-            name = "Rising Wedge",
-            family = PatternFamily.CONTINUATION,
-            detectionStatus = NOT_IMPLEMENTED,
-            minBars = 20,
-            shapeSummary = "Rising highs and rising lows, the highs rising more steeply.",
-            glossary = GlossaryEntry(
-                whatItIs = "A formation bounded below by a rising support line and above by a " +
-                    "steeper line that converges toward it.",
-                howItLooks = "Higher highs and higher lows, narrowing as they go.",
-                textbookSays = "Associated with a slowing rise, and often read as a reversal once it " +
-                    "breaks the lower boundary.",
-                doesNotPredict = "A rising wedge can break either way; the narrowing is the " +
-                    "pattern, not a direction.",
             ),
         ),
         PatternSpec(

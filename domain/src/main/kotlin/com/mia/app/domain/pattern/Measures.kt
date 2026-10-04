@@ -159,10 +159,37 @@ object PatternIds {
         "Bear Flag" to 14L,
     )
 
-    private val BY_NORMALISED: Map<String, Long> = CANONICAL.mapKeys { normalise(it.key) }
+    /**
+     * Patterns added after the v1 fourteen, each with its own constant starting at
+     * [FIRST_V2_ID].
+     *
+     * A separate map rather than more entries in [CANONICAL], because [CANONICAL_NAMES] is the v1
+     * identity contract and its size is what several tests and the accuracy table's id range are
+     * stated against. Extending it would quietly change all of those.
+     *
+     * Still a **constant**, not a digest, for the reason [CANONICAL] is one: a pattern that enters
+     * the track record needs an id that is the same on every device and after every update. A
+     * digest would be stable in practice but would make the stored column unreadable and would put
+     * an id that could in principle collide outside the reserved band.
+     */
+    private val V2: Map<String, Long> = linkedMapOf(
+        "Rising Wedge" to FIRST_V2_ID,
+    )
 
-    /** Canonical display names, in id order. */
+    /** First id available to a post-v1 pattern. 15 — immediately after the v1 fourteen. */
+    const val FIRST_V2_ID: Long = 15L
+
+    private val ALL_FIXED: Map<String, Long> = LinkedHashMap<String, Long>(CANONICAL).apply {
+        putAll(V2)
+    }
+
+    private val BY_NORMALISED: Map<String, Long> = ALL_FIXED.mapKeys { normalise(it.key) }
+
+    /** The v1 canonical display names, ids 1..14, in id order. */
     val CANONICAL_NAMES: List<String> = CANONICAL.keys.toList()
+
+    /** Every name with a fixed id, v1 then v2. */
+    val FIXED_NAMES: List<String> = ALL_FIXED.keys.toList()
 
     /**
      * The six canonical names the catalogue no longer claims to evaluate — ids `1..6`, the
@@ -193,16 +220,23 @@ object PatternIds {
     )
 
     /**
-     * The canonical names the catalogue currently claims to evaluate: ids `7..14`.
+     * The names the catalogue currently claims to evaluate: the v1 chart patterns (ids `7..14`)
+     * plus every post-v1 addition.
      *
-     * Distinct from [CANONICAL_NAMES] on purpose. The full list is an *identity* contract and this
-     * is a *product* one, and conflating them is what would make the next retirement look like a
-     * breaking change rather than a labelling decision.
+     * Distinct from [CANONICAL_NAMES] on purpose. That list is an *identity* contract — all
+     * fourteen v1 names, evaluated or retired, because their ids are stored. This one is a *product*
+     * contract — what the app currently claims to do. Conflating them is what made the first
+     * retirement look like a breaking change rather than a labelling decision.
      */
     val EVALUATED_CANONICAL_NAMES: List<String> =
-        CANONICAL_NAMES.filterNot { it in RETIRED_CANONICAL_NAMES }
+        CANONICAL_NAMES.filterNot { it in RETIRED_CANONICAL_NAMES } + V2.keys
 
-    /** `true` when [name] is one of the fourteen v1 pattern names, evaluated or retired. */
+    /**
+     * `true` when [name] has a fixed id — the v1 fourteen or a post-v1 addition.
+     *
+     * Retired v1 names still return `true`: they keep their ids, and a stored outcome pointing at
+     * `3` has to resolve.
+     */
     fun isCanonical(name: String): Boolean = normalise(name) in BY_NORMALISED
 
     /**
