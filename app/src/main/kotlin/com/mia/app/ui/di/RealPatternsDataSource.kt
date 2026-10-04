@@ -275,7 +275,7 @@ class RealPatternsDataSource @Inject constructor(
             //
             // One whole-market bhavcopy. Cheap, never rate-limited, and it is what makes a symbol
             // that has *some* history correct rather than merely old.
-            val ensured = candleRepository.ensureData(ticker).valueOrNull()
+            val ensured = candleRepository.ensureData(ticker)
 
             // ---- 2. deep history, aimed at this one symbol.
             //

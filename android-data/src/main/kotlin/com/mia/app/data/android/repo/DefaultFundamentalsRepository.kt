@@ -82,6 +82,9 @@ class DefaultFundamentalsRepository @Inject constructor(
             ratios.sector == com.mia.app.domain.model.Sector.OTHER
     }
 
+    private fun DataResult<FundamentalsView>.needsSectorRefresh(): Boolean =
+        valueOrNull()?.needsSectorRefresh() == true
+
     override suspend fun refresh(symbol: String): DataResult<FundamentalsView> =
         withContext(dispatcher) {
             val asOf = todayInMarket()
