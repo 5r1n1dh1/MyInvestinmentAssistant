@@ -3,6 +3,7 @@ package com.mia.app.domain.pattern
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.PatternDetector
+import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.Timeframe
 
 
@@ -110,6 +111,15 @@ object PatternExplorer {
      * Convenience for the Explorer path, and the only place a window scan is issued, so the
      * non-canonical flag cannot be forgotten at a call site. Every caller here is exploring; the
      * nightly canonical scan goes through `PatternEngine.run` directly with the default.
+     *
+     * ### Why [candles] is the whole series and [windowBars] selects a slice of it
+     * The engine needs bars *before* the window to compute indicators honestly, so this takes the
+     * full stored series and slices internally. A caller that pre-sliced with `takeLast` would
+     * leave every indicator at the window's left edge computed on a partial series, which is the
+     * warm-up bug this signature exists to prevent — see [WARM_UP_BARS].
+     *
+     * @param candles the **whole** stored series, ascending by date. Not a pre-sliced window.
+     * @param windowBars how many of the most recent bars to report on. Clamped to what is stored.
      */
     fun scanWindow(
         candles: List<Candle>,
@@ -119,23 +129,98 @@ object PatternExplorer {
         windowBars: Int = candles.size,
         benchmarkCandles: List<Candle>? = null,
     ): PatternEvaluation {
+        val reported = windowBars.coerceIn(0, candles.size)
+        // Fed to the engine: the reported window plus enough earlier bars for the longest
+        // indicator to have a real reading at the window's first bar.
+        val fed = candles.takeLast(reported + WARM_UP_BARS)
+
         val result = PatternEngine.run(
-            candles = candles,
+            candles = fed,
             timeframe = timeframe,
             detectors = detectors,
             options = PatternScanOptions(
                 symbol = symbol,
-                benchmarkCandles = benchmarkCandles,
+                benchmarkCandles = benchmarkCandles?.let { bench ->
+                    // Trimmed to the same end so a benchmark cannot read further forward than the
+                    // prices it is being compared against.
+                    bench.takeLast(fed.size)
+                },
                 // Explicit and non-default: a window scan is exploratory by definition, and
                 // PatternIds is name-based, so recording one would collide with the canonical
                 // scan's ids in the accuracy table.
                 isCanonicalScan = false,
             ),
         )
-        return evaluate(result, symbol, timeframe, windowBars)
+
+        // `fed` is the window plus warm-up, so a candidate belongs to the reported window only if
+        // its pivots sit at or after the warm-up boundary. Reported in the engine's own
+        // bar-index space, which is the space of `fed`.
+        val windowStart = fed.size - reported
+        return evaluate(
+            result = result.filterToWindow(windowStart),
+            symbol = symbol,
+            timeframe = timeframe,
+            windowBars = reported,
+        )
+    }
+
+    /**
+     * Drops candidates whose pivots fall entirely before [windowStart].
+     *
+     * ### Why filtering is not the same as recomputing
+     * The engine was given the window *and* its warm-up, so a formation straddling the boundary is
+     * detected with full context on both sides — that is the point of the warm-up. What this
+     * removes are candidates that belong to the warm-up itself: without it, widening a window
+     * could surface a match whose entire shape sits outside the bars the reader selected, and the
+     * chart would then draw a shape anchored to pivots it is not showing.
+     *
+     * A candidate is kept when **any** of its pivots is inside the window, not only when all are.
+     * A double top whose left top precedes the window is genuinely a formation of this window —
+     * the reader can see both tops in the visible bars — so requiring all pivots would discard the
+     * most useful matches at narrow widths.
+     *
+     * Candidates with no pivots are kept: they are the ones rejected before a shape existed, and
+     * they carry no geometry that could disagree with the window. Suppressing them would invent a
+     * blocker the engine never reported.
+     */
+    private fun PatternScanResult.filterToWindow(windowStart: Int): PatternScanResult {
+        if (windowStart <= 0) return this
+        fun inWindow(pivots: List<Pivot>): Boolean =
+            pivots.isEmpty() || pivots.any { it.barIndex >= windowStart }
+
+        return copy(
+            matches = matches.filter { inWindow(it.pivots) },
+            suppressed = suppressed.filter { inWindow(it.pivots) },
+        )
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * Bars fed to the engine *before* the reported window, so the window's first bar has an
+     * indicator reading that exists.
+     *
+     * ### Why this number and not a taste
+     * Every detector reads indicators, and the longest look-back any of them touches is the
+     * candlestick context window (`CandlestickPolicy.contextLookback` = 20 daily / 13 weekly)
+     * measured from the *current* bar, with ADX14 needing roughly twice its period for `+DI`/`−DI`
+     * to settle. Twenty bars is below all three, so at the left edge of a window computed from
+     * scratch those readings would be `null` — and a `null` is a silently unscored factor, which
+     * is how a window ends up scoring lower than the same stock in a wider window for reasons that
+     * have nothing to do with the pattern.
+     *
+     * Sixty is chosen as a round number that clears the longest look-back with room to spare, and
+     * because it is small enough that a 60-bar window still analyses 120 bars rather than
+     * pretending the reader's selection was ignored. It is deliberately *not* the full history:
+     * the pivot pass is meant to see the window's own swings, and feeding all 372 bars would put
+     * the zigzag's shallow-and-fallback threshold back on the footing this change exists to fix.
+     *
+     * What this does **not** fix: a pivot just inside the window's left edge is still confirmed
+     * using fewer bars to its left than the full series would have. Warm-up repairs the
+     * *indicator* readings; it cannot repair pivot confirmation without recomputing pivots over
+     * the whole series, which is the other design and a different trade.
+     */
+    const val WARM_UP_BARS: Int = 60
 
     /** The lowest factor reading, ties broken by weight so the costliest factor wins. */
     private fun weakestOf(breakdown: com.mia.app.domain.model.ScoreBreakdown): ScoreFactor {

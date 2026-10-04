@@ -103,7 +103,8 @@ data class PatternsUiState(
      *
      * Surfaced because it is a quality signal invisible on the chart: the formations being found
      * are structurally shallower, so a match at 60 bars is not the same claim as one at 250.
-     * Measured over 20 real large caps — 17 of 20 used the fallback at 60 bars, 0 of 20 at 372.
+     * Measured over 20 real large caps with window warm-up included: 13 of 20 use it at 60 bars,
+     * 5 of 20 at 120, and 0 of 20 on a whole series.
      */
     val usedFallbackPivots: Boolean = false,
 

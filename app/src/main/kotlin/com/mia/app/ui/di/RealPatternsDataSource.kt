@@ -159,7 +159,6 @@ class RealPatternsDataSource @Inject constructor(
     ): PatternEvaluation = withContext(backgroundDispatcher) {
         val ticker = symbol.trim().uppercase()
         val stored = candleRepository.storedSeries(ticker, timeframe).barsOrEmpty()
-        val required = MatchScorePolicy.minBars(timeframe)
 
         if (stored.isEmpty()) {
             return@withContext PatternEvaluation(
@@ -198,18 +197,20 @@ class RealPatternsDataSource @Inject constructor(
         }
 
         // Exploratory: a window, with its own pivot computation and no recording.
+        //
+        // The whole stored series is passed and `windowBars` selects the slice, rather than
+        // pre-slicing with `takeLast`. `PatternExplorer.scanWindow` feeds the engine the window
+        // plus warm-up bars and filters results back to the window, which is what keeps indicators
+        // at the window's left edge from being computed on a partial series. Pre-slicing here
+        // would silently undo that and make a narrow window score lower than the same stock in a
+        // wide one for reasons unrelated to the pattern.
         PatternExplorer.scanWindow(
-            candles = stored.takeLast(windowBars),
+            candles = stored,
             timeframe = timeframe,
             detectors = detectorRegistry.all(),
             symbol = ticker,
             windowBars = minOf(windowBars, stored.size),
-        ).also {
-            if (stored.size < required) {
-                // Reported by the evaluation itself; nothing to add. The window cannot clear the
-                // gate and the screen says so with the two numbers.
-            }
-        }
+        )
     }
 
     override suspend fun projections(

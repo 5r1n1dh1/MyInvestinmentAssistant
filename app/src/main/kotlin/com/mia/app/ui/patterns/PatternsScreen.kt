@@ -54,7 +54,8 @@ import com.mia.app.ui.common.EvidenceDialog
 import com.mia.app.ui.common.LoadingState
 import com.mia.app.ui.common.MatchScoreChip
 import com.mia.app.ui.common.NOT_AVAILABLE
-import com.mia.app.ui.common.RedFlagBanner
+import com.mia.app.ui.common.RedFlagAccess
+import com.mia.app.ui.common.RedFlagCoverageSection
 import com.mia.app.ui.common.ScoreExplainCard
 import com.mia.app.ui.common.SectionHeader
 import com.mia.app.ui.common.TimeframeToggle
@@ -134,8 +135,10 @@ fun PatternsScreen(
             .testTag(PATTERNS_TAG),
     ) {
         // plan.md §8.3: pinned at the top of the tab, not buried in a section.
-        RedFlagBanner(
+        RedFlagAccess(
             flags = state.redFlags,
+            skippedRules = state.skippedRules,
+            ruleFailures = state.ruleFailures,
             onFlagClick = { evidenceFlag = it },
             modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
         )
@@ -232,7 +235,9 @@ fun PatternsScreen(
             }
 
             if (state.flagCoverageIncomplete) {
-                item(key = FLAG_COVERAGE_KEY) { FlagCoverageSection(state) }
+                item(key = FLAG_COVERAGE_KEY) {
+                    RedFlagCoverageSection(state.skippedRules, state.ruleFailures)
+                }
             }
 
             item(key = FOOTER_KEY) { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
@@ -902,41 +907,6 @@ private fun NotesSection(state: PatternsUiState, modifier: Modifier = Modifier) 
                 text = "$BULLET $note",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * Why the red-flag banner may be missing entries (plan.md §12).
- *
- * A rule that could not be evaluated is not a rule that found nothing, and `RedFlagBanner` renders
- * nothing at all when the flag list is empty. Without this section an empty banner reads as "all
- * clear", which is the failure mode the plan calls the most dangerous one in the product.
- */
-@Composable
-private fun FlagCoverageSection(state: PatternsUiState, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-    ) {
-        Text(
-            text = SECTION_FLAG_COVERAGE,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        state.skippedRules.forEach { skip ->
-            Text(
-                text = "$NOT_EVALUATED ${skip.ruleId}: ${skip.reason}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        state.ruleFailures.forEach { (ruleId, message) ->
-            Text(
-                text = "$FAILED $ruleId: $message",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
             )
         }
     }

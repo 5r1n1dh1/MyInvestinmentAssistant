@@ -260,21 +260,42 @@ class PatternExplorerTest {
             candles = candles, timeframe = Timeframe.D1, detectors = detectors,
             symbol = "ITC", windowBars = candles.size,
         )
+        // The whole series, with `windowBars` selecting the slice — the signature that feeds the
+        // engine warm-up bars. Pre-slicing here would test the old, un-warmed behaviour.
         val narrow = PatternExplorer.scanWindow(
-            candles = candles.takeLast(60), timeframe = Timeframe.D1, detectors = detectors,
+            candles = candles, timeframe = Timeframe.D1, detectors = detectors,
             symbol = "ITC", windowBars = 60,
         )
 
-        // Measured over 20 large caps: 17 of 20 used the fallback at 60 bars, 0 of 20 at 372. If
-        // that ever inverts, the flag is wrong and the UI would be warning about the wrong window.
+        // Measured over the 20-symbol fixture, warm-up included: 13 of 20 use the fallback at 60
+        // bars, 5 of 20 at 120, and 0 at 372. The 60- and 120-bar figures were 17 and 13 before
+        // `scanWindow` fed warm-up bars — the fallback is rarer now because the pivot pass sees
+        // more context, which is the improvement this number exists to track. If it reaches 0 at
+        // 60 the UI's warning has become false and should be removed rather than reworded.
         assertFalse(
             wide.usedFallbackPivots,
-            "a 372-bar window should not need the shallow fallback",
+            "a whole-series window was measured as never needing the shallow fallback",
         )
+
+        var fallbackAt60 = 0
+        var symbols = 0
+        for (symbol in EodHistory.fullHistorySymbols(count = 20)) {
+            val series = EodHistory.candles(symbol)
+            if (series.size < 60) continue
+            symbols++
+            if (PatternExplorer.scanWindow(
+                    series, Timeframe.D1, detectors, symbol, windowBars = 60,
+                ).usedFallbackPivots
+            ) {
+                fallbackAt60++
+            }
+        }
+        println("warm-up: fallback at 60 bars on $fallbackAt60 of $symbols symbols (was 17 of 20)")
         assertTrue(
-            narrow.usedFallbackPivots,
-            "a 60-bar window was measured as needing the fallback on most symbols; " +
-                "if this changed, revisit what the UI warns about",
+            fallbackAt60 in 1 until symbols,
+            "a 60-bar window is still measured as needing the shallow fallback on some symbols; " +
+                "if that ever reaches 0 the UI warning is false and must go, " +
+                "if it reaches $symbols the warm-up is not reaching the pivot pass",
         )
     }
 
@@ -309,6 +330,128 @@ class PatternExplorerTest {
             first.matched().map { it.score },
             second.matched().map { it.score },
             "two identical window scans disagreed on scores",
+        )
+    }
+
+    // -------------------------------------------------------------- window warm-up
+
+    @Test
+    fun `a narrow window is analysed with warm-up bars before it, not from scratch`() {
+        // The point of the warm-up is that indicators at the window's first bar have a real
+        // reading. A window computed from exactly its own bars has none: the longest look-back any
+        // detector touches is the 20-bar candlestick context, so the first ~20 bars of the window
+        // would score on `null` indicators. That is a silent scoring penalty for choosing a narrow
+        // window, which is the bug.
+        val candles = EodHistory.candles("ITC")
+        val windowBars = 120
+        assertTrue(
+            candles.size > windowBars + PatternExplorer.WARM_UP_BARS,
+            "the fixture must be deep enough for this test to be meaningful",
+        )
+
+        // Fed to the engine with warm-up, versus the same window computed from scratch.
+        val warmed = PatternExplorer.scanWindow(
+            candles = candles, timeframe = Timeframe.D1, detectors = detectors,
+            symbol = "ITC", windowBars = windowBars,
+        )
+        val coldResult = PatternEngine.run(
+            candles = candles.takeLast(windowBars),
+            timeframe = Timeframe.D1,
+            detectors = detectors,
+            options = PatternScanOptions(symbol = "ITC", isCanonicalScan = false),
+        )
+        val cold = PatternExplorer.evaluate(coldResult, "ITC", Timeframe.D1, windowBars)
+
+        // The reported window is what the reader asked for, in both cases — the warm-up is never
+        // counted as reported bars, or the window label would lie.
+        assertEquals(windowBars, warmed.windowBars)
+        assertEquals(windowBars, cold.windowBars)
+
+        // The pivot pass sees more bars, so the shallow fallback is less likely — which is the
+        // measurable consequence of the warm-up and the reason it exists.
+        val symbols = EodHistory.fullHistorySymbols(count = 20)
+        var warmedFallback = 0
+        var coldFallback = 0
+        for (symbol in symbols) {
+            val series = EodHistory.candles(symbol)
+            if (PatternExplorer.scanWindow(
+                    series, Timeframe.D1, detectors, symbol, windowBars,
+                ).usedFallbackPivots
+            ) {
+                warmedFallback++
+            }
+            val coldScan = PatternEngine.run(
+                candles = series.takeLast(windowBars),
+                timeframe = Timeframe.D1,
+                detectors = detectors,
+                options = PatternScanOptions(symbol = symbol, isCanonicalScan = false),
+            )
+            if (coldScan.pivots.usedFallbackDepth) coldFallback++
+        }
+        println(
+            "warm-up census at $windowBars bars over ${symbols.size} symbols: " +
+                "fallback used $warmedFallback warmed vs $coldFallback cold",
+        )
+        assertTrue(
+            warmedFallback <= coldFallback,
+            "warm-up bars can only add pivot context, so the shallow fallback cannot get more " +
+                "likely: $warmedFallback warmed vs $coldFallback cold",
+        )
+    }
+
+    @Test
+    fun `reported candidates are the ones inside the window`() {
+        // A candidate formed entirely in the warm-up region is not a finding about the window the
+        // reader selected. Reported, it would also be drawn on a chart that is not showing those
+        // bars.
+        val candles = EodHistory.candles("ITC")
+        val windowBars = 120
+        val evaluation = PatternExplorer.scanWindow(
+            candles = candles, timeframe = Timeframe.D1, detectors = detectors,
+            symbol = "ITC", windowBars = windowBars,
+        )
+        // Re-derive the boundary the same way `scanWindow` does: fed = window + warm-up, so the
+        // window starts at `fed.size - windowBars` in the engine's bar-index space.
+        val windowStart = minOf(candles.size, windowBars + PatternExplorer.WARM_UP_BARS) - windowBars
+        assertTrue(windowStart > 0, "this test needs warm-up bars to exist")
+
+        val outside = evaluation.matched().filter { outcome ->
+            outcome.match.pivots.isNotEmpty() && outcome.match.pivots.none { it.barIndex >= windowStart }
+        }
+        assertTrue(
+            outside.isEmpty(),
+            "matches entirely before the window leaked in: " +
+                outside.joinToString { "${it.name} pivots=${it.match.pivots.map { p -> p.barIndex }}" },
+        )
+    }
+
+    @Test
+    fun `a whole-series window needs no warm-up and is unchanged by it`() {
+        // The `All` chip is the control: with no bars before the window there is nothing to warm up,
+        // so it must behave exactly like a canonical scan of the stored series.
+        val candles = EodHistory.candles("ITC")
+        val evaluation = PatternExplorer.scanWindow(
+            candles = candles, timeframe = Timeframe.D1, detectors = detectors,
+            symbol = "ITC", windowBars = candles.size,
+        )
+        assertEquals(candles.size, evaluation.windowBars)
+        assertFalse(
+            evaluation.usedFallbackPivots,
+            "a whole-series scan was measured as never needing the fallback",
+        )
+    }
+
+    @Test
+    fun `a window scan cannot report more bars than are stored`() {
+        val candles = EodHistory.candles("ITC")
+        val evaluation = PatternExplorer.scanWindow(
+            candles = candles, timeframe = Timeframe.D1, detectors = detectors,
+            symbol = "ITC", windowBars = candles.size + 500,
+        )
+        assertEquals(
+            candles.size,
+            evaluation.windowBars,
+            "a window wider than the stored series must be clamped, not invented",
         )
     }
 }

@@ -239,9 +239,14 @@ private fun AddSymbolRow(
  * accessibility reality is about, and a watchlist is the densest place it would bite.
  *
  * ### Why the flag chip is absent when the count is zero
- * Same reasoning as `RedFlagBanner`: a permanent "0 flags" badge on every row teaches the eye to
- * ignore the badge, and the badge is the thing a reader scans for. Silence is the correct empty
- * state, and the coverage note above the list is what stops that silence from reading as "all clear".
+ * A permanent "0 flags" badge on every row teaches the eye to ignore the badge, and the badge is the
+ * thing a reader scans for. Silence is the correct empty state, and the coverage note above the
+ * list is what stops that silence from reading as "all clear".
+ *
+ * This is deliberately the opposite of `RedFlagAccess`, which always renders its row even at zero
+ * flags. The difference is density: a watchlist is a dense grid scanned for one thing, so a chip on
+ * every row is noise — whereas `RedFlagAccess` sits once at the top of a single stock's tab, where
+ * an absent row would leave the reader with no way to reach the report at all.
  */
 @Composable
 private fun WatchlistRowCard(

@@ -51,7 +51,7 @@ import com.mia.app.ui.common.ErrorState
 import com.mia.app.ui.common.EvidenceDialog
 import com.mia.app.ui.common.LoadingState
 import com.mia.app.ui.common.NOT_AVAILABLE
-import com.mia.app.ui.common.RedFlagBanner
+import com.mia.app.ui.common.RedFlagAccess
 import com.mia.app.ui.common.RUPEE
 import com.mia.app.ui.common.SectionHeader
 import com.mia.app.ui.common.StaleBadge
@@ -123,8 +123,12 @@ fun FundamentalsScreen(
     ) {
         // plan.md §8.3: at the top of the tab, and outside the scroll so a flag cannot scroll away
         // before it has been read.
-        RedFlagBanner(
+        RedFlagAccess(
             flags = state.redFlags,
+            // The Fundamentals tab never rendered a coverage section — `flagCoverageIncomplete`
+            // was computed and then unused — so the gap is stated in the row itself.
+            skippedRules = state.skippedRules,
+            ruleFailures = state.ruleFailures,
             onFlagClick = { evidenceFlag = it },
             modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
         )

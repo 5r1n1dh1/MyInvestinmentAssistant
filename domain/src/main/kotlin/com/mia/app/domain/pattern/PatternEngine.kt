@@ -6,6 +6,7 @@ import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.PatternDetector
+import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.PivotKind
 import com.mia.app.domain.model.ScoreBreakdown
 import com.mia.app.domain.model.Timeframe
@@ -65,6 +66,18 @@ data class SuppressedMatch(
      * only the factor total. Empty when the candidate was never scored.
      */
     val measures: List<Measure> = emptyList(),
+    /**
+     * The swing points this candidate was built from.
+     *
+     * Present so a window scan can decide whether the candidate actually *belongs* to the window
+     * the reader selected. Without it a near-miss formed entirely before the window's first bar
+     * would be reported as this window's near-miss, which is a claim about a period the reader
+     * is not looking at.
+     *
+     * Empty when the candidate was rejected before any pivot could be attached — the same
+     * "not a real candidate" reading as an absent [breakdown].
+     */
+    val pivots: List<Pivot> = emptyList(),
 ) {
     /** `true` when this candidate reached the scorer, as opposed to being rejected earlier. */
     val wasScored: Boolean get() = breakdown != null
@@ -308,6 +321,7 @@ object PatternEngine {
                     reason = notEnoughHistoryReason(timeframe, barCount),
                     breakdown = carriedBreakdown,
                     measures = carriedMeasures,
+                    pivots = match.pivots,
                 )
                 continue
             }
@@ -318,6 +332,7 @@ object PatternEngine {
                     reason = notEnoughHistoryReason(timeframe, barCount),
                     breakdown = carriedBreakdown,
                     measures = carriedMeasures,
+                    pivots = match.pivots,
                 )
                 continue
             }
@@ -329,6 +344,7 @@ object PatternEngine {
                         "${MatchScorePolicy.SUPPRESS_THRESHOLD} render threshold. Geometric fit only.",
                     breakdown = carriedBreakdown,
                     measures = carriedMeasures,
+                    pivots = match.pivots,
                 )
                 continue
             }
