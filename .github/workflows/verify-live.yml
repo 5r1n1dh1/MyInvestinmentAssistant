@@ -1,0 +1,181 @@
+# Live source probes — on-demand only (planv2 W8, owner decision: no cron).
+#
+# Probes every free data source the app depends on, from GitHub's
+# network, and writes a markdown report (step summary + artifact).
+# The report drives the Class-B decisions in planv2:
+#
+#   * W3  — does any NSE index-history URL answer 200? (relative
+#           strength needs an index series; breadth does not)
+#   * W4  — does screener.in's HDFCBANK page publish NIM / GNPA /
+#           CASA / PCR rows today? (decides whether those RatioIds
+#           promote from NOT_SOURCED to AVAILABLE)
+#   * W4  — do corporate-action / bulk-deal / surveillance endpoints
+#           answer from the archives host?
+#   * W3  — does the Yahoo cookie+crumb handshake answer, or 429?
+#
+# robots.txt compliance (binding, plan.md §3.6): only the permitted
+# screener.in URL shape is fetched — /company/{SYMBOL}/consolidated/,
+# one request, with the required Referer. No search, no pagination.
+# NSE endpoints are read-only GETs of published archives.
+
+name: Live source probes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe free data sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run probes and build the report
+        run: |
+          set -uo pipefail
+          REPORT="$RUNNER_TEMP/live-probe-report.md"
+          YESTERYDAY="$(date -u -d '1 day ago' +%Y%m%d)"
+          YESTERDAY_DMY="$(date -u -d '1 day ago' +%d%m%Y)"
+
+          {
+            echo "# Live source probe — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            echo "Run: \`${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\`"
+            echo
+            echo "Every endpoint the app depends on, probed from GitHub's network."
+            echo "A probe failing from here is a **finding about this network**, not"
+            echo "about the source — the app's own fallbacks are documented in"
+            echo "docs/DATA-NOTES.md."
+            echo
+          } > "$REPORT"
+
+          probe_row() {
+            # probe_row "name" "url" [curl args...]
+            local name="$1"; local url="$2"; shift 2
+            local result
+            result="$(curl -sS -o /dev/null -w '%{http_code} · %{size_download} bytes · %{time_total}s' \
+                      --max-time 60 "$@" "$url" 2>&1)" || result="curl failed: $result"
+            echo "| $name | \`$url\` | $result |" >> "$REPORT"
+          }
+
+          echo "## 1. NSE EOD price layer" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "| Source | URL | Result |" >> "$REPORT"
+          echo "|---|---|---|" >> "$REPORT"
+          probe_row "Bhavcopy — archives mirror (primary in app)" \
+            "https://archives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${YESTERDAY}_F_0000.csv.zip"
+          probe_row "Bhavcopy — nsearchives (documented primary)" \
+            "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${YESTERDAY}_F_0000.csv.zip"
+          probe_row "Symbol master (EQUITY_L)" \
+            "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+          probe_row "Legacy delivery file (DELIV_PER)" \
+            "https://archives.nseindia.com/products/content/sec_bhavdata_full_${YESTERDAY_DMY}.csv"
+
+          echo >> "$REPORT"
+          echo "## 2. Index history (candidates — W3 needs one that answers 200)" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "| Candidate | URL | Result |" >> "$REPORT"
+          echo "|---|---|---|" >> "$REPORT"
+          probe_row "indices/ind_close_all (archives)" \
+            "https://archives.nseindia.com/content/indices/ind_close_all_${YESTERDAY}.csv"
+          probe_row "indices/ind_close_all (nsearchives)" \
+            "https://nsearchives.nseindia.com/content/indices/ind_close_all_${YESTERDAY}.csv"
+          probe_row "indices historical (products path)" \
+            "https://archives.nseindia.com/products/content/equities/indices/ind_close_all_${YESTERDAY}.csv"
+
+          echo >> "$REPORT"
+          echo "## 3. Corporate events (candidates — W4)" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "| Candidate | URL | Result |" >> "$REPORT"
+          echo "|---|---|---|" >> "$REPORT"
+          probe_row "Corporate announcements archive" \
+            "https://archives.nseindia.com/content/equities/corporate/announcements.csv"
+          probe_row "Bulk deals archive" \
+            "https://archives.nseindia.com/content/equities/bulkdeals.csv"
+          probe_row "Block deals archive" \
+            "https://archives.nseindia.com/content/equities/blockdeals.csv"
+          probe_row "ASM list (www host)" \
+            "https://www.nseindia.com/content/equities/equity_advisory.htm"
+          probe_row "GSM list (www host)" \
+            "https://www.nseindia.com/content/equities/gsm_equity.htm"
+
+          echo >> "$REPORT"
+          echo "## 4. Yahoo Finance handshake (W3 history backfill)" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "| Step | URL | Result |" >> "$REPORT"
+          echo "|---|---|---|" >> "$REPORT"
+          # Step 1: fc.yahoo.com sets the session cookie (a 404 with a
+          # Set-Cookie is the expected, documented answer).
+          COOKIE_JAR="$RUNNER_TEMP/yahoo_cookies.txt"
+          probe_row "fc.yahoo.com (cookie seed; 404 + cookie is the good case)" \
+            "https://fc.yahoo.com" -c "$COOKIE_JAR" -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+          # Step 2: getcrumb with the cookie.
+          CRUMB="$(curl -sS --max-time 45 -b "$COOKIE_JAR" \
+                   -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+                   "https://query1.finance.yahoo.com/v1/test/getcrumb" 2>/dev/null | head -c 64)"
+          if [ -n "$CRUMB" ] && ! printf '%s' "$CRUMB" | grep -qiE 'too many|error|invalid'; then
+            echo "| getcrumb | query1.finance.yahoo.com/v1/test/getcrumb | \`200\` — crumb obtained |" >> "$REPORT"
+            # Step 3: the chart API with cookie + crumb.
+            probe_row "chart API (RELIANCE.NS, 5d) with cookie+crumb" \
+              "https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?range=5d&interval=1d&crumb=${CRUMB}" \
+              -b "$COOKIE_JAR" -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+          else
+            echo "| getcrumb | query1.finance.yahoo.com/v1/test/getcrumb | FAILED (429 or blocked — the documented behaviour from some networks) |" >> "$REPORT"
+          fi
+
+          echo >> "$REPORT"
+          echo "## 5. screener.in — bank-ratio re-check (W4 decision input)" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "Fetches ONLY the robots-permitted URL shape" >> "$REPORT"
+          echo "(\`/company/{SYMBOL}/consolidated/\`), one request, with the" >> "$REPORT"
+          echo "required Referer, and greps the returned page for the bank" >> "$REPORT"
+          echo "ratio rows the app cannot currently source." >> "$REPORT"
+          echo >> "$REPORT"
+          HDFC="$RUNNER_TEMP/hdfcbank.html"
+          SCREENER_STATUS="$(curl -sS -o "$HDFC" -w '%{http_code}' --max-time 90 \
+            -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+            -e "https://www.screener.in/" \
+            "https://www.screener.in/company/HDFCBANK/consolidated/" 2>/dev/null)" || SCREENER_STATUS="failed"
+          echo "| Page | URL | Result |" >> "$REPORT"
+          echo "|---|---|---|" >> "$REPORT"
+          echo "| HDFCBANK consolidated | https://www.screener.in/company/HDFCBANK/consolidated/ | ${SCREENER_STATUS} · $(wc -c < "$HDFC" 2>/dev/null || echo 0) bytes |" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "Bank ratio rows found on the page today:" >> "$REPORT"
+          echo >> "$REPORT"
+          if [ "$SCREENER_STATUS" = "200" ]; then
+            for label in "Net Interest Margin" "Gross NPA" "Net NPA" "CASA" "Provision Coverage" "GNPA" "NNPA" "Stage 2" "Cost of Funds"; do
+              COUNT="$(grep -o -i "$label" "$HDFC" 2>/dev/null | wc -l | tr -d ' ')"
+              if [ "$COUNT" -gt 0 ]; then
+                echo "- ✅ **$label** — present ($COUNT occurrence(s)) → candidate to promote from NOT_SOURCED" >> "$REPORT"
+              else
+                echo "- ❌ **$label** — absent on this capture" >> "$REPORT"
+              fi
+            done
+          else
+            echo "Page not fetchable (status ${SCREENER_STATUS}); re-check required." >> "$REPORT"
+          fi
+
+          echo >> "$REPORT"
+          echo "## Verdict lines for the plan" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "- W3 index series: promote the first index URL above that answered **200**;" >> "$REPORT"
+          echo "  if none did, relative strength stays honestly unscored and breadth" >> "$REPORT"
+          echo "  (computed from the bhavcopy itself) carries the market-pulse card." >> "$REPORT"
+          echo "- W4 bank ratios: promote only the labels marked ✅, each pinned to a" >> "$REPORT"
+          echo "  new golden fixture before the RatioId leaves NOT_SOURCED." >> "$REPORT"
+
+          # Step summary + artifact.
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          cp "$REPORT" live-probe-report.md
+
+      - name: Upload probe report
+        uses: actions/upload-artifact@v5
+        with:
+          name: live-probe-report
+          path: live-probe-report.md
+          if-no-files-found: error
+          retention-days: 90
