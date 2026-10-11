@@ -47,6 +47,7 @@ jobs:
   build:
     name: Build & Package APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Nothing here needs elevated permissions.
     permissions:
       contents: read
@@ -60,10 +61,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -132,18 +133,27 @@ jobs:
         run: ./gradlew :domain:test :data:test -PskipAndroid --no-daemon --stacktrace
 
       # CHANGE 2 (this repo only): `settings.gradle.kts` includes :android-data and :app ONLY when
-      # an SDK is detectable, so one must exist before ANY Gradle task that touches them. Detected
-      # via `local.properties`, which AGP reads; writing it here is what flips those modules into
-      # the build.
+      # an SDK is detectable, so one must exist before ANY Gradle task that touches them.
+      #
+      # The `android-actions/setup-android` action is deliberately NOT used: its
+      # `tools` package install fails on current runners (the standalone SDK "tools"
+      # package was removed from Google's repository, and the action's pinned
+      # cmdline-tools revision then exits 1 before any module compiles). The
+      # runner image ships a working `sdkmanager` on PATH, so the packages this
+      # build needs are installed directly. Failures here are loud on purpose:
+      # a swallowed SDK install only surfaces later as a confusing Gradle error.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licences
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
-          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          set -euo pipefail
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          # Accept licences. Tolerant: a licence prompt that fails should not
+          # block a build that may not need a new package.
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          # Install exactly what AGP 8.13 / compileSdk 36 needs. NOT tolerant:
+          # a missing package must fail the run now, with this step's name on it.
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          ls "${ANDROID_SDK_ROOT}"
 
       # NOTE: the "Ensure gradlew executable" step that used to live here has moved ABOVE the
       # first ./gradlew call. It ran too late to prevent "Permission denied". The chmod is now
@@ -215,10 +225,10 @@ jobs:
       - name: Decide which variants to build
         id: variants
         run: |
-          case "${{ github.event.inputs.build_type || 'release' }}" in
-            debug)  echo "targets=assembleDebug"       >> $GITHUB_OUTPUT ;;
-            both)   echo "targets=assembleDebug assembleRelease" >> $GITHUB_OUTPUT ;;
-            *)      echo "targets=assembleRelease"     >> $GITHUB_OUTPUT ;;
+          case "${{ github.event.inputs.build_type || 'debug' }}" in
+            release)  echo "targets=assembleRelease"     >> $GITHUB_OUTPUT ;;
+            both)     echo "targets=assembleDebug assembleRelease" >> $GITHUB_OUTPUT ;;
+            *)        echo "targets=assembleDebug"       >> $GITHUB_OUTPUT ;;
           esac
           echo "Building: ${{ steps.variants.outputs.targets }}"
 
@@ -268,7 +278,7 @@ jobs:
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --print-certs "$REL" | head -20
 
       - name: Upload APK Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mia-apk
           path: |
@@ -279,7 +289,7 @@ jobs:
 
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-log
           path: |
