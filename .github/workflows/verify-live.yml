@@ -38,7 +38,7 @@ jobs:
         run: |
           set -uo pipefail
           REPORT="$RUNNER_TEMP/live-probe-report.md"
-          YESTERYDAY="$(date -u -d '1 day ago' +%Y%m%d)"
+          YESTERDAY="$(date -u -d '1 day ago' +%Y%m%d)"
           YESTERDAY_DMY="$(date -u -d '1 day ago' +%d%m%Y)"
 
           {
@@ -113,10 +113,13 @@ jobs:
           COOKIE_JAR="$RUNNER_TEMP/yahoo_cookies.txt"
           probe_row "fc.yahoo.com (cookie seed; 404 + cookie is the good case)" \
             "https://fc.yahoo.com" -c "$COOKIE_JAR" -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-          # Step 2: getcrumb with the cookie.
+          # Step 2: getcrumb with the cookie. Guarded: the runner
+          # invokes this script with `bash -e`, so an unguarded
+          # command substitution that fails (e.g. a network error)
+          # would kill the whole probe run.
           CRUMB="$(curl -sS --max-time 45 -b "$COOKIE_JAR" \
                    -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
-                   "https://query1.finance.yahoo.com/v1/test/getcrumb" 2>/dev/null | head -c 64)"
+                   "https://query1.finance.yahoo.com/v1/test/getcrumb" 2>/dev/null | head -c 64)" || CRUMB=""
           if [ -n "$CRUMB" ] && ! printf '%s' "$CRUMB" | grep -qiE 'too many|error|invalid'; then
             echo "| getcrumb | query1.finance.yahoo.com/v1/test/getcrumb | \`200\` — crumb obtained |" >> "$REPORT"
             # Step 3: the chart API with cookie + crumb.
@@ -148,7 +151,11 @@ jobs:
           echo >> "$REPORT"
           if [ "$SCREENER_STATUS" = "200" ]; then
             for label in "Net Interest Margin" "Gross NPA" "Net NPA" "CASA" "Provision Coverage" "GNPA" "NNPA" "Stage 2" "Cost of Funds"; do
-              COUNT="$(grep -o -i "$label" "$HDFC" 2>/dev/null | wc -l | tr -d ' ')"
+              # grep exits 1 on no match; with pipefail and the
+              # runner's `bash -e` that would kill the run, so the
+              # substitution is guarded and an absent label is a
+              # clean "0" — which is the answer we want anyway.
+              COUNT="$(grep -o -i "$label" "$HDFC" 2>/dev/null | wc -l | tr -d ' ')" || COUNT="0"
               if [ "$COUNT" -gt 0 ]; then
                 echo "- ✅ **$label** — present ($COUNT occurrence(s)) → candidate to promote from NOT_SOURCED" >> "$REPORT"
               else
