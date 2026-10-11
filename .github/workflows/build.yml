@@ -63,7 +63,14 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.base_ref }}"
             git fetch origin "$BASE" --depth=1
-            if git diff --name-only "origin/${BASE}"...HEAD \
+            # Two-dot diff, not three-dot: the checkout is a depth-1
+            # shallow clone of the PR merge commit, which shares no
+            # history with the freshly fetched base ref, so a
+            # three-dot diff fails with "no merge base". The merge
+            # commit's tree IS the base tree plus the PR's changes,
+            # so a plain tree-to-tree diff lists exactly the PR's
+            # changed paths.
+            if git diff --name-only "origin/${BASE}" HEAD \
                 | grep -qE '^(app/|android-data/|gradle/|\.github/workflows/)|^build\.gradle\.kts$|^settings\.gradle\.kts$'; then
               echo "android=true" >> "$GITHUB_OUTPUT"
             else
@@ -72,7 +79,7 @@ jobs:
           else
             echo "android=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "android=${{ steps.filter.outputs.android }} (event: ${{ github.event_name }})"
+          echo "event: ${{ github.event_name }}"
 
   # The engine's JVM tests need no Android SDK, so they run first and fail
   # fast: on a broken parser or detector this job fails in ~1 minute instead
