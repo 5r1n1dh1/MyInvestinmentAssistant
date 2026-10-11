@@ -146,12 +146,24 @@ jobs:
         run: |
           set -euo pipefail
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          # Resolve the runner's preinstalled sdkmanager. It lives under
+          # cmdline-tools/latest/bin and is NOT on the default PATH, so a
+          # bare `sdkmanager` fails with exit 127.
+          SDKMGR="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMGR" ]; then
+            SDKMGR="$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$SDKMGR" ]; then
+            echo "::error::sdkmanager not found under ${ANDROID_SDK_ROOT}/cmdline-tools"
+            exit 1
+          fi
+          echo "Using sdkmanager: $SDKMGR"
           # Accept licences. Tolerant: a licence prompt that fails should not
           # block a build that may not need a new package.
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
           # Install exactly what AGP 8.13 / compileSdk 36 needs. NOT tolerant:
           # a missing package must fail the run now, with this step's name on it.
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMGR" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           ls "${ANDROID_SDK_ROOT}"
 
