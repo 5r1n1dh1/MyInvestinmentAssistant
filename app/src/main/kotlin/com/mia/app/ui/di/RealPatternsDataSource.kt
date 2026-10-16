@@ -24,6 +24,7 @@ import com.mia.app.domain.pattern.PatternScanOptions
 import com.mia.app.domain.pattern.PatternScanResult
 import com.mia.app.domain.pattern.PivotSet
 import com.mia.app.domain.pattern.ProjectionBuilder
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.redflag.RuleSkip
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.ui.patterns.ForceScanOutcome
@@ -230,15 +231,32 @@ class RealPatternsDataSource @Inject constructor(
         if (bars.isEmpty()) return@withContext PatternsProjection.NONE
 
         val regime = IndicatorSnapshot.of(bars).trendRegime
-        val aligned = PatternEngine.regimeAligned(regime, move.direction, match.category)
-        val verdict = MatchScorePolicy.verdict(match.score, timeframe, bars.size, aligned)
+        // `PatternEngine.resolveDirection` rather than `move.direction`, so this tab resolves
+        // direction exactly as the scan did. With a measured move present the two agree; the point
+        // is that they cannot come to disagree.
+        val aligned = PatternEngine.regimeAligned(
+            regime = regime,
+            direction = PatternEngine.resolveDirection(match),
+            category = match.category,
+        )
+        // The projection gate, asked once. It used to be answered here as
+        // `MatchScorePolicy.verdict(score, timeframe, bars.size, aligned)`, which — since W1 moved
+        // projection off the score onto `ProjectionGate` — could only ever return `RENDER`, so this
+        // tab never drew a projected path for anything. The blocker is carried out so the screen
+        // can state which condition said no rather than silently omitting the panel.
+        val blocker = ProjectionGate.blocker(
+            match = match,
+            lastClose = bars.last().close,
+            timeframe = timeframe,
+            barCount = bars.size,
+            regimeAligned = aligned,
+        )
 
         PatternsProjection(
             measuredMove = move,
-            // decision D2: the path is drawn **only** for a match the engine would have projected —
-            // `PROJECT` is `score >= 70` **and** an aligned regime, and both halves are read from the
-            // shared policy rather than restated here.
-            path = if (verdict == MatchScorePolicy.Verdict.PROJECT) {
+            // decision D2: the path is drawn **only** for a match the engine would have projected,
+            // and "would have projected" is `ProjectionGate`'s answer, not a score's.
+            path = if (blocker == null) {
                 ProjectionBuilder.directionalPath(
                     candles = bars,
                     direction = move.direction,
@@ -248,8 +266,8 @@ class RealPatternsDataSource @Inject constructor(
                 null
             },
             // The trigger is an event, not a forecast, so it is **not** gated. `PatternScanWorker`
-            // applies `MatchScorePolicy.PROJECT_THRESHOLD` itself before raising a notification, and
-            // gating here would make the tab and the alert disagree about the same formation.
+            // applies `ProjectionGate` itself before raising a notification, and gating here would
+            // make the tab and the alert disagree about the same formation.
             trigger = BreakoutEvaluator.trigger(
                 candles = bars,
                 level = move.triggerLevel,
@@ -257,6 +275,8 @@ class RealPatternsDataSource @Inject constructor(
                 subject = TRIGGER_SUBJECT,
                 timeframe = timeframe,
             ),
+            blocker = blocker,
+            levelDistancePercent = ProjectionGate.distance(match, bars.last().close)?.times(100.0),
         )
     }
 

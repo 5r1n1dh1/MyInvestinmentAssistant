@@ -2,8 +2,9 @@ package com.mia.app.data.android.alert
 
 import com.mia.app.domain.compliance.AdviceLanguage
 import com.mia.app.domain.model.Direction
-import com.mia.app.domain.model.MatchScorePolicy
+import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.ProjectionGate
 import java.time.LocalDate
 
 /**
@@ -19,6 +20,17 @@ import java.time.LocalDate
  *   carried only so the app can explain why the alert was raised at all.
  * * **No advice.** [init] runs the composed copy through `AdviceLanguage.requireClean`, so a
  *   future edit that introduces banned wording fails immediately instead of shipping.
+ *
+ * ### Why the gate inputs are here even though nothing renders them
+ * [measuredMove], [lastClose], [barCount] and [regimeAligned] exist so [mayAlert] can ask
+ * `com.mia.app.domain.pattern.ProjectionGate` for itself. They are never part of [title] or [body]:
+ * the measured move is an input to the decision, not something a notification may state.
+ *
+ * Carrying them rather than a boolean means the dispatcher is a **second, independent** check of
+ * the same gate rather than a copy of somebody else's answer, and it cannot be right by
+ * construction — a future caller that constructs an alert without the inputs gets the fail-closed
+ * default (`barCount = 0` → `INSUFFICIENT_HISTORY`) and no notification, which is the right answer
+ * for an alert that cannot prove it was earned.
  */
 data class BreakoutAlert(
     val symbol: String,
@@ -32,6 +44,14 @@ data class BreakoutAlert(
     val condition: String,
     /** The session whose close satisfied the condition. */
     val asOf: LocalDate,
+    /** Gate input only, never rendered. See the class KDoc. */
+    val measuredMove: MeasuredMove? = null,
+    /** Gate input only: the breakout close the projected level is measured from. */
+    val lastClose: Double = 0.0,
+    /** Gate input only: bars in the window the detection was scanned on. */
+    val barCount: Int = 0,
+    /** Gate input only: `null` is an undecided regime, which is not alignment. */
+    val regimeAligned: Boolean? = null,
 ) {
     init {
         require(condition.isNotBlank()) {
@@ -41,13 +61,29 @@ data class BreakoutAlert(
     }
 
     /**
+     * The first unmet condition of `ProjectionGate`, or `null` when this alert is allowed.
+     *
+     * Carried as the blocker rather than as a boolean so a caller can report *why* nothing was
+     * delivered instead of leaving "0 alerts" as a mystery (plan.md §12).
+     */
+    val projectionBlocker: ProjectionGate.Blocker?
+        get() = ProjectionGate.blocker(measuredMove, lastClose, timeframe, barCount, regimeAligned)
+
+    /**
      * Whether the app is allowed to raise an alert for this match at all.
      *
-     * plan.md §6.4: a projection and an alert require `score >= 70` **and** an aligned regime;
-     * anything at or above the render threshold may be shown but must not be alerted on. The
-     * threshold is read from the shared policy so this cannot drift from the pattern screen.
+     * ### What this used to be, and why it was always `false`
+     * plan.md §6.4 was implemented here as `score >= MatchScorePolicy.PROJECT_THRESHOLD` — a
+     * threshold no match could clear (the highest score in 875 settled walk-forward candidates was
+     * 68), so `notifyBreakout` returned before the permission check on every single call. The
+     * feature was not gated conservatively; it was off, and nothing noticed, because a gate nothing
+     * can cross looks exactly like a gate that works.
+     *
+     * The gate is now the measured-move distance, the bar minimum and the regime gate, together —
+     * read from `ProjectionGate`, which `PatternEngine.verdictFor` also uses, so the alert and the
+     * chart cannot disagree about the same formation.
      */
-    val mayAlert: Boolean get() = score >= MatchScorePolicy.PROJECT_THRESHOLD
+    val mayAlert: Boolean get() = projectionBlocker == null
 
     /**
      * Title line: the pattern, the symbol, the timeframe. Nothing else.

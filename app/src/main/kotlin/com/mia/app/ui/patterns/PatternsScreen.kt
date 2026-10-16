@@ -43,6 +43,7 @@ import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.ratios.Freshness
 import com.mia.app.domain.ratios.FreshnessKind
 import com.mia.app.domain.ratios.FreshnessPolicy
@@ -66,6 +67,7 @@ import com.mia.app.ui.common.TrackRecordRow
 import com.mia.app.ui.common.UiStrings
 import com.mia.app.ui.common.displayName
 import com.mia.app.ui.common.formatDate
+import com.mia.app.ui.common.formatFixed
 import com.mia.app.ui.common.formatPrice
 import com.mia.app.ui.common.shortLabel
 import com.mia.app.ui.theme.MiaSpacing
@@ -230,8 +232,17 @@ fun PatternsScreen(
                 }
             }
 
-            state.projection.path?.let { path ->
-                item(key = PATH_KEY) { ProjectedPathSection(path = path) }
+            val projectedPath = state.projection.path
+            val gateBlocker = state.projection.blocker
+            if (projectedPath != null) {
+                item(key = PATH_KEY) { ProjectedPathSection(path = projectedPath) }
+            } else if (gateBlocker != null) {
+                // The same slot as the path, so the screen never shows a gap where a section would
+                // have been: the reader gets either the projection or the app's own reason for not
+                // drawing it, never neither.
+                item(key = PATH_KEY) {
+                    ProjectionBlockedSection(state = state, blocker = gateBlocker)
+                }
             }
 
             state.projection.trigger?.let { trigger ->
@@ -860,6 +871,94 @@ private fun ProjectedPathSection(path: ProjectedPath, modifier: Modifier = Modif
     }
 }
 
+// ------------------------------------------------------------------- projection withheld
+
+/**
+ * The projection gate said no, and the screen says which condition said it.
+ *
+ * ### Why this section exists at all
+ * `ProjectionGate` replaced a score threshold that **nothing could ever cross**, and the app did
+ * not notice for the whole life of that gate. The same class of failure is silent from the other
+ * side: a section that quietly does not render looks identical to a bug, and a reader who has been
+ * told the app projects measured moves has no way to learn that this one was withheld and why.
+ * plan.md §1.4 makes "why did it not show me this" a product requirement, not a nicety.
+ *
+ * So every branch of the gate gets its own sentence, in the order a reader would want them
+ * explained, and each one is a statement about **geometry or a measurement** — never about what
+ * price will do. The level is still drawn on the chart and still labelled "Pattern geometry": the
+ * gate withholds the *projection and the alert*, not the measurement, because a measurement the
+ * reader is entitled to see is not a forecast.
+ */
+@Composable
+private fun ProjectionBlockedSection(
+    state: PatternsUiState,
+    blocker: ProjectionGate.Blocker,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        SectionHeader(title = PROJECTION_WITHHELD_TITLE, subtitle = PROJECTION_WITHHELD_SUBTITLE)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(MiaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            ) {
+                Text(
+                    text = withheldReason(state, blocker),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(text = PROJECTION_WITHHELD_ALERT, style = MaterialTheme.typography.bodySmall)
+                Text(text = Disclosure.PROJECTION_FOOTER, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+/**
+ * The gate's own verdict, in one sentence.
+ *
+ * The distance branch quotes the level's size in percent because that is the number the reader
+ * could check against the chart, and because `ProjectionGate`'s ceiling is a *measurement*
+ * ([ProjectionGate.DISTANCE_MAX]) rather than a matter of taste. No hit rate is quoted here: a rate
+ * without its sample size is the thing this app's copy is built to avoid, and the calibration
+ * tables already print their `n` wherever they are shown.
+ */
+private fun withheldReason(state: PatternsUiState, blocker: ProjectionGate.Blocker): String =
+    when (blocker) {
+        ProjectionGate.Blocker.DISTANCE_TOO_FAR -> {
+            val distance = state.projection.levelDistancePercent
+            val shown = distance?.let { " It sits ${formatFixed(it, 1)} % from the last close." } ?: ""
+            "The measured-move level is further from the last close than the " +
+                "${ProjectionGate.DISTANCE_MAX_PERCENT.toInt()} % the measured calibration " +
+                "supports, so no path is projected from it.$shown"
+        }
+
+        ProjectionGate.Blocker.REGIME_NOT_ALIGNED ->
+            "The trend regime is not aligned with this formation's direction, so no path is " +
+                "projected. The regime is a reading of the bars and it changes; the geometry above " +
+                "stays on the chart either way."
+
+        ProjectionGate.Blocker.NO_MEASURED_MOVE ->
+            "This formation carries no measured move, so there is no level to measure a distance " +
+                "from and no direction to project."
+
+        ProjectionGate.Blocker.INSUFFICIENT_HISTORY ->
+            "Not enough history to project: this timeframe needs ${state.minimumBars} bars and " +
+                "${state.barCount} are stored."
+    }
+
 // ----------------------------------------------------------------------- breakout alerts
 
 /**
@@ -1083,6 +1182,14 @@ private const val PATH_CARRIES_NO_LEVEL =
 private const val PATH_DISTINCT_NOTE =
     "The chart draws it with a fine dash and the geometry with a long dash. They are two separate " +
         "outputs and this screen never combines them."
+
+private const val PROJECTION_WITHHELD_TITLE = "No path projected for this formation"
+private const val PROJECTION_WITHHELD_SUBTITLE =
+    "The app's projection gate did not admit this match. The measured-move geometry above is still " +
+        "shown, because it is a measurement of the chart rather than a statement about the future."
+private const val PROJECTION_WITHHELD_ALERT =
+    "No breakout alert was scheduled for this formation either. Projection and alerting are one " +
+        "decision, so an alert is never raised for something the chart declined to project."
 
 private const val TRIGGER_SUBTITLE =
     "An event, not a projection: a condition on a closing price. Scheduled separately from the " +

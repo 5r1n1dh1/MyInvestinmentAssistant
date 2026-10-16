@@ -2,9 +2,9 @@ package com.mia.app.ui.share
 
 import com.mia.app.domain.compliance.Disclosure
 import com.mia.app.domain.model.MatchScoreLabels
-import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Source
 import com.mia.app.ui.common.NOT_AVAILABLE
+import com.mia.app.ui.common.UiStrings
 import com.mia.app.ui.common.displayName
 import com.mia.app.ui.common.formatDate
 import com.mia.app.ui.common.formatPrice
@@ -265,12 +265,15 @@ object BriefCardContent {
     private fun row(label: String, value: String): BriefLine =
         BriefLine(text = "$label$SEPARATOR $value", role = BriefLineRole.FIGURE)
 
-    /** The word beside a score, read from the same thresholds the screen uses. */
-    private fun bandLabel(score: Int): String = when {
-        score >= MatchScorePolicy.PROJECT_THRESHOLD -> BAND_STRONG
-        score >= MatchScorePolicy.RENDER_THRESHOLD -> BAND_MODERATE
-        else -> BAND_WEAK
-    }
+    /**
+     * The word beside a score, read from the same source the screens use.
+     *
+     * A shared image outlives the session it was made in, so the band and its cut live in
+     * `UiStrings` rather than being restated here: a card that said "strong fit" at 70 while the
+     * Patterns screen said something else at the same number would be two answers to one question,
+     * and the flat bitmap has no other way to explain itself.
+     */
+    private fun bandLabel(score: Int): String = UiStrings.fitBand(score)
 
     /** The direction glyph, so a sign in a flat image is never carried by colour alone. */
     private fun moveGlyph(changePercent: Double): String = when {
@@ -371,10 +374,6 @@ private const val CONDITION_NOTE =
 private const val EVERY_PATTERN_ON_THIS_STOCK = "Every tracked pattern on this stock"
 private const val RED_FLAG_THRESHOLD = "Threshold"
 private const val DERIVED_NOTE = "Projected from the stored bars above. Derived on device, source:"
-
-private const val BAND_STRONG = "strong fit"
-private const val BAND_MODERATE = "moderate fit"
-private const val BAND_WEAK = "weak fit"
 
 /** Separator inside a label/value row. */
 private const val SEPARATOR = "·"
