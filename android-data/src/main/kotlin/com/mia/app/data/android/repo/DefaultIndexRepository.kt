@@ -6,6 +6,7 @@ import com.mia.app.data.android.di.IoDispatcher
 import com.mia.app.data.price.IndexFailureReason
 import com.mia.app.data.price.IndexSource
 import com.mia.app.data.price.IndexSymbol
+import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.ParserHealth
 import com.mia.app.domain.model.Source
 import kotlinx.coroutines.CoroutineDispatcher
@@ -91,7 +92,7 @@ class DefaultIndexRepository @Inject constructor(
      * the same code path with a different meaning (a benchmark exists but shares no dates) and
      * would therefore unscore the factor with no stated reason at all.
      */
-    suspend fun benchmarkCandlesOrNull(): List<com.mia.app.domain.model.Candle>? =
+    suspend fun benchmarkCandlesOrNull(): List<Candle>? =
         runCatching { benchmark() }.getOrNull()?.valueOrNull()?.asBenchmarkCandles()
 
     /**
