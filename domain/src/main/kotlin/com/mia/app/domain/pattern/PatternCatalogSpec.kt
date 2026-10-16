@@ -102,6 +102,19 @@ data class PatternSpec(
  * *associated with*, and — the part that is easy to omit and the most useful — [doesNotPredict].
  * That last field is not a disclaimer bolted on: it is what stops a reader treating a named,
  * well-known formation as advice.
+ *
+ * ### Why [invalidation] is worth more than a better [doesNotPredict]
+ * `gaps.md` E4: the glossary taught descriptions and stopped there. A disclaimer is **the same
+ * sentence with the pattern's name swapped** — it tells the reader the app will not be held to an
+ * outcome, which is true of all fifty rows and actionable for none. An invalidation condition is
+ * the opposite: it is the one observation that would have to appear for this formation to be
+ * wrong, which is exactly what a reader cannot get from the textbook, because the textbook defines
+ * the shape and stops there.
+ *
+ * It also converts the pattern from a picture into a claim that can be graded. "A flag that drifts
+ * up through its lower boundary was not a flag" is checkable on the next bar; "a flag is not a
+ * guarantee" is not. Two rows of the catalogue sharing an invalidation sentence would show the
+ * author had nothing pattern-specific to say, so `PatternCatalogTest` counts reuse.
  */
 data class GlossaryEntry(
     /** What the pattern is, in one or two sentences. Geometry, not prediction. */
@@ -121,6 +134,22 @@ data class GlossaryEntry(
      * formed, so there is nothing to measure from".
      */
     val doesNotPredict: String,
+    /**
+     * What would prove this pattern wrong. Required, non-blank, **no default** (gaps.md E4).
+     *
+     * The invalidation condition belongs to the formation, so it is a property of the pattern
+     * rather than a property of the app's posture: "a close back above the right shoulder's high"
+     * is true about head & shoulders whether or not this app scores it. Giving it a default was
+     * considered and rejected — `planv2.md` W6 initially proposed one, but a default is how a
+     * field becomes optional in practice: the fiftieth row would inherit a generic sentence nobody
+     * wrote, and the row would read as finished. Requiring it means every row states it, and
+     * `PatternCatalogTest` counts how often a sentence is reused so "specific to this pattern"
+     * is enforced rather than hoped for.
+     *
+     * One sentence is the unit: a reader has to be able to hold it in their head as "if I see
+     * this, the pattern is wrong" without parsing three clauses about unrelated caveats.
+     */
+    val invalidation: String,
 ) {
     init {
         require(whatItIs.isNotBlank()) { "a glossary entry must say what the pattern is" }
@@ -128,6 +157,10 @@ data class GlossaryEntry(
         require(textbookSays.isNotBlank()) { "a glossary entry must say what the textbook says" }
         require(doesNotPredict.isNotBlank()) {
             "a glossary entry must state what the pattern does not establish (plan.md §1.4 rule 3)"
+        }
+        require(invalidation.isNotBlank()) {
+            "a glossary entry must state what would prove the pattern wrong (gaps.md E4): a row " +
+                "that cannot be wrong cannot be checked"
         }
     }
 }
