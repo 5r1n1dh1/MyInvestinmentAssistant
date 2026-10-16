@@ -160,6 +160,11 @@ class ProjectionCalibrationTest {
         withheld?.let { assertTrue(!it.isReportable) }
     }
 
+    @Test
+    fun `zz temporary dump of the measured table and the gate census`() {
+        kotlin.test.fail(ProjectionFixture.report() + "\n\n" + ProjectionFixture.gateReport())
+    }
+
     private companion object {
         /** `OutcomeTrackerPolicy.DEFAULT_HORIZON_BARS` — the horizon every published finding uses. */
         const val H5 = 5
@@ -234,5 +239,23 @@ internal object ProjectionFixture {
             append("candidates=${table.totalSamples} incomplete=${table.incomplete}")
         }
         return (listOf("=== PROJECTION CALIBRATION ===", header) + table.renderTable()).joinToString("\n")
+    }
+
+    /** One line describing how many real candidates the gate actually admitted. */
+    fun gateReport(): String {
+        val candidates = walk.candidates
+        val projecting = candidates.filter { it.verdict == MatchScorePolicy.Verdict.PROJECT }
+        val windows = candidates.filter { it.scanVerdict == MatchScorePolicy.Verdict.PROJECT }
+            .map { it.symbol to it.projectedOn }
+            .distinct()
+        val byPattern = projecting.groupingBy { it.match.name }.eachCount()
+            .entries.sortedByDescending { it.value }
+            .joinToString { "${it.key}=${it.value}" }
+        return "=== PROJECTION GATE ===\n" +
+            "candidates=${candidates.size} projecting=${projecting.size} " +
+            "projectingWindows=${windows.size} maxScore=${candidates.maxOf { it.match.score }} " +
+            "lowestProjectingScore=${projecting.minOfOrNull { it.match.score }}\n" +
+            "byPattern: $byPattern\n" +
+            "scoreRange=${candidates.minOf { it.match.score }}..${candidates.maxOf { it.match.score }}"
     }
 }

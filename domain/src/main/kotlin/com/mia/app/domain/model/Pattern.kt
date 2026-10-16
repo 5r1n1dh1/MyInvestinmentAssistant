@@ -241,10 +241,15 @@ object MatchScorePolicy {
         projectable: Boolean = false,
     ): Verdict {
         if (!isSufficientBars(timeframe, barCount)) return Verdict.NOT_ENOUGH_HISTORY
+        // [RENDER_THRESHOLD] is a **floor**, not a band, and it is checked before the projection
+        // gate. A candidate below it is neither drawn nor projected whatever its geometry says —
+        // otherwise a tight level could lift a 41-scoring formation into the rendered set and, from
+        // there, into the track record, which `OutcomeTracker` rule 3 forbids: the record describes
+        // what the app showed, so nothing the app hid may appear in it.
+        if (score < RENDER_THRESHOLD) return Verdict.SUPPRESS
         return when {
             projectable && regimeAligned == true -> Verdict.PROJECT
-            score >= RENDER_THRESHOLD -> Verdict.RENDER
-            else -> Verdict.SUPPRESS
+            else -> Verdict.RENDER
         }
     }
 }

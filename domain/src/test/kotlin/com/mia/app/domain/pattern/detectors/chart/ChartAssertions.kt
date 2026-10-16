@@ -108,9 +108,11 @@ internal object ChartAssertions {
             projectable = projectable,
         )
         when {
+            match.score < MatchScorePolicy.RENDER_THRESHOLD ->
+                assertEquals(MatchScorePolicy.Verdict.SUPPRESS, verdict)
+
             projectable -> assertEquals(MatchScorePolicy.Verdict.PROJECT, verdict)
-            match.score >= MatchScorePolicy.RENDER_THRESHOLD -> assertEquals(MatchScorePolicy.Verdict.RENDER, verdict)
-            else -> assertEquals(MatchScorePolicy.Verdict.SUPPRESS, verdict)
+            else -> assertEquals(MatchScorePolicy.Verdict.RENDER, verdict)
         }
     }
 
