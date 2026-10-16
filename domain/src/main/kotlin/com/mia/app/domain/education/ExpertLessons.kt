@@ -1180,7 +1180,7 @@ val EXPERT_MODULES: List<Module> = listOf(
                     it cannot see. A valuation exercise done on hidden inputs is an assertion,
                     and the reverse form is only useful when every assumption is on the page.
                 """.trimIndent(),
-                doesNotEstablish = "It does not produce a fair value, a projected price, or a " +
+                doesNotEstablish = "It does not establish a fair value, a projected price, or a " +
                     "recommendation. The output of this exercise is a stated set of assumptions, " +
                     "not an estimate of what will happen.",
             ),
