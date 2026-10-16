@@ -116,7 +116,7 @@ class DefaultPatternRepository @Inject constructor(
             )
         }
 
-// The benchmark, read once per scan from the on-device `index_candles` cache.
+        // The benchmark, read once per scan from the on-device `index_candles` cache.
         //
         // `null` here is a **real, expected** state — it is what the device reports before the
         // first index fetch, and forever on a device whose Yahoo requests all fail. The engine
