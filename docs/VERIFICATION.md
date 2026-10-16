@@ -128,6 +128,48 @@ This mattered enough to measure rather than assume:
   with the **cross date** and sessions elapsed, so a persistent condition is never presented as
   news. A point-in-time rate would have hidden this entirely.
 
+### The projection gate was unreachable, and the score was pointing the wrong way
+
+The app's headline feature — project a measured level, draw it, fire a breakout alert — had
+**never executed once**. `MatchScorePolicy.PROJECT_THRESHOLD = 70` gated it, and over 875 settled
+walk-forward candidates the highest score ever produced was **68**. No test caught it, because a
+gate nothing can cross is indistinguishable from a gate that works.
+
+Worse, the score was not merely useless — it was **inverted**. Hit rate fell as the score rose,
+monotonically across all six horizons (50–59 bucket: 35% @h5; 60–69: 30%). The mechanism is not
+noise: the score is a proxy for how far away the projected level sits, so a more textbook-ideal
+formation is a *bigger* formation that projects a *further*, harder-to-reach level.
+
+**The fix is a gate on distance, calibrated from the fixture** (`ProjectionGate`,
+`ProjectionCalibration`; PR #5). Reproduced on every test run from
+`fixtures/eod_history.json` (20 symbols × 372 sessions, 5-bar stride, 875 settled candidates):
+
+| Level within | h1 | h5 | h20 | n | control @h5 |
+|---|---|---|---|---|---|
+| 1 % | 76 % | 90 % | 94 % | 49 | 68 % |
+| 2 % | 71 % | 87 % | 92 % | 87 | — |
+| 3 % | 63 % | 82 % | 92 % | 121 | — |
+| 5 % | 48 % | 65 % | 80 % | 203 | **10 %** |
+| 12 % | 28 % | 36 % | 48 % | 531 | — |
+| beyond 12 % | 31 % | 31 % | 34 % | 344 | — |
+
+**A base rate is a function of the level's size.** At h5, a 5 %-wide level is touched 10% of the
+time with *no pattern involved*; a 1 %-wide level is touched 68%. So the 5 % row is a **6.5× lift**
+while the 1 % row is barely an edge at all — and quoting "90% of tight targets get hit" without
+that control is how this table gets misused. The gate stops at 5 % precisely because past it the
+level is out of reach, and below 2 % chance has already reached it.
+
+**The gate now fires.** 156 of 976 walk-forward candidates produce `Verdict.PROJECT` through the
+real `PatternEngine.verdictFor` path (lowest projecting score 50; highest score anywhere, 69).
+`ProjectionGateSatisfiabilityTest` exists specifically so this bug class cannot recur silently.
+
+Two corrections the measurement forced:
+- **The unfiltered hit rate is 34 %, not the 16.45 %** reported in gap A6. The 16.45% figure comes
+  from a *stand-in* detector (last five bars' range) that projects far wider levels than the real
+  detectors do. Both are honest numbers about different things; the test asserts "far below 50%".
+- **`Match.score` still reaches 99** in stored matches. It is display-only now, and anti-correlated
+  with outcomes — see the calibration dashboard lesson in the education curriculum.
+
 ### Candlestick patterns were structurally excluded from projecting
 
 `resolveDirection` read the measured move, then the newest pivot's kind. Candlestick formations

@@ -2,7 +2,7 @@
 <!--
   app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
 
-  The adaptive icon, for API 26+. `minSdk` is 26, so **every** supported device uses this file
+  The adaptive icon, for API 26+. `minSdk` is 31, so **every** supported device uses this file
   and the legacy `mipmap-*/ic_launcher.png` bitmaps are only a belt-and-braces fallback for a
   launcher that asks for them by density.
 
