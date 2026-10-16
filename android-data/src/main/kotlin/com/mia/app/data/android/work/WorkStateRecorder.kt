@@ -47,6 +47,17 @@ class WorkStateRecorder @Inject constructor(
          * succeed while the other never runs needs to be able to tell which one is stuck.
          */
         const val HISTORY_BACKFILL: String = "history_backfill"
+
+        /**
+         * The benchmark index fetch (`planv2` W3, run inside `EodRefreshWorker`).
+         *
+         * Its own row because it answers a different question from everything else here — "is
+         * there an index to measure relative strength against?" rather than "is today's market
+         * data in?" — and because a reader who sees the prices refresh nightly while relative
+         * strength stays unscored needs to be able to tell which of the two is stuck. Folding it
+         * into `EOD_REFRESH` would make an index problem look like a broken price layer.
+         */
+        const val INDEX_REFRESH: String = "index_refresh"
     }
 
     suspend fun recordSuccess(taskId: String, status: String) {

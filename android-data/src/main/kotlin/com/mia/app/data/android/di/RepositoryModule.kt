@@ -3,9 +3,11 @@ package com.mia.app.data.android.di
 import com.mia.app.data.android.alert.AndroidBreakoutAlertDispatcher
 import com.mia.app.data.android.alert.BreakoutAlertDispatcher
 import com.mia.app.data.http.HttpTransport
+import com.mia.app.data.price.IndexSource
 import com.mia.app.data.price.LegacyDeliverySource
 import com.mia.app.data.price.NseBhavcopySource
 import com.mia.app.data.price.PriceSource
+import com.mia.app.data.price.YahooIndexSource
 import com.mia.app.data.history.YahooCrumbHandshake
 import com.mia.app.data.history.YahooHistorySource
 import com.mia.app.data.fundamentals.ScreenerInSource
@@ -14,10 +16,12 @@ import com.mia.app.data.android.repo.CandleRepository
 import com.mia.app.data.android.repo.DefaultAccuracyRepository
 import com.mia.app.data.android.repo.DefaultCandleRepository
 import com.mia.app.data.android.repo.DefaultFundamentalsRepository
+import com.mia.app.data.android.repo.DefaultIndexRepository
 import com.mia.app.data.android.repo.DefaultPatternRepository
 import com.mia.app.data.android.repo.DefaultRedFlagRepository
 import com.mia.app.data.android.repo.DefaultSymbolRepository
 import com.mia.app.data.android.repo.FundamentalsRepository
+import com.mia.app.data.android.repo.IndexRepository
 import com.mia.app.data.android.repo.PatternRepository
 import com.mia.app.data.android.repo.RedFlagRepository
 import com.mia.app.data.android.repo.SymbolRepository
@@ -76,11 +80,27 @@ abstract class RepositoryModule {
     @Singleton
     abstract fun bindRedFlagRepository(impl: DefaultRedFlagRepository): RedFlagRepository
 
+    @Binds
+    @Singleton
+    abstract fun bindIndexRepository(impl: DefaultIndexRepository): IndexRepository
+
     // -------------------------------------------------------------------------- interfaces
 
     @Binds
     @Singleton
     abstract fun bindPriceSource(impl: NseBhavcopySource): PriceSource
+
+    /**
+     * The benchmark index source, bound by type so a test can substitute one.
+     *
+     * `YahooIndexSource` rather than an NSE CSV source, because docs/LIVE-PROBE.md measured all
+     * three NSE index-CSV shapes answering `404` while Yahoo's chart endpoint answered `200` for
+     * the same cookie+crumb handshake the app already performs. The rejected shapes stay in
+     * `IndexEndpoints.NSE_CSV_CANDIDATES` so a future one that answers is a one-line change.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindIndexSource(impl: YahooIndexSource): IndexSource
 
     @Binds
     @Singleton
@@ -141,5 +161,30 @@ abstract class RepositoryModule {
                 handshake = YahooCrumbHandshake(transport),
                 sleeper = { millis -> delay(millis) },
             )
+
+        /**
+         * planv2 W3: the benchmark index series.
+         *
+         * Given its **own** handshake rather than the history source's. That is a considered
+         * choice and not an oversight: the two are cached separately so a `429` on a symbol's
+         * per-symbol history cannot invalidate the benchmark session, and so the benchmark's
+         * daily fetch cannot spend the crumb a backfill is mid-way through using. Both handshakes
+         * cost one cookie request per process, and plan.md §13's budget covers two.
+         */
+        @Provides
+        @Singleton
+        fun provideYahooIndexSource(transport: HttpTransport): YahooIndexSource =
+            YahooIndexSource(
+                transport = transport,
+                handshake = YahooCrumbHandshake(transport, backoffMillis = INDEX_HANDSHAKE_BACKOFF_MILLIS),
+                sleeper = { millis -> delay(millis) },
+            )
+
+        /**
+         * The benchmark fetch runs at 19:00 IST alongside the bhavcopy, so it gets a longer
+         * crumb backoff than the interactive path: a retry after 1.5 s on a congested evening
+         * edge is a request that is very likely to be refused again.
+         */
+        const val INDEX_HANDSHAKE_BACKOFF_MILLIS: Long = 3_000L
     }
 }

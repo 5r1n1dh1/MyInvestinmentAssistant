@@ -21,6 +21,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * `fallbackToDestructiveMigration()` is therefore never called: a missing migration must be a
  * loud failure at development time, not a silent data loss in the field.
  *
+ * ### The 3 → 4 migration
+ * v4 adds `index_candles` — the benchmark index series. Purely additive: no existing table is
+ * touched, so the upgrade is lossless and a downgrade is still impossible rather than merely
+ * inadvisable. See [DOWNGRADE_NOT_SUPPORTED].
+ *
  * ### The 1 → 2 migration
  * v2 is purely additive: `statement_rows` and `derived_metrics` (so a cached fundamentals page
  * can still produce red-flag evidence — plan.md §8.3) and `watchlist` (so decision OQ-4's
@@ -113,10 +118,50 @@ object DatabaseMigrations {
     }
 
     /**
+     * 3 → 4.
+     *
+     * Adds `index_candles(symbol, date, open, high, low, close, volume, source)` — the benchmark
+     * that `PatternScanOptions.benchmarkCandles` reads.
+     *
+     * ### Why the table is created rather than seeded
+     * A benchmark that ships pre-populated would be a series of *some other date range*, and the
+     * relative-strength ratio would silently compare a stored stock close against a stale index
+     * level. The table starts empty; `EodRefreshWorker` fills it after the first successful
+     * fetch, and until then every scan reads the engine's documented "no benchmark — unscored"
+     * state. An honest absence costs a display line; a fabricated one costs every Context score.
+     *
+     * `IF NOT EXISTS` for the same reason as 1 → 2: Room runs a migration in a transaction, and an
+     * interrupted one must be re-runnable rather than unrecoverable without a wipe.
+     */
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `index_candles` (
+                    `symbol` TEXT NOT NULL,
+                    `date` TEXT NOT NULL,
+                    `open` REAL NOT NULL,
+                    `high` REAL NOT NULL,
+                    `low` REAL NOT NULL,
+                    `close` REAL NOT NULL,
+                    `volume` INTEGER NOT NULL,
+                    `source` TEXT NOT NULL,
+                    PRIMARY KEY(`symbol`, `date`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_index_candles_symbol` " +
+                    "ON `index_candles` (`symbol`)",
+            )
+        }
+    }
+
+    /**
      * Every migration, in order. `DatabaseModule` passes exactly this list to Room, which is
      * what makes "the migration exists" and "the migration is registered" the same fact.
      */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
     /**
      * A path from [MiaDatabase.DATABASE_VERSION] back down to [target] does not exist: v3 is a
@@ -124,5 +169,6 @@ object DatabaseMigrations {
      * Named so a future developer adding a destructive step has to delete this and think again.
      */
     const val DOWNGRADE_NOT_SUPPORTED: String =
-        "no downgrade path: v2 is additive over v1 (see DatabaseMigrations)"
+        "no downgrade path: every version so far is additive over the one before it (see " +
+            "DatabaseMigrations)"
 }
