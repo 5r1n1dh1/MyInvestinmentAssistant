@@ -48,6 +48,9 @@ data class ShareholdingSeries(
     /** Row labels the card published, so an absent holder can name its neighbours. */
     val publishedRowLabels: List<String> = emptyList(),
 ) {
+    /** No dated observation for this holder. Never a series of zeros — see the class KDoc. */
+    val isEmpty: Boolean get() = points.isEmpty()
+
     /** `true` when the card published this holder's row but no column resolved to a quarter. */
     val isUndated: Boolean get() = points.isEmpty() && publishedRowLabels.isNotEmpty()
 

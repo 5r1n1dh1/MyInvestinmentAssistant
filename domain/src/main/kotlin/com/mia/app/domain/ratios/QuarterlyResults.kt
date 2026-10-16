@@ -70,18 +70,36 @@ data class QuarterlyPoint(
     /** Chronological key. Strictly increasing in the calendar quarter, which is the point. */
     val sortKey: Long get() = year * 4L + quarter
 
-    val period: String get() = "${MONTH_ABBREVIATIONS[(quarter - 1).coerceIn(0, 3)]} $year"
+    val period: String get() = quarterLabel(year, quarter)
 
-    /** The label of the quarter immediately before this one, wrapping `Q1` to the prior year's Q4. */
-    val previousPeriod: String
-        get() = if (quarter == 1) "Dec ${year - 1}" else "${
-            MONTH_ABBREVIATIONS[(quarter - 2).coerceIn(0, 3)]} $year"
-        }
-
-    companion object {
-        private val MONTH_ABBREVIATIONS = listOf("Mar", "Jun", "Sep", "Dec")
-    }
+    /**
+     * The label of the quarter immediately before this one, wrapping `Q1` back to the prior
+     * year's `Dec`.
+     *
+     * Used only in the note explaining why a comparison could **not** be made, so the reader can
+     * see which quarter the app looked for.
+     */
+    val previousPeriod: String get() = quarterLabel(year, quarter - 1)
 }
+
+/**
+ * `"Jun 2026"` for `(2026, Q2)`.
+ *
+ * ### Why the app renders its own label instead of quoting the table's
+ * `QuarterRecord` carries a calendar `(year, quarter)` pair, not screener.in's header text — that is
+ * the whole reason the pair is chronological. The header is `"Jun 2026"`, so this reproduces it
+ * exactly for a pair the app received; it is never used to name a quarter the app did not.
+ */
+private fun quarterLabel(year: Int, quarter: Int): String {
+    // Asking for the quarter before a Q1 means the December of the year before, so the year rolls
+    // back and the month becomes the last one, rather than the month clamping to March and the year
+    // staying put — which would name a March quarter that is two quarters away.
+    val index = if (quarter < 1) 3 else (quarter - 1).coerceIn(0, 3)
+    val labelledYear = if (quarter < 1) year - 1 else year
+    return "${QUARTER_MONTH_ABBREVIATIONS[index]} $labelledYear"
+}
+
+private val QUARTER_MONTH_ABBREVIATIONS = listOf("Mar", "Jun", "Sep", "Dec")
 
 /**
  * One metric's quarterly picture: the latest figure, the two comparisons, and the series to draw.
@@ -101,10 +119,14 @@ data class QuarterlyComparison(
     val previousQuarter: QuarterlyPoint?,
     /** The same calendar quarter one year earlier, or `null`. */
     val sameQuarterPriorYear: QuarterlyPoint?,
-    /** `(latest ÷ previousQuarter − 1) × 100`. `null` when either endpoint is absent. */
-    val quarterOverQuarterPercent: Double?,
-    /** `(latest ÷ sameQuarterPriorYear − 1) × 100`. `null` when either endpoint is absent. */
-    val yearOnYearPercent: Double?,
+    /**
+     * `(latest ÷ previousQuarter − 1) × 100`. `null` when either endpoint is absent, when the
+     * earlier figure is exactly zero, or when both endpoints are negative — each with a note.
+     */
+    val quarterOverQuarterPercent: Double? = null,
+
+    /** `(latest ÷ sameQuarterPriorYear − 1) × 100`. `null` on the same three conditions. */
+    val yearOnYearPercent: Double? = null,
     /** Every readable quarter, **oldest first**, gaps dropped. The sparkline's input. */
     val series: List<QuarterlyPoint> = emptyList(),
     /** One sentence per comparison the card could not make. Empty when both were possible. */
@@ -169,6 +191,8 @@ object QuarterlyResults {
                 latest = null,
                 previousQuarter = null,
                 sameQuarterPriorYear = null,
+                quarterOverQuarterPercent = null,
+                yearOnYearPercent = null,
                 notes = listOf(absentReason(metric)),
             )
         }
@@ -221,11 +245,8 @@ object QuarterlyResults {
     }
 
     /** `"Jun 2026"` for a `year * 4 + quarter` key. The inverse of [QuarterlyPoint.sortKey]. */
-    private fun labelOf(key: Long): String {
-        val year = key / 4L
-        val quarter = (key % 4L).toInt() + 1
-        return QuarterlyPoint(year, quarter, 0.0).period
-    }
+    private fun labelOf(key: Long): String =
+        QuarterlyPoint((key / 4L).toInt(), (key % 4L).toInt() + 1, 0.0).period
 
     /**
      * `(now ÷ before − 1) × 100`, with the failure written down.

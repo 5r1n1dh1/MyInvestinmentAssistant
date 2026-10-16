@@ -167,22 +167,44 @@ class ScreenerQuarterlyResultsGoldenTest {
      * issues, splits, ESOPs — so an absent quarter is a real gap rather than a hole to smooth over.
      */
     @Test
-    fun `a gap in the series is named and the endpoints are the quarters either side of it`() {
+    fun `a gap is named and the comparison across it is refused`() {
         val withGap = listOf(
+            // Sep 2025, then Dec 2025 and Mar 2026 absent, then Jun 2026.
             com.mia.app.domain.model.QuarterRecord(2025, 3, sales = 100.0),
-            // 2025 Q4 absent.
-            com.mia.app.domain.model.QuarterRecord(2026, 1, sales = 130.0),
             com.mia.app.domain.model.QuarterRecord(2026, 2, sales = 140.0),
         )
         val comparison = QuarterlyResults.compare(withGap, QuarterlyMetric.SALES)
-        assertEquals(3, comparison.series.size)
-        assertTrue(
-            comparison.notes.any { it.contains("Dec 2025") && it.contains("skipped") },
-            "the missing quarter must be named: ${comparison.notes}",
-        )
-        // And it is not silently compared across: there is no Dec 2025 to compare with.
+        assertEquals(2, comparison.series.size)
+        val gapNote = comparison.notes.firstOrNull { it.contains("skipped") }
+        assertNotNull(gapNote, "the missing quarters must be named: ${comparison.notes}")
+        assertTrue(gapNote.contains("Dec 2025"), gapNote)
+        assertTrue(gapNote.contains("Mar 2026"), gapNote)
+        // And the comparison is refused rather than made against Sep 2025, which is two quarters back.
         assertNull(comparison.previousQuarter)
+        assertNull(comparison.quarterOverQuarterPercent)
         assertTrue(comparison.notes.any { it.contains("no quarter on quarter comparison") })
+        // Year on year is refused on the same rule: there is no Jun 2025 here either.
+        assertNull(comparison.sameQuarterPriorYear)
+        assertEquals(0, comparison.comparisonCount)
+    }
+
+    /**
+     * A gap that is **not** adjacent does not break the adjacent comparison.
+     *
+     * `Sep 2025 → Mar 2026 → Jun 2026` with `Dec 2025` missing: Mar 2026 is the immediately
+     * preceding quarter of Jun 2026, so the QoQ figure is legitimate and only the gap is reported.
+     */
+    @Test
+    fun `a gap away from the latest quarter does not suppress the adjacent comparison`() {
+        val records = listOf(
+            com.mia.app.domain.model.QuarterRecord(2025, 3, sales = 100.0),
+            com.mia.app.domain.model.QuarterRecord(2026, 1, sales = 130.0),
+            com.mia.app.domain.model.QuarterRecord(2026, 2, sales = 140.0),
+        )
+        val comparison = QuarterlyResults.compare(records, QuarterlyMetric.SALES)
+        assertEquals("Mar 2026", comparison.previousQuarter!!.period)
+        assertEquals(7.6923, comparison.quarterOverQuarterPercent!!, 1e-3)
+        assertTrue(comparison.notes.any { it.contains("Dec 2025") }, "${comparison.notes}")
     }
 
     /** A prior quarter of exactly zero has no percentage. Reported, not divided. */
