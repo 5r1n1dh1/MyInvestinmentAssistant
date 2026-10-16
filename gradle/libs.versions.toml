@@ -20,7 +20,10 @@ junit-platform = "1.11.4"
 # Android side (only resolved when an Android SDK is present).
 agp = "8.13.2"
 compileSdk = "36"
-minSdk = "26"
+# Raised from 26 for planv2 W7: `RenderEffect`/`Modifier.blur` needs API 31, and the glassmorphism
+# directive requires a real blur everywhere rather than a partial one. The dropped API 26–30 range
+# is an owner-accepted tradeoff, recorded in planv2.md §2.
+minSdk = "31"
 targetSdk = "36"
 room = "2.8.5"
 hilt = "2.57.1"
