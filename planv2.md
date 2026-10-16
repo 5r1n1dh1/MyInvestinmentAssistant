@@ -72,24 +72,48 @@ listed so parallel agents cannot collide.
 **The finding:** score correlates *backwards* with outcomes; **target distance**
 correlates forward (≤3% → 83% touched within 5 bars vs 10% base rate).
 
+> **Landed in two parts. Read this before assuming the feature works.**
+>
+> - **PR #5 — the engine (`:domain`).** `ProjectionGate` + `ProjectionCalibration` + the
+>   satisfiability test. The gate fires on **156 of 976** walk-forward candidates through the real
+>   `PatternEngine.verdictFor` path. `PROJECT_THRESHOLD` survives as a deprecated constant so the
+>   history stays inspectable.
+> - **W1b — the downstream wiring (`:app`, `:android-data`), still in flight.** The engine could
+>   decide `PROJECT` while six call sites still read the retired constant, which made the app
+>   degrade to render-only: **no projected level drawn, no notification scheduled.** W1's author
+>   flagged this as out of scope; it is the difference between "the engine can project" and "the
+>   user ever sees one", so it is tracked as its own item rather than folded into #5.
+
+**Two corrections the measurement forced — record these, do not quietly revert them:**
+- **The unfiltered hit rate is 34 %, not the 16.45 %** in gap A6. The 16.45% comes from a
+  *stand-in* detector (last five bars' range) that projects far wider levels than the real
+  detectors. Both are honest numbers about different things.
+- **`Match.score` still reaches 99** in stored matches. It is display-only and anti-correlated with
+  outcomes; anything labelling a band by the old threshold is now misleading to a reader.
+
 **Fix:**
 - New `domain/pattern/ProjectionGate.kt`: projection + alert fires when
   (a) a measured-move level exists, (b) `distance = |level − close| / close ≤
   DISTANCE_MAX` (calibrated, default 5%), (c) `barsSufficient`, (d) `regimeAligned`.
   **Score no longer gates projection** — it remains a display-only shape-fit metric.
+  `ProjectionGate.blocker(...)` reports *which* condition stopped a match, so the UI can state
+  "why this did not project" instead of showing nothing.
 - `domain/pattern/ProjectionCalibration.kt`: the distance-bucket × horizon hit
-  table **computed from the committed fixture** (17 large caps, 372 bars, walk-forward,
-  5-bar stride) — a test must reproduce the table; no hand-typed constants.
-- `ProjectionGateSatisfiabilityTest`: asserts ≥ K samples cross the gate on the
-  fixture **and** that the end-to-end path fires at least once. This test class is
-  the permanent guard against the A1 bug (a gate nothing can satisfy).
-- UI ordering switches to **distance-aware** (nearest calibrated level first);
-  score chip stays, labelled shape fidelity only.
+  table **computed from the committed fixture** (20 large caps, 372 sessions, walk-forward,
+  5-bar stride, 875 settled candidates) — a test reproduces the table; no hand-typed constants.
+- `ProjectionGateSatisfiabilityTest`: asserts the gate is satisfiable end-to-end on the
+  fixture. This test class is the permanent guard against the A1 bug (a gate nothing can satisfy).
+- **The calibration's own lesson: a hit rate without its control is close to meaningless.** At h5,
+  a 5 %-wide level is touched 10 % of the time with *no pattern involved*; a 1 %-wide level is
+  touched 68 %. So the ≤1 % row (90 %) is barely an edge while the 5 % row (65 %) is a **6.5× lift**
+  — which is exactly why the gate stops at 5 %: past it the level is out of reach, and below 2 %
+  chance has already reached it.
 
-**Files:** `domain/pattern/{ProjectionGate,ProjectionCalibration,ProjectionGateTest}.kt`,
+**Files:** `domain/pattern/{ProjectionGate,ProjectionCalibration}.kt`,
 `domain/pattern/PatternEngine.kt` (gate wiring), `app/.../ui/patterns/*`.
-**Acceptance:** gate fires ≥ 1× on fixture; score bucket vs hit-rate table renders
-with `n`s; old `PROJECT_THRESHOLD` removed or retired as display-only.
+**Acceptance:** ✅ gate fires on 156/976 fixture candidates (was 0); ✅ calibration table
+reproduced per test run; ✅ satisfiability test guards the bug class; ⏳ downstream call sites
+routed through the gate (W1b).
 
 ### W2 — Track-record depth (gaps A4, A5, A6, B1-partial) · P1 · `:domain`, `:app`
 
@@ -142,6 +166,23 @@ candidate counts; no rate without `n` (existing `HitRateText` guard still green)
 **Also measured:** `nsearchives.nseindia.com` — NSE's *documented* primary — fails from GitHub's
 runners with `HTTP/2 INTERNAL_ERROR` on every attempt, while `archives.nseindia.com` answers 200.
 The app's mirror choice is vindicated; do not "fix" it toward the documented primary.
+
+> **Landed — PR #4.** `^NSEI` / `^NSEMDCP50` / `^NSEMDCP150` via the Yahoo chart endpoint; the
+> three dead NSE `ind_close_all` shapes stay in `IndexEndpoints.NSE_CSV_CANDIDATES` with their
+> 404s recorded and pinned by a test. Breadth (`MarketBreadth`) and the liquidity gate (`Liquidity`)
+> are in `:domain` with tests; the index repository, Room entity/migration and EOD fetch are wired
+> in `:android-data`; the cap-band chip and liquidity notice are on the stock-detail header via a
+> separate `StockContextViewModel` — deliberately not folded into the price header's source, so a
+> missing cohort asset cannot stop the price header drawing.
+>
+> **Two honest gaps the agent reported rather than papered over:**
+> 1. **Breadth is computed and tested but not rendered** — the "market pulse" card belongs on
+>    `StockListScreen.kt`, owned by a parallel agent at the time. Still to do.
+> 2. **`:android-data`'s tests were not compiled by CI at all.** The `jvm` job excludes the module
+>    (`-PskipAndroid`) and `assembleDebug` compiles without running tests — so
+>    `DefaultIndexRepositoryTest`, the test that pins the honest null-benchmark fallback, was
+>    verified by nothing. **Fixed on `main`**: `:android-data:testDebugUnitTest` now runs in the
+>    android job, before the build.
 
 **Files:** `data/price/{IndexSource,NseIndexSource}.kt`, `domain/technical/MarketBreadth.kt`,
 `android-data/.../repo/DefaultPatternRepository.kt`, `app/.../ui/stocklist/*`, `app/.../ui/detail/*`.
