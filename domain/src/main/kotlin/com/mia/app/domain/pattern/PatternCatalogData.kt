@@ -85,6 +85,9 @@ internal object PatternCatalogData {
                     "breaks the lower boundary.",
                 doesNotPredict = "A rising wedge can break either way; the narrowing is the " +
                     "pattern, not a direction.",
+                invalidation = "A close back through the upper boundary while the lower boundary " +
+                    "still holds shows the narrowing was a pause in the rise, not its end, " +
+                    "and nothing is projected from it.",
             ),
         ),
 
@@ -127,6 +130,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "Until the neckline breaks it is an unconfirmed shape, and the " +
                     "app scores it as such. It also marks no price level and no duration: the " +
                     "projected move is a geometry-based measurement, not a target.",
+                invalidation = "A close back above the right shoulder's high before the neckline " +
+                    "breaks shows the three peaks were never one formation, so there is " +
+                    "nothing to measure from them.",
             ),
         ),
         PatternSpec(
@@ -163,6 +169,9 @@ internal object PatternCatalogData {
                     "completed on the neckline break.",
                 doesNotPredict = "Unconfirmed until the neckline breaks. As with its mirror it " +
                     "specifies no level and no duration.",
+                invalidation = "A close back below the right shoulder's low before the resistance " +
+                    "breaks shows the three troughs were never one formation, so nothing " +
+                    "is measured from them.",
             ),
         ),
         PatternSpec(
@@ -198,6 +207,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "The trough is a level, not a forecast. And the two peaks need not " +
                     "be identical — the app measures their symmetry rather than demanding a perfect " +
                     "match, because the textbook's own tolerance is wide.",
+                invalidation = "A close back above the trough between the peaks before it gives way " +
+                    "shows the two peaks were never one formation; and a second peak far " +
+                    "from the first's height falls outside the symmetry the app measures.",
             ),
         ),
         PatternSpec(
@@ -232,6 +244,9 @@ internal object PatternCatalogData {
                     "the break of the peak.",
                 doesNotPredict = "The peak is a level, not a forecast, and the pattern names no " +
                     "duration.",
+                invalidation = "A close back below the peak between the troughs before it gives way " +
+                    "shows the two troughs were never one formation; and a second trough " +
+                    "far from the first's depth falls outside that symmetry.",
             ),
         ),
 
@@ -267,6 +282,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "It is a statement about converging boundaries, not about the " +
                     "break's size being certain. The pattern also depends on a prior uptrend, " +
                     "which the app scores separately rather than assuming.",
+                invalidation = "A close below the rising support line while the flat resistance is " +
+                    "still untouched shows the two boundaries were never converging, so " +
+                    "there is no height to measure.",
             ),
         ),
         PatternSpec(
@@ -298,6 +316,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with an existing downtrend pausing and then continuing.",
                 doesNotPredict = "As with its mirror, the converging boundaries say nothing about " +
                     "how far a break would travel.",
+                invalidation = "A close above the falling resistance line while the flat support is " +
+                    "still untouched shows the boundaries were never converging, so the " +
+                    "pattern's height is not measurable either.",
             ),
         ),
         PatternSpec(
@@ -341,6 +362,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "The measured move is a geometric projection from the pole, not a " +
                     "target — the app labels it as such. And the app cannot score a flag whose pole " +
                     "has not yet formed, which is the commonest early case.",
+                invalidation = "A close below the flag's lower boundary, or a channel whose two lines " +
+                    "drift apart, shows the pause was not a textbook flag and there is no " +
+                    "pole to project from.",
             ),
         ),
         PatternSpec(
@@ -381,6 +405,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a falling trend resuming after the pause.",
                 doesNotPredict = "As with its mirror: a geometric projection, not a target, and " +
                     "nothing to score until the pole exists.",
+                invalidation = "A close above the flag's upper boundary, or a channel whose two lines " +
+                    "drift apart, shows the pause was not a textbook flag and the pole's " +
+                    "height projects nothing.",
             ),
         ),
     )
@@ -419,6 +446,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a change from a rise toward a decline.",
                 doesNotPredict = "Three similar peaks make the pattern harder to distinguish from " +
                     "ordinary chop, and the third peak is the confirmation rather than a prediction.",
+                invalidation = "A third peak that cannot hold its own height and gives the fall back " +
+                    "to the second trough leaves the sequence unfinished: a triple top " +
+                    "needs a break below both troughs.",
             ),
         ),
         PatternSpec(
@@ -433,6 +463,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a change from a decline toward a rise.",
                 doesNotPredict = "Shares the triple top's difficulty of being distinct from " +
                     "ordinary chop.",
+                invalidation = "A third trough that cannot hold its own depth and gives the rise back " +
+                    "to the second peak leaves the sequence unfinished: a triple bottom " +
+                    "needs a break above both peaks.",
             ),
         ),
         PatternSpec(
@@ -448,6 +481,9 @@ internal object PatternCatalogData {
                     "longer period than the other reversals.",
                 doesNotPredict = "It spans many sessions, so it identifies neither a session nor a " +
                     "level where it began.",
+                invalidation = "A new low below the bowl's floor, or a retracement that takes back " +
+                    "more than half the fall, shows the arc is still forming rather than " +
+                    "finished.",
             ),
         ),
         PatternSpec(
@@ -461,6 +497,9 @@ internal object PatternCatalogData {
                 howItLooks = "A rising arc, a rounded top, and a falling arc.",
                 textbookSays = "Associated with a change from a rise toward a decline.",
                 doesNotPredict = "As with its inverse, it identifies no single decisive session.",
+                invalidation = "A new high above the dome, or a fall that gives back less than half " +
+                    "the rise, leaves the rollover unconfirmed: an arc has no single " +
+                    "session that decides it.",
             ),
         ),
         PatternSpec(
@@ -475,6 +514,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a quick change of direction.",
                 doesNotPredict = "A V is mostly a description of steepness. It carries no level and " +
                     "no confirmation beyond the shape itself.",
+                invalidation = "A close back below the low that began the fall, or a recovery spread " +
+                    "over more than a few sessions, makes it a slow bottom rather than a " +
+                    "V.",
             ),
         ),
         PatternSpec(
@@ -491,6 +533,8 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a gap-driven change in the traded price level.",
                 doesNotPredict = "It is usually a consequence of news or a corporate action rather " +
                     "than a forecast, and the app cannot distinguish those cases from price alone.",
+                invalidation = "A move back into the original range without a gap through it means " +
+                    "the range was never really left, so there is no island to read.",
             ),
         ),
 
@@ -509,6 +553,9 @@ internal object PatternCatalogData {
                     "ambiguous by nature that it is sometimes called a coil.",
                 doesNotPredict = "Its direction is genuinely undetermined until it breaks, so it is " +
                     "the clearest case of a pattern that names no outcome.",
+                invalidation = "Boundaries that widen rather than converge, or a break that comes " +
+                    "before the lines have converged, make it an ordinary range, and " +
+                    "nothing was set up to continue.",
             ),
         ),
         PatternSpec(
@@ -523,6 +570,8 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a slowing decline, often read as a reversal on a " +
                     "break of the upper boundary.",
                 doesNotPredict = "As with its inverse, the narrowing does not fix a direction.",
+                invalidation = "A close back through the lower boundary while the upper one still " +
+                    "holds shows the narrowing was a pause in the decline, not its end.",
             ),
         ),
         PatternSpec(
@@ -538,6 +587,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a rising trend resuming.",
                 doesNotPredict = "It differs from a flag by degree, not by kind, so the two are " +
                     "easy to confuse and the app does not yet attempt the distinction.",
+                invalidation = "A pennant with no pole in front of it has no impulse to measure, so " +
+                    "there is nothing to project; and one that widens rather than narrows " +
+                    "is not the shape.",
             ),
         ),
         PatternSpec(
@@ -554,6 +606,8 @@ internal object PatternCatalogData {
                     "without saying which.",
                 doesNotPredict = "A rectangle's whole content is indecision. Nothing in the shape " +
                     "favours an upward or downward break.",
+                invalidation = "A break taken back inside the same range within the window it was " +
+                    "supposed to hold shows the levels were only touched, not defended.",
             ),
         ),
         PatternSpec(
@@ -569,6 +623,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a sustained recovery in a rising trend.",
                 doesNotPredict = "It is the longest of the textbook formations, so its early stages " +
                     "are indistinguishable from an ordinary decline until much later.",
+                invalidation = "A handle that falls back into the cup instead of holding above the " +
+                    "rim, or a close below the rim before the handle is done, shows the " +
+                    "interruption was a decline rather than a pause.",
             ),
         ),
         PatternSpec(
@@ -586,6 +643,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "This is the case most often mistaken for a forecast. It is a " +
                     "geometric projection from a past height, and the app labels every projected " +
                     "path with " + MatchScoreLabels.NOT_A_TARGET_WARNING,
+                invalidation = "The projection stops describing anything the moment the structure it " +
+                    "measures changes: a move out of the flag that is not a clean break " +
+                    "leaves the impulse and its projection undefined.",
             ),
         ),
         PatternSpec(
@@ -600,6 +660,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a trend continuing along its own line.",
                 doesNotPredict = "A channel is defined by its slope, so it describes the drift " +
                     "already present rather than adding new information.",
+                invalidation = "Two lines that are not parallel — one steepening as the other " +
+                    "flattens — make a wedge or a broadening formation, and a projection " +
+                    "from those is arithmetic on a shape that is not there.",
             ),
         ),
 
@@ -617,6 +680,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with indecision within a session.",
                 doesNotPredict = "Indecision is the reading and nothing more. It is not a signal of " +
                     "a turn in either direction, and it occurs in trends as readily as in ranges.",
+                invalidation = "A doji followed by a session that closes far from its level shows the " +
+                    "doji had named no side at all: it is not evidence for the direction " +
+                    "it was resolved in.",
             ),
         ),
         PatternSpec(
@@ -632,6 +698,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with one side controlling the session's range.",
                 doesNotPredict = "It describes a single session's coverage and says nothing about " +
                     "what follows it.",
+                invalidation = "A marubozu whose next session closes back inside its range shows the " +
+                    "one-sided session did not set even its own direction, let alone the " +
+                    "following one's.",
             ),
         ),
         PatternSpec(
@@ -648,6 +717,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a contraction of the traded range.",
                 doesNotPredict = "Contraction is the whole content of the pattern; it does not " +
                     "indicate which way the range re-expands.",
+                invalidation = "A small inside bar whose next session engulfs both bars shows the " +
+                    "contraction was one session of noise rather than a coiling range, so " +
+                    "the shape was read in the wrong order.",
             ),
         ),
         PatternSpec(
@@ -661,6 +733,9 @@ internal object PatternCatalogData {
                 howItLooks = "The second bar's shadows extend beyond the first's on both sides.",
                 textbookSays = "Associated with an expansion of the traded range.",
                 doesNotPredict = "As with the inside bar, it describes range and nothing more.",
+                invalidation = "An outside bar whose next session closes back inside the previous " +
+                    "bar's range shows the expansion was one session of noise rather than " +
+                    "a re-pricing.",
             ),
         ),
         PatternSpec(
@@ -677,6 +752,8 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with sustained buying across three sessions.",
                 doesNotPredict = "Three sessions do not make a trend, and the pattern is as common " +
                     "partway through a rise as at its start.",
+                invalidation = "A session closing back below the third soldier's open, giving up more " +
+                    "than half of the three-bar advance, shows the sequence did not carry.",
             ),
         ),
         PatternSpec(
@@ -690,6 +767,8 @@ internal object PatternCatalogData {
                 howItLooks = "Three long bodies of the same direction with falling closes.",
                 textbookSays = "Associated with sustained selling across three sessions.",
                 doesNotPredict = "As with its inverse, three sessions do not establish a trend.",
+                invalidation = "A session closing back above the third crow's open, giving up more " +
+                    "than half of the three-bar decline, shows the sequence did not carry.",
             ),
         ),
         PatternSpec(
@@ -705,6 +784,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a reduction in momentum between the two sessions.",
                 doesNotPredict = "It describes a single relationship between two bodies and " +
                     "carries no direction.",
+                invalidation = "A small body inside a large one, mid-trend, with the range simply " +
+                    "continuing, describes ordinary trading rather than a pause, and the " +
+                    "textbook reading is void.",
             ),
         ),
         PatternSpec(
@@ -719,6 +801,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a repeated failure to make a higher high.",
                 doesNotPredict = "Matching highs are a common coincidence in a narrow range, so the " +
                     "pattern has no meaning without the context around it.",
+                invalidation = "Two equal highs inside a range that then makes a higher high are not " +
+                    "a failed attempt at one: equal prices in a narrow range are a " +
+                    "coincidence the context has to rule out.",
             ),
         ),
         PatternSpec(
@@ -733,6 +818,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a repeated failure to make a lower low.",
                 doesNotPredict = "Shares the tweezer tops' weakness: without context it is a " +
                     "coincidence of two equal prices.",
+                invalidation = "A pair of equal lows followed by a decisive break below them is a " +
+                    "support that gave way rather than a double test of one, and the two " +
+                    "bars never named a side.",
             ),
         ),
         PatternSpec(
@@ -749,6 +837,9 @@ internal object PatternCatalogData {
                     "to a decline.",
                 doesNotPredict = "It is a single session. Its resemblance to the hammer is exactly " +
                     "why position in the trend has to be measured rather than assumed.",
+                invalidation = "An inverted hammer whose next session closes below the session's low " +
+                    "shows the rejection failed; with no prior decline beneath it there is " +
+                    "also no position to read it from.",
             ),
         ),
         PatternSpec(
@@ -766,6 +857,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "The same shape means opposite things in opposite positions, " +
                     "which is why the app measures trend context as a scored factor rather than " +
                     "assuming it.",
+                invalidation = "A hanging man whose next session closes above the session's high " +
+                    "shows the rejection failed — and the same shape at the bottom of a " +
+                    "fall is a hammer, not this.",
             ),
         ),
         PatternSpec(
@@ -781,6 +875,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with the continuation of an established move.",
                 doesNotPredict = "Kickers usually accompany news or a corporate action rather than " +
                     "forecasting anything.",
+                invalidation = "A gap that opens and closes inside the previous session's range is " +
+                    "not a kicker at all, and a gap left by a corporate action is an event " +
+                    "rather than a two-candle setup.",
             ),
         ),
 
@@ -798,6 +895,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with the end of a move that has been sustained a long time.",
                 doesNotPredict = "Extreme volume can mark continuation as easily as exhaustion, so " +
                     "the pattern does not by itself indicate a turn.",
+                invalidation = "A climax session followed by more heavy volume and further price " +
+                    "extension is continuation rather than exhaustion: the move has to end " +
+                    "before the pattern reads as a top.",
             ),
         ),
         PatternSpec(
@@ -812,6 +912,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a market waiting, often shortly before a move.",
                 doesNotPredict = "It describes a lull and its cause is not observable from volume " +
                     "alone.",
+                invalidation = "Volume can fall while the price range widens, and then there is no " +
+                    "coiling to release — a dry-up without a narrowing range is not the " +
+                    "pattern.",
             ),
         ),
         // ------------------------------------------------------------ candlestick (ids 1..6)
@@ -849,6 +952,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "It describes two sessions only, and says nothing about the days " +
                     "around them. A textbook needs a downtrend before it for the reading to carry " +
                     "its usual meaning, and the app measures that as a separate factor.",
+                invalidation = "An engulfing body followed by a session closing back inside the first " +
+                    "candle's body shows the two-session reversal failed, and without a " +
+                    "prior decline it is only a change of balance.",
             ),
         ),
         PatternSpec(
@@ -865,6 +971,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a shift toward sellers over those two sessions.",
                 doesNotPredict = "It describes two sessions. Like its bullish mirror it carries no " +
                     "information about the sessions that follow.",
+                invalidation = "An engulfing body followed by a session closing back above the first " +
+                    "candle's body shows the shift failed, and the same shape printed " +
+                    "mid-rise is only a pause.",
             ),
         ),
         PatternSpec(
@@ -883,6 +992,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "One candle cannot confirm anything on its own. The textbook " +
                     "requires it to follow a decline, and a confirmation candle; the app scores " +
                     "both as separate factors rather than assuming them.",
+                invalidation = "A hammer whose next session closes below the session's low shows the " +
+                    "rejection did not hold; without a prior decline there is also no " +
+                    "position for the textbook reading.",
             ),
         ),
         PatternSpec(
@@ -899,6 +1011,9 @@ internal object PatternCatalogData {
                     "end to a rise.",
                 doesNotPredict = "As with the hammer, a single candle is not a signal on its own " +
                     "and says nothing about later sessions.",
+                invalidation = "A shooting star whose next session closes above the session's high " +
+                    "shows the rejection did not hold; and one printed mid-range rather " +
+                    "than after a rise has no position to be read from.",
             ),
         ),
         PatternSpec(
@@ -916,6 +1031,9 @@ internal object PatternCatalogData {
                 doesNotPredict = "Three candles are still three sessions. It establishes neither a " +
                     "level nor a duration, and the app measures the recovery as a fraction rather " +
                     "than assuming it is complete.",
+                invalidation = "A morning star whose third candle gives back its whole body, or whose " +
+                    "middle candle extends the fall instead of stalling it, was never the " +
+                    "three-bar bottoming the textbook describes.",
             ),
         ),
         PatternSpec(
@@ -932,6 +1050,9 @@ internal object PatternCatalogData {
                 textbookSays = "Associated with a topping process after a rise.",
                 doesNotPredict = "As with the morning star, it covers three sessions and nothing " +
                     "beyond them.",
+                invalidation = "An evening star whose third candle closes back above the middle " +
+                    "candle's body, or whose middle candle extends the rise, was never the " +
+                    "three-bar topping the textbook describes.",
             ),
         ),
 

@@ -289,6 +289,11 @@ class PatternCatalogTest {
                 "howItLooks" to entry.howItLooks,
                 "textbookSays" to entry.textbookSays,
                 "doesNotPredict" to entry.doesNotPredict,
+                // An invalidation is the sentence most likely to drift into advice, because it is
+                // the one that talks about what happens next ("if it breaks, the pattern is
+                // void") and a single extra clause turns it into a forecast. It is scanned with
+                // the rest rather than trusted.
+                "invalidation" to entry.invalidation,
             )
             for ((field, text) in fields) {
                 val lower = text.lowercase()
@@ -326,6 +331,83 @@ class PatternCatalogTest {
                 spec.shapeSummary.length <= 120,
                 "${spec.name}'s shape summary is ${spec.shapeSummary.length} chars; " +
                     "it should name a shape, not explain it",
+            )
+        }
+    }
+
+    // ------------------------------------------------- invalidation: the gap E4 content
+
+    /**
+     * gaps.md E4: the glossary taught descriptions and stopped there, so a row with no
+     * invalidation is the defect this workstream exists to close.
+     *
+     * The field has no default in the schema either, so a blank can only come from a sentence of
+     * whitespace — which is why the length floor is here rather than another `isNotBlank`.
+     */
+    @Test
+    fun `every entry states what would prove the pattern wrong`() {
+        for (spec in PatternCatalog.all) {
+            assertTrue(
+                spec.glossary.invalidation.isNotBlank(),
+                "${spec.name} has a blank invalidation condition",
+            )
+            assertTrue(
+                spec.glossary.invalidation.length > 40,
+                "${spec.name} has a token invalidation: " +
+                    "\"${spec.glossary.invalidation}\"",
+            )
+        }
+    }
+
+    /**
+     * An invalidation two rows share verbatim is a disclaimer wearing the field's name, which is
+     * the whole thing E4 says the catalogue was missing.
+     *
+     * The bound is two rather than one because a mirror pair may legitimately state the same
+     * condition — but mirrored words are still different strings, so a repeat at all has to be
+     * copy-pasted rather than derived. Anything past two rows is a template, not an analysis.
+     */
+    @Test
+    fun `no invalidation sentence is reused across more than two rows`() {
+        val shared = PatternCatalog.all.groupBy { it.glossary.invalidation }.filterValues { it.size > 1 }
+        for ((text, rows) in shared) {
+            assertTrue(
+                rows.size <= 2,
+                "${rows.size} rows share one invalidation verbatim in ${rows.map { it.name }}: " +
+                    "\"$text\". Each row's invalidation has to be its own.",
+            )
+        }
+    }
+
+    /**
+     * The nine evaluated patterns get a genuinely different condition each.
+     *
+     * Stronger than the reuse bound above, because these are the rows the app scores: two sharing
+     * a condition would mean a reader cannot tell which formation they are looking at from the one
+     * sentence meant to distinguish it.
+     */
+    @Test
+    fun `the evaluated patterns each state their own invalidation`() {
+        val evaluated = PatternCatalog.evaluated
+        assertTrue(evaluated.isNotEmpty(), "no evaluated rows")
+        val shared = evaluated.groupBy { it.glossary.invalidation }.filterValues { it.size > 1 }
+        assertTrue(
+            shared.isEmpty(),
+            "evaluated patterns share an invalidation: " +
+                shared.keys.joinToString() +
+                " — each one's break level differs, so each sentence should too",
+        )
+        // …and an invalidation is a claim about geometry, so it has to name an observable price
+        // event. A sentence mentioning no close, boundary, level or break is a disclaimer.
+        val observables = listOf(
+            "close", "boundary", "line", "break", "level", "pole", "symmetry", "height",
+        )
+        for (spec in evaluated) {
+            val text = spec.glossary.invalidation.lowercase()
+            assertTrue(
+                observables.any { text.contains(it) },
+                "${spec.name}'s invalidation names no observable price event: " +
+                    "\"${spec.glossary.invalidation}\"",
             )
         }
     }
