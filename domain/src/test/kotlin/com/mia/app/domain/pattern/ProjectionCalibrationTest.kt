@@ -36,8 +36,12 @@ import kotlin.test.assertTrue
  *    level of the same size with no pattern involved — the whole reason the gate exists.
  * 2. **The curve falls with distance.** Every reportable bucket is at or below the one inside it,
  *    so the gate is cutting in the direction the data points.
- * 3. **The unfiltered rate is far below a coin flip.** Roughly one pattern in six is reached inside
- *    five bars. Publishing anything stronger than that is the failure mode plan.md §1.4 is about.
+ * 3. **The unfiltered rate is far below a coin flip.** Measured here: about a third of the real
+ *    detectors' levels are reached inside five bars, and most of those are the tight ones. (The
+ *    app's 16.45 % headline in `RealHistorySimulationTest` is a *stand-in* detector — the last five
+ *    bars' range — which projects much wider levels; the real detectors project tighter ones, which
+ *    is why this table is higher at every distance.) Publishing the tight-bucket rate as if it were
+ *    the overall rate is the failure mode plan.md §1.4 is about.
  *
  * ### Every number carries its sample size
  * Cells are printed with `n` and a bucket below [MatchScorePolicy.MIN_HIT_RATE_SAMPLES] is never
@@ -58,7 +62,7 @@ class ProjectionCalibrationTest {
         assertTrue(
             rate > 60.0,
             "a level within 3 % was reached only ${"%.1f".format(rate)} % of the time (n=${tight.samples}); " +
-                "the measurement this gate rests on found 83 %",
+                "the measurement this gate rests on put it at 82 %",
         )
         assertTrue(
             base < 20.0,
@@ -121,26 +125,32 @@ class ProjectionCalibrationTest {
     }
 
     @Test
-    fun `theGateBoundaryIsWhereTheLiftOverTheBaseRateEnds`() {
+    fun `every bucket inside the gate beats the no-pattern base rate of the same size`() {
+        // DISTANCE_MAX = 5 % is the edge the gate draws, so the claim that justifies it is: inside
+        // that edge, a level the app drew is reached several times more often than a level of the
+        // *same size* drawn with no pattern at all. The control is drawn at each bucket's own edge —
+        // comparing a 1 % level against a 5 % base rate would flatter the pattern for the wrong
+        // reason.
         val table = ProjectionFixture.calibration
-        val base = assertNotNull(table.baseRatePct(H5))
-        val insideGate = assertNotNull(table.bucket(DistanceBucket.WITHIN_5).hitRatePct(H5))
-
-        // DISTANCE_MAX = 5 % is the edge the gate draws. Inside it the level is reached several
-        // times more often than chance; past it the curve decays back toward the base rate, which is
-        // why the gate stops there.
-        assertTrue(
-            insideGate >= base * 2,
-            "the bucket the gate admits (within 5 %) was reached ${"%.1f".format(insideGate)} % of the " +
-                "time against a ${"%.1f".format(base)} % base rate — the gate would be admitting noise",
-        )
-        val far = assertNotNull(table.bucket(DistanceBucket.BEYOND_12).hitRatePct(H5))
-        assertTrue(
-            far <= base * 2,
-            "a level more than 12 % away was reached ${"%.1f".format(far)} % of the time against a " +
-                "${"%.1f".format(base)} % base rate, so the distance curve has not decayed where the " +
-                "gate says it has",
-        )
+        DistanceBucket.entries
+            .filter { it.maxPercent != null && it.maxPercent <= ProjectionGate.DISTANCE_MAX_PERCENT }
+            .forEach { bucket ->
+                val rate = assertNotNull(table.bucket(bucket).hitRatePct(H5), "${bucket.label} is empty")
+                val base = assertNotNull(
+                    ProjectionCalibration.baseRatesPct(
+                        candlesBySymbol = ProjectionFixture.candlesBySymbol,
+                        horizons = ProjectionCalibration.HORIZONS,
+                        distancePercent = bucket.maxPercent!!,
+                    )[H5],
+                    "no base rate was computed for ${bucket.label}",
+                )
+                assertTrue(
+                    rate >= base * 2,
+                    "${bucket.label} was reached ${"%.1f".format(rate)} % of the time against a " +
+                        "${"%.1f".format(base)} % base rate at the same level size — the gate would be " +
+                        "admitting a level that is no better than chance",
+                )
+            }
     }
 
     @Test
@@ -158,11 +168,6 @@ class ProjectionCalibrationTest {
         // A bucket below the sample floor says so instead of quoting a percentage.
         val withheld = table.byBucket.firstOrNull { it.samples in 1 until MatchScorePolicy.MIN_HIT_RATE_SAMPLES }
         withheld?.let { assertTrue(!it.isReportable) }
-    }
-
-    @Test
-    fun `zz temporary dump of the measured table and the gate census`() {
-        kotlin.test.fail(ProjectionFixture.report() + "\n\n" + ProjectionFixture.gateReport())
     }
 
     private companion object {
@@ -239,23 +244,5 @@ internal object ProjectionFixture {
             append("candidates=${table.totalSamples} incomplete=${table.incomplete}")
         }
         return (listOf("=== PROJECTION CALIBRATION ===", header) + table.renderTable()).joinToString("\n")
-    }
-
-    /** One line describing how many real candidates the gate actually admitted. */
-    fun gateReport(): String {
-        val candidates = walk.candidates
-        val projecting = candidates.filter { it.verdict == MatchScorePolicy.Verdict.PROJECT }
-        val windows = candidates.filter { it.scanVerdict == MatchScorePolicy.Verdict.PROJECT }
-            .map { it.symbol to it.projectedOn }
-            .distinct()
-        val byPattern = projecting.groupingBy { it.match.name }.eachCount()
-            .entries.sortedByDescending { it.value }
-            .joinToString { "${it.key}=${it.value}" }
-        return "=== PROJECTION GATE ===\n" +
-            "candidates=${candidates.size} projecting=${projecting.size} " +
-            "projectingWindows=${windows.size} maxScore=${candidates.maxOf { it.match.score }} " +
-            "lowestProjectingScore=${projecting.minOfOrNull { it.match.score }}\n" +
-            "byPattern: $byPattern\n" +
-            "scoreRange=${candidates.minOf { it.match.score }}..${candidates.maxOf { it.match.score }}"
     }
 }

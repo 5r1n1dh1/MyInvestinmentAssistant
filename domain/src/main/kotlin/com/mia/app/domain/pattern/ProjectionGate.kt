@@ -33,22 +33,26 @@ import kotlin.math.abs
  *
  * ### What the same measurement found instead
  * Bucketing by the distance from the breakout close to the projected level — the quantity a reader
- * would have to be right about — inverts the result:
+ * would have to be right about — inverts the result. Reproduced on this fixture by
+ * `ProjectionCalibrationTest` (20 large caps, 875 settled candidates, 5-bar stride, reach inside
+ * five bars, against a no-pattern base rate drawn at the same level size):
  *
  * ```
- * target within 2%   87 % touched within 5 bars    n=87    base rate 10 %
- * target within 3%   83 %                          n=119
- * target within 4%   74 %                          n=167
- * target within 5%   66 %                          n=197
+ * level within 1 %   90 %   n=49
+ * level within 2 %   87 %   n=87
+ * level within 3 %   82 %   n=121
+ * level within 4 %   73 %   n=169
+ * level within 5 %   65 %   n=203
+ * beyond 12 %        31 %   n=344
+ * base rate, no pattern, 5 % away:  10 %   (1 % 3 % 5 % 10 % 22 % 38 % at h1…h20)
  * ```
  *
- * A level within 3 % is touched 83 % of the time inside five bars, against a 10 % no-pattern base
+ * A level within 3 % is touched 82 % of the time inside five bars, against a 10 % no-pattern base
  * rate — and 87 % of those touches land on the very next bar. So the signal exists, it is
  * concentrated in tight levels, and the score was filtering exactly the wrong end of it.
  *
  * **[DISTANCE_MAX] is therefore the largest distance the calibration still supports**, not a score:
- * the 5 % row is the last measured bucket where the level is touched several times more often
- * than chance, and past it the curve decays toward the base rate.
+ * it is the edge of the last bucket whose rate stays several times above a same-size base rate.
  *
  * ### What this object does *not* claim
  * A hit is a chart event and never a profit (plan.md §6.1); touching a level says nothing about
@@ -62,10 +66,11 @@ object ProjectionGate {
     /**
      * The calibrated ceiling on `|projectedLevel − lastClose| / lastClose`, as a fraction.
      *
-     * `0.05` = the 5 % row of the distance table above (66 % touched within five bars, n=197,
-     * against a 10 % base rate). Chosen from the measurement, not from taste — and deliberately
-     * *not* re-tuned per pattern, because a per-pattern number chosen after seeing the outcomes is
-     * the guess the measurement exists to remove.
+     * `0.05` = the 5 % row of the distance table above: reached 65 % of the time inside five bars
+     * (n=203) against a 10 % no-pattern base rate at the same level size. Chosen from the
+     * measurement, not from taste — and deliberately *not* re-tuned per pattern, because a
+     * per-pattern number chosen after seeing the outcomes is the guess the measurement exists to
+     * remove.
      */
     const val DISTANCE_MAX: Double = 0.05
 
