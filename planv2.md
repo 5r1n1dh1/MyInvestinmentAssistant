@@ -111,12 +111,22 @@ candidate counts; no rate without `n` (existing `HitRateText` guard still green)
 
 ### W3 — Market context (gaps B1–B4) · P0 · `:data`, `:domain`, `:android-data`
 
-- **Index series** — `data/price/IndexSource.kt` + `NseIndexSource` (probe
-  `archives.nseindia.com/content/indices/…` shapes live from a GitHub probe job;
-  the archives host already works as the bhavcopy mirror) → Yahoo `^NSEI` fallback →
-  bundled seed series. If all fail: the existing honest "no benchmark" note remains
-  (already implemented — do not regress it).
-- **Breadth, computed on-device from the bhavcopy itself** (free, reliable):
+> **RESOLVED BY PROBE 2026-10-16** (run 38949742442, [docs/LIVE-PROBE.md](docs/LIVE-PROBE.md)).
+> The index-source decision below is no longer a question — the probe ran it.
+
+- **Index series — DECIDED: Yahoo first, NSE CSV shapes dropped.** All three NSE index-CSV shapes
+  (`ind_close_all` on `archives`, on `nsearchives`, and on the `products` path) return **404**. But
+  the Yahoo cookie+crumb handshake **executes**: `fc.yahoo.com` seeds a cookie, `getcrumb` returns a
+  crumb, and `v8/finance/chart/RELIANCE.NS` answers **200** on the same cookie+crumb pair. Yahoo
+  serves `^NSEI`, `^NSEMDCP50` and `^NSEMDCP150` through that endpoint, so the benchmark series is
+  obtainable. Implement `NseIndexSource` as a **Yahoo-backed** `IndexSource` (the NSE CSV shapes stay
+  in the candidate constant list, now with a recorded 404 against them, so a future shape that does
+  answer is a one-line change). The bundled seed series remains the offline floor.
+- **This also closes the P3 gate**, which `docs/VERIFICATION.md` had carried as permanently open.
+  Until W3's code lands, `benchmarkCandles = null` remains the *correct* behaviour — this finding
+  says the path has an exit, not that the honest fallback was wrong.
+- **Breadth, computed on-device from the bhavcopy itself** (free, reliable — and now the
+  load-bearing piece, since it needs no external source at all):
   advancers/decliners/unchanged, new 52-week highs/lows, % above 50-DMA →
   `domain/technical/MarketBreadth.kt` + a "Market pulse" card on the watchlist screen.
 - **Relative strength vs index** activates the moment an index series loads
@@ -129,21 +139,34 @@ candidate counts; no rate without `n` (existing `HitRateText` guard still green)
 - **SME liquidity gate**: median daily turnover over the stored window below a
   threshold → "thin trading" warning on the stock header (SME = `SM` series).
 
+**Also measured:** `nsearchives.nseindia.com` — NSE's *documented* primary — fails from GitHub's
+runners with `HTTP/2 INTERNAL_ERROR` on every attempt, while `archives.nseindia.com` answers 200.
+The app's mirror choice is vindicated; do not "fix" it toward the documented primary.
+
 **Files:** `data/price/{IndexSource,NseIndexSource}.kt`, `domain/technical/MarketBreadth.kt`,
 `android-data/.../repo/DefaultPatternRepository.kt`, `app/.../ui/stocklist/*`, `app/.../ui/detail/*`.
 **Acceptance:** market pulse card renders from the fixture; RS factor reports
 "unscored — no benchmark" when no index loads and a real value when it does; SME
-warning fires on a synthetic SME fixture.
+warning fires on a synthetic SME fixture; the index source reports its failure reason
+rather than fabricating a series.
 
 ### W4 — Fundamentals (gaps C1–C8) · P1 · `:data`, `:domain`, `:app`
 
-- **Bank-ratio live re-check (Class B):** the on-demand probe job fetches the
-  robots-permitted `screener.in/company/HDFCBANK/consolidated/` page from GitHub's
-  network and reports whether NIM/GNPA/CASA/PCR rows exist **today**. If yes →
-  parser extension promotes those `RatioId`s from `NOT_SOURCED` to `AVAILABLE`
-  (follow-up PR, fixture-pinned). If no → stays `NOT_SOURCED` with a "where to
-  verify" note (annual report, RBI FSR). *Do not promote on assumption — the
-  current fixture says absent; only a live capture changes that.*
+> **Bank-ratio and corporate-event questions are now DECIDED by probe** (run 38949742442,
+> [docs/LIVE-PROBE.md](docs/LIVE-PROBE.md)). Both Class-B branches below are closed.
+
+- **Bank-ratio live re-check (Class B) — DECIDED: REJECTED. The `RatioId`s stay `NOT_SOURCED`.**
+  The probe fetched the robots-permitted `screener.in/company/HDFCBANK/consolidated/` page
+  (200, 218,206 bytes) and a naive label grep reported `Gross NPA`, `Net NPA` and `CASA` as
+  "present". Direct inspection says otherwise: those labels sit inside **60 paywalled
+  `highlight-cell` elements with empty values**, and the standalone ratio rows carry labels with no
+  numbers at all — while `ROCE`, which the app already sources, renders a real `7.02`.
+  **Do not promote.** No parser work follows; the "where to verify" branch below is the deliverable.
+  *The transferable lesson, now recorded in LIVE-PROBE.md §3: a label match is not a value. Any
+  future `NOT_SOURCED → AVAILABLE` promotion must pin a golden fixture asserting a parsed number.*
+  **Deliverable instead:** every abstaining bank ratio carries a "where to verify" action (bank
+  annual report; RBI Financial Stability Report for the system view), and W6's "Reading a bank"
+  module teaches it with this fact stated.
 - **FII/DII (Class A):** extend `DerivedMetrics` + new `RatioId`s
   (`FII_HOLDING`, `DII_HOLDING`, `FII_TREND`) from the **already-parsed**
   `shareholding` table — data on the floor today, UI missing.
@@ -151,15 +174,18 @@ warning fires on a synthetic SME fixture.
   Sales, Operating Profit, EPS + sparkline.
 - **Promoter pledging & goodwill (Class B):** keep the honest abstention; add a
   per-flag **"Where to verify"** action (exchange shareholding-pattern disclosures,
-  annual report) and an education-hub lesson on reading them. The probe job tests
-  whether NSE corporate-announcement endpoints answer from `archives.nseindia.com`;
-  if reachable, a pledge scanner is a follow-up PR; if not, documented gap.
-- **Exchange event overlays (Class B):** probe job tests bulk/block deals, ASM/GSM
-  lists, F&O ban on the archives host; integrate what answers 200, teach where to
-  verify the rest.
-- **Corporate-action-adjusted view (Class B/A):** probe NSE corporate-actions feed;
-  splits/bonuses → a local, reversible, labelled "adjusted view" toggle (raw stays
-  the default and the truth); demergers remain flag-only.
+  annual report) and an education-hub lesson on reading them.
+  **Probe verdict: NSE corporate-announcement endpoints 404 from GitHub's network** (announcements,
+  bulk deals, block deals all 404 on the archives host; the `www.nseindia.com` variants fail with
+  the same HTTP/2 INTERNAL_ERROR as `nsearchives`). No pledge scanner follows — this is a
+  documented gap, and the ASM/GSM lists are unreachable for the same reason.
+- **Exchange event overlays (Class B) — DECIDED: not reachable.** Bulk/block deals and ASM/GSM all
+  fail from this network (same table as above). Gap **B3** closes as Class-B "where to verify".
+- **Corporate-action-adjusted view (Class B/A):** the NSE corporate-actions feed is unreachable
+  (404), so this stays flag-only. The app's existing behaviour is already the right one: four real
+  corporate actions in the committed fixture (HDFCBANK −50.4%, BAJFINANCE −89.9%, KOTAKBANK −80.3%,
+  TATAMOTORS −40.2%) are detected from *price discontinuity* and flagged, never silently adjusted.
+  An "adjusted view" toggle would need a feed that answers; do not build one against a 404.
 - **Second fundamentals source (Class A, minimal):** `FundamentalsSource` interface
   + manual CSV/JSON import so `divergences()` can become non-empty without a second
   scraper.
@@ -167,8 +193,9 @@ warning fires on a synthetic SME fixture.
 **Files:** `data/fundamentals/*`, `domain/ratios/RatioPriority.kt`, `domain/redflag/fundamentals/*`,
 `app/.../ui/fundamentals/*`, probe workflow (W8).
 **Acceptance:** FII/DII + quarterly cards render on the five golden fixtures; every
-abstaining flag carries a "where to verify" action; divergence card no longer
-permanently empty when a second source is imported.
+abstaining flag carries a "where to verify" action naming the annual report / RBI FSR;
+divergence card no longer permanently empty when a second source is imported; **no bank
+ratio appears as `AVAILABLE` without a fixture-pinned parsed value.**
 
 ### W5 — Technicals (gaps D1–D3) · P1 · `:domain`, `:app`
 
