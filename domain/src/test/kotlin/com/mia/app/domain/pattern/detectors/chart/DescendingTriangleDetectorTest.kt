@@ -123,7 +123,7 @@ class DescendingTriangleDetectorTest {
         val applied = FactorScorer.apply(FactorScorer.score(candidate.measures), candidate.penalties)
         ChartAssertions.breakdownIs(match, applied.breakdown.geometry, applied.breakdown.structure,
             applied.breakdown.confirmation, applied.breakdown.context)
-        ChartAssertions.verdictIsConsistent(match, series.candles.size)
+        ChartAssertions.verdictIsConsistent(match, series.candles)
     }
 
     @Test

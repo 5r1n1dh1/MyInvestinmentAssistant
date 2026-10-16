@@ -141,6 +141,11 @@ interface PatternDetector {
  * A measured control test over 20,780 next-day returns showed every signal at ~50%
  * accuracy. Match score therefore measures *geometric fidelity to the textbook template*
  * and is never a probability of profit.
+ *
+ * **The score is a display metric.** It gates nothing but [RENDER_THRESHOLD]. It used to gate
+ * projection too, at a threshold that turned out to be unreachable *and* inverted against outcomes
+ * — see [PROJECT_THRESHOLD] — so projection is now decided by measured-move distance in
+ * `com.mia.app.domain.pattern.ProjectionGate`.
  */
 object MatchScorePolicy {
     const val GEOMETRY_WEIGHT: Int = 40
@@ -156,10 +161,28 @@ object MatchScorePolicy {
      */
     const val TOTAL_WEIGHT: Int = GEOMETRY_WEIGHT + STRUCTURE_WEIGHT + CONFIRMATION_WEIGHT + CONTEXT_WEIGHT
 
-    /** >= 70 plus gates: project and schedule an alert. */
+    /**
+     * The old score gate for projection. **Retired — kept only so out-of-date callers still
+     * compile.**
+     *
+     * Measured over 875 settled walk-forward candidates on the app's own fixture, the highest score
+     * ever produced was **68**: this threshold was unreachable, so the project-and-alert path had
+     * never executed once. The score also ran *backwards* against outcomes — hit rate fell as the
+     * score rose, monotonically across all six horizons — because a more textbook-ideal formation
+     * is a bigger one, and a bigger formation projects a further, harder-to-reach level.
+     *
+     * Projection is now gated by **measured-move distance** instead
+     * (`com.mia.app.domain.pattern.ProjectionGate`), and the score is a display-only measure of
+     * geometric fidelity. Nothing in `:domain` reads this constant any more; it is deprecated
+     * because removing it would break modules this change does not own.
+     */
+    @Deprecated(
+        "PROJECT_THRESHOLD is unreachable and inverted; projection is gated by measured-move " +
+            "distance (com.mia.app.domain.pattern.ProjectionGate), not by the match score.",
+    )
     const val PROJECT_THRESHOLD: Int = 70
 
-    /** 50..69: render, but no projection. */
+    /** 50..99: render, but no projection. The display gate, and the only gate the score still owns. */
     const val RENDER_THRESHOLD: Int = 50
 
     /** < 50: suppress entirely. */
@@ -178,10 +201,15 @@ object MatchScorePolicy {
         barCount >= minBars(timeframe)
 
     enum class Verdict {
-        /** Score >= 70 and every gate passed: project + alert. */
+        /**
+         * The distance gate passed and the regime is aligned: project + alert.
+         *
+         * No longer a function of the score. A match that scores 52 and projects a level 2 % from
+         * the close gets this; a match that scores 74 and projects a level 19 % away does not.
+         */
         PROJECT,
 
-        /** 50 <= score < 70: render only. */
+        /** 50 <= score < 100 and the distance gate was not met: render only. */
         RENDER,
 
         /** < 50: hide. */
@@ -192,13 +220,29 @@ object MatchScorePolicy {
     }
 
     /**
-     * Applies §6.4. [regimeAligned] is the ADX/relative-strength gate; when it is null the
-     * gate is treated as unmet for PROJECT but the match may still RENDER.
+     * Applies §6.4, with projection gated on **measured-move distance** rather than on the score.
+     *
+     * @param projectable whether `com.mia.app.domain.pattern.ProjectionGate` admits this match: a
+     *   measured-move level exists, it sits within the calibrated distance of the breakout close,
+     *   the timeframe's bar minimum is met, and the regime gate is satisfied. It defaults to
+     *   `false` because **not knowing a level's distance must never mean "project it"** — a caller
+     *   that has not been taught the distance rule degrades to render-only, which is the safe
+     *   direction. `com.mia.app.domain.pattern.ProjectionGate` owns the rule; this function only
+     *   applies the outcome.
+     * @param regimeAligned the ADX/relative-strength gate. `null` (undecided regime, unknown
+     *   direction) is treated as unmet for PROJECT, exactly as before, but the match may still
+     *   RENDER.
      */
-    fun verdict(score: Int, timeframe: Timeframe, barCount: Int, regimeAligned: Boolean?): Verdict {
+    fun verdict(
+        score: Int,
+        timeframe: Timeframe,
+        barCount: Int,
+        regimeAligned: Boolean?,
+        projectable: Boolean = false,
+    ): Verdict {
         if (!isSufficientBars(timeframe, barCount)) return Verdict.NOT_ENOUGH_HISTORY
         return when {
-            score >= PROJECT_THRESHOLD && regimeAligned == true -> Verdict.PROJECT
+            projectable && regimeAligned == true -> Verdict.PROJECT
             score >= RENDER_THRESHOLD -> Verdict.RENDER
             else -> Verdict.SUPPRESS
         }

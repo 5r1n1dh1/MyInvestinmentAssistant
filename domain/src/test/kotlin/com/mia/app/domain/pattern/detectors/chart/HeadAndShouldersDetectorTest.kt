@@ -5,6 +5,7 @@ import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.ScoreBreakdown
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.PatternIds
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.model.PivotKind
 import com.mia.app.domain.pattern.FactorScorer
 import com.mia.app.domain.pattern.ScoreFactor
@@ -152,13 +153,39 @@ class HeadAndShouldersDetectorTest {
         )
         assertEquals(breakdown.total, match.score, "CONTRACTS.md: score is always the breakdown total")
         assertTrue(match.score in 0..100)
-        // The §12.7 fixture, scored on a synthetic series, reaches the PROJECT threshold. The four
-        // factors are pinned here so a change to any normalisation anchor shows up as one number.
+        // The §12.7 fixture, scored on a synthetic series, clears the render threshold with room to
+        // spare. The four factors are pinned here so a change to any normalisation anchor shows up
+        // as one number.
         assertEquals(ScoreBreakdown(geometry = 62, structure = 61, confirmation = 93, context = 79), breakdown)
         assertEquals(70, match.score)
+        // 70 is the score the retired `PROJECT_THRESHOLD` asked for, and it is above every score any
+        // real candidate has ever produced. The gate that decides is distance, and §12.7's own
+        // measured move is a 19 %-wide formation — so this textbook-perfect match is rendered, not
+        // projected. That inversion is the whole point of the change, so it is asserted, not assumed.
+        val distance = assertNotNull(
+            ProjectionGate.distance(match, series.candles.last().close),
+            "a broken head & shoulders must carry a level",
+        )
+        assertTrue(
+            distance > ProjectionGate.DISTANCE_MAX,
+            "§12.7's measured move is expected to sit well outside the calibrated distance, was " +
+                "${"%.1f".format(distance * 100)} %",
+        )
         assertEquals(
-            MatchScorePolicy.Verdict.PROJECT,
-            MatchScorePolicy.verdict(match.score, Timeframe.D1, series.candles.size, regimeAligned = true),
+            MatchScorePolicy.Verdict.RENDER,
+            MatchScorePolicy.verdict(
+                match.score,
+                Timeframe.D1,
+                series.candles.size,
+                regimeAligned = true,
+                projectable = ProjectionGate.admits(
+                    match,
+                    series.candles.last().close,
+                    Timeframe.D1,
+                    series.candles.size,
+                    regimeAligned = true,
+                ),
+            ),
         )
     }
 

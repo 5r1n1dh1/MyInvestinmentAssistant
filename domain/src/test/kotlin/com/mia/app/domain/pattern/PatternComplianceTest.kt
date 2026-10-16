@@ -63,6 +63,8 @@ class PatternComplianceTest {
             "Not enough history — need 60 daily bars, have 42.",
             "Head & Shoulders not shown — match score 41 is below the 50 render threshold. Geometric fit only.",
             "Head & Shoulders scored 74 with the trend regime aligned — its geometry is projected and its breakout alert is scheduled.",
+            "Head & Shoulders scored 74 — shown without a projection: the measured-move level sits 18.2 % from the last close, beyond the 5 % the measured calibration supports.",
+            "Head & Shoulders scored 74 — shown without a projection: it carries no measured move, so there is no level to project.",
             "Close above the neckline",
             "Close below the confirmation level",
             "Delivery % unavailable — confirmation partially unscored.",

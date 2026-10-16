@@ -1,5 +1,6 @@
 package com.mia.app.domain.pattern.detectors.chart
 
+import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScorePolicy
@@ -7,6 +8,7 @@ import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.ScoreBreakdown
 import com.mia.app.domain.pattern.FactorScorer
 import com.mia.app.domain.pattern.PatternIds
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.pattern.ScoreFactor
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -81,16 +83,33 @@ internal object ChartAssertions {
         assertTrue(PatternIds.isCanonical(name), "'$name' is not a PatternIds canonical name")
     }
 
-    /** `scoring-spec.md` §8: the verdict follows the score and the history gate. */
-    fun verdictIsConsistent(match: Match, barCount: Int) {
-        val verdict = MatchScorePolicy.verdict(match.score, match.timeframe, barCount, regimeAligned = true)
+    /**
+     * `scoring-spec.md` §8, as it stands after the projection-gate re-derivation: the **score**
+     * decides show-or-hide, and the **distance gate** decides project-or-render.
+     *
+     * [candles] rather than a bare bar count, because the gate measures the projected level against
+     * the series' own last close — the same numbers `PatternEngine` hands it in production. Passing
+     * a synthetic `true` for alignment keeps the assertion about one variable at a time.
+     */
+    fun verdictIsConsistent(match: Match, candles: List<Candle>) {
+        val barCount = candles.size
+        val projectable = ProjectionGate.admits(
+            match,
+            candles.last().close,
+            match.timeframe,
+            barCount,
+            regimeAligned = true,
+        )
+        val verdict = MatchScorePolicy.verdict(
+            match.score,
+            match.timeframe,
+            barCount,
+            regimeAligned = true,
+            projectable = projectable,
+        )
         when {
-            match.score >= MatchScorePolicy.PROJECT_THRESHOLD ->
-                assertEquals(MatchScorePolicy.Verdict.PROJECT, verdict)
-
-            match.score >= MatchScorePolicy.RENDER_THRESHOLD ->
-                assertEquals(MatchScorePolicy.Verdict.RENDER, verdict)
-
+            projectable -> assertEquals(MatchScorePolicy.Verdict.PROJECT, verdict)
+            match.score >= MatchScorePolicy.RENDER_THRESHOLD -> assertEquals(MatchScorePolicy.Verdict.RENDER, verdict)
             else -> assertEquals(MatchScorePolicy.Verdict.SUPPRESS, verdict)
         }
     }
