@@ -237,12 +237,24 @@ covered by the compliance scan. Three levels:
   shrinkage, multiple testing), Indian microstructure, portfolio construction,
   build-your-own screener (filter the watchlist by the app's own ratios).
 
-**Schema additions (additive, backwards-compatible):**
+**Schema additions:**
 - `GlossaryEntry.invalidation: String` — "what would prove this pattern wrong"
-  (gap E4). Existing entries get a default; a test asserts every entry is non-blank.
+  (gap E4). **Landed, and stricter than planned** (PR #3): the field is **required with no
+  default**, so the compiler forces all 42 rows to state it — the "existing entries get a
+  default, a test asserts non-blank" idea below was weaker, because a default is a sentence
+  nobody chose. All 42 now carry a specific break-level condition; the 9 evaluated patterns
+  name an observable price event. `PatternCatalogTest` asserts the sentences are distinct
+  (max reuse ≤ 2 rows), exceed a 40-character substance floor, and pass the banned-language
+  sweep.
 - `Curriculum.kt`: `Level`, `Module`, `Lesson(title, body, doesNotEstablish,
   relatedPattern/Flag/Ratio ids)`; a test walks every lesson through
-  `AdviceLanguage.requireClean` and `HonestyContract.requireNotProbabilityClaim`.
+  `AdviceLanguage.requireClean` and `HonestyContract.requireNotProbabilityClaim`. **Landed**
+  (PR #3) with a registration contract: content files self-install via `Curriculum.register`
+  in their own `init`, `register` keys on `Module.id` and **replaces in place**, so a double
+  registration cannot duplicate or reorder a row.
+  **Known follow-up (not done):** `PatternExplorerSection.kt` renders the other four glossary
+  fields but not the new `invalidation` — the dialog needs a "what would prove this wrong"
+  row. That is `:app` UI work, not schema work.
 
 **Journaling (gap E5):** Room entity `journal_entry(symbol, thesis, expectation,
 falsification, reviewDate, createdAt)` + outcome capture + **personal hit rate**
