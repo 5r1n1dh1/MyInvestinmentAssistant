@@ -2,6 +2,7 @@ package com.mia.app.ui.stocklist
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -311,7 +312,12 @@ private fun WatchlistRowCard(
             .glassEntrance(index = index)
             .glassPressScale(interactionSource)
             .clickable(
+                // `indication` has no default on the interactionSource overload of `clickable`, and
+                // it is passed explicitly rather than as `null` so the ripple survives: a dip with no
+                // ripple reads as a dropped frame on a slow device, which is exactly the impression
+                // this screen cannot afford on a 2 GB phone.
                 interactionSource = interactionSource,
+                indication = LocalIndication.current,
                 onClick = { onOpenStock(row.symbol) },
             )
             .testTag(ROW_TAG_PREFIX + row.symbol),

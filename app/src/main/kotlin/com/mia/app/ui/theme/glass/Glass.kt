@@ -212,12 +212,15 @@ fun GlassSurface(
     val mode = rememberGlassMode()
     val blurs = GlassModeResolver.blurs(mode)
     val radius = blurRadius ?: GlassTokens.blurFor(mode)
+    // Hoisted so the smart cast does not have to survive being captured by the nested composable
+    // lambda below.
+    val blurredBackdrop = backdrop
 
     Box(
         modifier = modifier.clip(shape),
         contentAlignment = contentAlignment,
     ) {
-        if (backdrop != null && blurs && radius > GlassTokens.NoBlur) {
+        if (blurredBackdrop != null && blurs && radius > GlassTokens.NoBlur) {
             // The one place the app spends a RenderEffect. `Modifier.blur(radius,
             // BlurredEdgeTreatment.Rectangle)` builds exactly
             // `BlurEffect(radiusPx, radiusPx, TileMode.Clamp)` — i.e.
@@ -230,7 +233,7 @@ fun GlassSurface(
                     .matchParentSize()
                     .blur(radius, BlurredEdgeTreatment.Rectangle),
             ) {
-                backdrop()
+                blurredBackdrop()
             }
         }
 
@@ -462,18 +465,15 @@ fun Modifier.glassPressScale(
  * }
  * ```
  *
- * ### Interaction budget
- * Each entry is a single [Animatable] driving one `graphicsLayer`, so a row costs one layer
- * transform per frame and nothing after it finishes: no remeasure, no relayout, no recomposition of
- * the row's children. On a low-RAM device this is the *only* thing that still moves — [GlassMode]
- * turns the blur off there precisely so the motion can stay.
- *
  * ### Why it is cheap enough to put in a lazy list
- * One [Animatable] per item, driving a single `graphicsLayer` block: alpha and a translation, both
- * read inside the layer block so a frame invalidates the layer and not the composition. No blur is
- * involved, nothing is measured, and once the animation finishes the item is skipped by the
- * composition entirely — the cost stops rather than merely becoming small. The cumulative delay is
- * capped at [GlassTokens.MaxStaggerMillis] so a long list does not open with rows still invisible.
+ * One [Animatable] per item, driving a single `graphicsLayer` block: `alpha` and `translationY`,
+ * both read inside the layer block, so a frame invalidates the layer and not the composition. No
+ * blur is involved, nothing is measured or laid out, and once the animation finishes the cost stops
+ * rather than merely becoming small. On a low-RAM device this is the only thing on screen that
+ * still moves — [GlassMode] turns the blur off there precisely so the motion can stay.
+ *
+ * The cumulative delay is capped at [GlassTokens.MaxStaggerMillis], so a long list cannot open with
+ * its last rows still invisible: row 40 arrives at the same moment row 0 has finished.
  *
  * The animation re-runs when an item is recycled by the lazy list, which is the behaviour a reader
  * expects: a row that scrolls back into view arrives rather than popping.
