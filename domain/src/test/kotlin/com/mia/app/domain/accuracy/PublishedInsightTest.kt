@@ -78,7 +78,7 @@ class PublishedInsightTest {
 
         published.rows.forEach { row ->
             val live = assertNotNull(
-                recomputed.row(row.bucket ?: DistanceBucket.WITHIN_12),
+                recomputed.byBucket.firstOrNull { it.bucket == row.bucket },
                 "${row.label} is published but no longer measured",
             )
             // Counts exactly: an integer cannot be "nearly" right, and a changed count is the first
@@ -478,7 +478,12 @@ class PublishedInsightTest {
     }
 
     private companion object {
-        /** The app's own horizon; every published finding is measured at it. */
+        /**
+         * The app's own horizon; every published finding is measured at it.
+         *
+         * `OutcomeTrackerPolicy.DEFAULT_HORIZON_BARS`, written out because the two packages are
+         * independently compiled and a typo here would silently compare the wrong horizon.
+         */
         const val H5 = 5
 
         /**

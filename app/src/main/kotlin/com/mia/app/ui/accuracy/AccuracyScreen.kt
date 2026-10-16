@@ -261,9 +261,9 @@ private fun CoverageSection(state: AccuracyUiState, modifier: Modifier = Modifie
         // screen is indistinguishable from a broken one — the whole point of withholding below 30
         // samples is that the number is too small to mean anything, and that is a fact about the
         // sample rather than about the app.
-        state.samplesUntilNextReportable?.let { remaining ->
+        state.nearestReportable?.let { nearest ->
             Text(
-                text = samplesUntilReportableText(state, remaining),
+                text = samplesUntilReportableText(state, nearest),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -274,12 +274,12 @@ private fun CoverageSection(state: AccuracyUiState, modifier: Modifier = Modifie
 /**
  * The nearest-cell sentence: "N more settled outcomes and X becomes reportable".
  *
- * Names the cell it is talking about, because "6 more outcomes" without a scope is not actionable
- * and the nearest cell is deliberately the strictest grouping — the one the reader most wants and
- * the furthest from the gate.
+ * Names the cell it is talking about, because "6 more outcomes" without a scope is not actionable.
+ * Rendered only when a cell is actually below the gate — when every cell clears it, there is nothing
+ * left to wait for and the sentence would be noise.
  */
-private fun samplesUntilReportableText(state: AccuracyUiState, remaining: Int): String {
-    val nearest = state.nearestReportable ?: return NOT_NEEDED_TEXT
+private fun samplesUntilReportableText(state: AccuracyUiState, nearest: HitRate): String {
+    val remaining = TrackRecordInsight.samplesUntilReportable(nearest)
     val scope = when {
         nearest.symbol != null && nearest.patternName != null ->
             "${nearest.patternName} on ${nearest.symbol}"
@@ -290,8 +290,6 @@ private fun samplesUntilReportableText(state: AccuracyUiState, remaining: Int): 
     return "$remaining more settled ${if (remaining == 1) "outcome" else "outcomes"} and $scope " +
         "becomes reportable — it holds ${nearest.samples} of ${state.minimumSamples} now."
 }
-
-private const val NOT_NEEDED_TEXT = "Every cell on this screen clears the reporting gate."
 
 /** `Last settled verdict: 02 Oct 2026`, or an honest "never" when there is none. */
 private fun lastSettledText(state: AccuracyUiState): String {
