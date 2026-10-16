@@ -11,11 +11,12 @@
   may only have 2 GB of RAM.
 
   `android:icon` / `android:roundIcon` point at `mipmap-anydpi-v26`, an **adaptive icon**
-  (`minSdk` is 26, so every supported device resolves it). It carries three layers: a gradient
-  background the OEM mask may crop freely, a candle foreground confined to the 72dp safe zone,
-  and a monochrome layer so Android 13+ themed icons work — an app with no monochrome layer is
-  simply absent from themed-icon pickers on many launchers, which is a discoverability cost
-  rather than a cosmetic one.
+  (`minSdk` is 31, so every supported device resolves it — and every one of them is far above the
+  API 26 floor the `-v26` qualifier names). It carries three layers: a gradient background the OEM
+  mask may crop freely, a candle foreground confined to the 72dp safe zone, and a monochrome layer
+  so Android 13+ themed icons work — an app with no monochrome layer is simply absent from
+  themed-icon pickers on many launchers, which is a discoverability cost rather than a cosmetic
+  one.
 
   The per-density PNGs (`mipmap-*/ic_launcher.png`, `ic_launcher_round.png`) exist only as a
   fallback for a launcher that asks for a bitmap by density; they are generated from the same

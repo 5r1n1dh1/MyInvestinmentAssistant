@@ -2,7 +2,9 @@ package com.mia.app.ui.stocklist
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,9 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +43,11 @@ import com.mia.app.ui.common.ErrorState
 import com.mia.app.ui.common.LoadingState
 import com.mia.app.ui.common.formatPrice
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassBackdrop
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.GlassTopBar
+import com.mia.app.ui.theme.glass.glassEntrance
+import com.mia.app.ui.theme.glass.glassPressScale
 
 /**
  * The tracked-symbols list — the app's home surface after a first launch.
@@ -67,6 +73,23 @@ import com.mia.app.ui.theme.MiaSpacing
  * [EmptyWatchlist] therefore explains what tracking is *for* and points at Search, rather than
  * rendering "no data".
  *
+ * ### Glass (planv2 W7) — the reference implementation for the rest of the app
+ * Three layers, and only three:
+ * ```
+ *  GlassBackdrop   one fixed, blurred background behind the whole screen — the entire blur budget
+ *  GlassTopBar     the add-row header, blurring its own copy of that background
+ *  GlassCard       the rows: a translucent pane and a hairline, and NO blur
+ * ```
+ * The rule that makes this affordable lives in `Glass.kt`: a blur is never inside a `LazyColumn`
+ * item. The rows sit on the screen's single blurred layer, so a watchlist of 40 costs what a
+ * watchlist of 4 costs. The two interactions — [glassPressScale] on a row, [glassEntrance] on the
+ * list — are `graphicsLayer` transforms: no measure, no relayout, no second pass, and both stop
+ * costing anything once they finish.
+ *
+ * The screen's own logic is untouched: the same `when` over the same four states, the same
+ * `testTag`s, the same strings. Every other screen should copy this shape rather than inventing
+ * its own.
+ *
  * @param onOpenStock invoked with a ticker when a row is tapped. The screen never navigates itself —
  *   `MiaNavHost` belongs to another agent. Always opens `Timeframe.D1` (plan.md decision D1).
  * @param onOpenSearch invoked from the empty state. Search is the app's front door (plan.md §1.1),
@@ -83,98 +106,112 @@ fun StockListScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .testTag(STOCK_LIST_TAG),
     ) {
-        AddSymbolRow(
-            value = state.addField,
-            enabled = !state.isMutating,
-            onValueChange = viewModel::onAddFieldChanged,
-            onSubmit = viewModel::onAddConfirmed,
-        )
+        // The one blurred layer for this screen. Fixed, static content, blurred once and then served
+        // from a cached layer — so scrolling costs nothing, whatever the length of the list.
+        GlassBackdrop(modifier = Modifier.fillMaxSize())
 
-        state.notice?.let { notice ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                Text(
-                    text = notice,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(NOTICE_TAG),
+        Column(
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            GlassTopBar {
+                AddSymbolRow(
+                    value = state.addField,
+                    enabled = !state.isMutating,
+                    onValueChange = viewModel::onAddFieldChanged,
+                    onSubmit = viewModel::onAddConfirmed,
                 )
-                TextButton(onClick = viewModel::onNoticeDismissed) {
-                    Text(text = DISMISS_LABEL)
-                }
             }
-        }
 
-        state.coverageNotes.forEach { note ->
-            Text(
-                text = coverageLine(note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier
-                    .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs)
-                    .testTag(COVERAGE_TAG),
-            )
-        }
-
-        when {
-            state.errorReason != null && !state.hasRows -> ErrorState(
-                reason = state.errorReason ?: UNEXPECTED_ERROR,
-                onRetry = viewModel::onRetry,
-                modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
-            )
-
-            state.isLoading && !state.hasRows -> LoadingState(label = LOADING_LABEL)
-
-            state.isEmpty -> EmptyWatchlist(
-                onOpenSearch = onOpenSearch,
-                modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
-            )
-
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = MiaSpacing.lg,
-                    end = MiaSpacing.lg,
-                    top = MiaSpacing.sm,
-                    bottom = MiaSpacing.xxl,
-                ),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                items(items = state.rows, key = { row -> row.symbol }) { row ->
-                    WatchlistRowCard(
-                        row = row,
-                        removeEnabled = !state.isMutating,
-                        onOpenStock = onOpenStock,
-                        onRemove = viewModel::onRemove,
+            state.notice?.let { notice ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+                ) {
+                    Text(
+                        text = notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(NOTICE_TAG),
                     )
+                    TextButton(onClick = viewModel::onNoticeDismissed) {
+                        Text(text = DISMISS_LABEL)
+                    }
                 }
-                item(key = FOOTER_KEY) { DataSourceFooter() }
             }
-        }
 
-        // A failed reload while rows are on screen is an error *about the refresh*, not about the
-        // list, so it is a line under the rows rather than a card that replaces them.
-        state.errorReason?.takeIf { state.hasRows }?.let { reason ->
-            Text(
-                text = refreshFailedLine(reason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier
-                    .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs)
-                    .testTag(REFRESH_ERROR_TAG),
-            )
+            state.coverageNotes.forEach { note ->
+                Text(
+                    text = coverageLine(note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs)
+                        .testTag(COVERAGE_TAG),
+                )
+            }
+
+            when {
+                state.errorReason != null && !state.hasRows -> ErrorState(
+                    reason = state.errorReason ?: UNEXPECTED_ERROR,
+                    onRetry = viewModel::onRetry,
+                    modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
+                )
+
+                state.isLoading && !state.hasRows -> LoadingState(label = LOADING_LABEL)
+
+                state.isEmpty -> EmptyWatchlist(
+                    onOpenSearch = onOpenSearch,
+                    modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
+                )
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = MiaSpacing.lg,
+                        end = MiaSpacing.lg,
+                        top = MiaSpacing.sm,
+                        bottom = MiaSpacing.xxl,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+                ) {
+                    itemsIndexed(
+                        items = state.rows,
+                        key = { _, row -> row.symbol },
+                    ) { index, row ->
+                        WatchlistRowCard(
+                            row = row,
+                            index = index,
+                            removeEnabled = !state.isMutating,
+                            onOpenStock = onOpenStock,
+                            onRemove = viewModel::onRemove,
+                        )
+                    }
+                    item(key = FOOTER_KEY) { DataSourceFooter() }
+                }
+            }
+
+            // A failed reload while rows are on screen is an error *about the refresh*, not about
+            // the list, so it is a line under the rows rather than a card that replaces them.
+            state.errorReason?.takeIf { state.hasRows }?.let { reason ->
+                Text(
+                    text = refreshFailedLine(reason),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.xs)
+                        .testTag(REFRESH_ERROR_TAG),
+                )
+            }
         }
     }
 }
@@ -247,97 +284,106 @@ private fun AddSymbolRow(
  * flags. The difference is density: a watchlist is a dense grid scanned for one thing, so a chip on
  * every row is noise — whereas `RedFlagAccess` sits once at the top of a single stock's tab, where
  * an absent row would leave the reader with no way to reach the report at all.
+ *
+ * ### The glass and the two interactions
+ * A [GlassCard] rather than a `Card`: a translucent pane with a hairline over the screen's blurred
+ * background, and — the important half — **no blur of its own**, because this is a `LazyColumn`
+ * item and the list recycles.
+ *
+ * The press scale and the ripple read the *same* [MutableInteractionSource], so they cannot drift
+ * apart: one `MutableInteractionSource` per row, handed to [glassPressScale] and to `clickable`.
+ * Scale rather than size, so a press never remeasures or relayouts the row.
  */
 @Composable
 private fun WatchlistRowCard(
     row: WatchlistRow,
+    index: Int,
     removeEnabled: Boolean,
     onOpenStock: (String) -> Unit,
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+
+    GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onOpenStock(row.symbol) }
+            .glassEntrance(index = index)
+            .glassPressScale(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                onClick = { onOpenStock(row.symbol) },
+            )
             .testTag(ROW_TAG_PREFIX + row.symbol),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        // What the Material `Card` this replaced set: the secondary tone for every `Text` inside
+        // that does not pick its own colour.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = row.symbol,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = row.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = formatPrice(row.lastClose),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    ChangePercentText(
-                        changePercent = row.changePercent,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.symbol,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = row.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                row.asOf?.let { asOf ->
-                    AsOfChip(
-                        source = Source.NSE_BHAVCOPY,
-                        asOf = asOf,
-                        freshness = priceFreshness(asOf),
-                    )
-                }
-                if (row.redFlagCount > 0) {
-                    RedFlagCountChip(count = row.redFlagCount)
-                }
-                if (row.isFromCache && row.asOf != null) {
-                    Text(
-                        text = CACHED_LABEL,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = formatPrice(row.lastClose),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                ChangePercentText(
+                    changePercent = row.changePercent,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        ) {
+            row.asOf?.let { asOf ->
+                AsOfChip(
+                    source = Source.NSE_BHAVCOPY,
+                    asOf = asOf,
+                    freshness = priceFreshness(asOf),
+                )
+            }
+            if (row.redFlagCount > 0) {
+                RedFlagCountChip(count = row.redFlagCount)
+            }
+            if (row.isFromCache && row.asOf != null) {
+                Text(
+                    text = CACHED_LABEL,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = { onRemove(row.symbol) },
+                enabled = removeEnabled,
+                modifier = Modifier.testTag(REMOVE_TAG_PREFIX + row.symbol),
             ) {
-                TextButton(
-                    onClick = { onRemove(row.symbol) },
-                    enabled = removeEnabled,
-                    modifier = Modifier.testTag(REMOVE_TAG_PREFIX + row.symbol),
-                ) {
-                    Text(text = REMOVE_LABEL)
-                }
+                Text(text = REMOVE_LABEL)
             }
         }
     }

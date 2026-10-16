@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,12 +20,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +48,10 @@ import com.mia.app.ui.common.SectionHeader
 import com.mia.app.ui.common.formatDate
 import com.mia.app.ui.share.ShareBriefButton
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassMode
+import com.mia.app.ui.theme.glass.GlassModeController
+import com.mia.app.ui.theme.glass.GlassModeStore
+import com.mia.app.ui.theme.glass.SharedPreferencesGlassModeStorage
 import com.mia.app.work.RefreshRunState
 import com.mia.app.work.RefreshStatus
 import com.mia.app.work.RefreshTask
@@ -59,6 +66,7 @@ import com.mia.app.work.RefreshTask
  *  what each number means    score / geometry / hit rate, verbatim from Disclosure
  *  data coverage             what the app can measure, and — the part that matters — what it cannot
  *  notifications             the one permission, requested here and nowhere else
+ *  glass effects             how much blur is drawn, and the device conditions behind the answer
  *  voice search              what it does, what it needs, and that it guesses
  *  background refresh        plan.md §10's last success / last failure, plus "refresh now"
  *  clear cache               with its consequences stated before it is pressed
@@ -141,6 +149,8 @@ fun SettingsScreen(
         item(key = COVERAGE_KEY) { CoverageSection(state, viewModel::onRetry) }
 
         item(key = NOTIFICATIONS_KEY) { NotificationsSection() }
+
+        item(key = GLASS_KEY) { GlassSection() }
 
         item(key = SPEECH_KEY) { SpeechSection(state) }
 
@@ -435,6 +445,115 @@ private fun notificationPermissionGranted(context: Context): Boolean =
         true
     }
 
+// ------------------------------------------------------------------------------ glass mode
+
+/**
+ * How much glass the app draws (planv2 W7).
+ *
+ * ### Why this is here and not in a theme switch
+ * It changes no number, no disclosure and nothing the reader is asked to act on — [GlassMode.FULL]
+ * and [GlassMode.OFF] render the same text with the same contrast, differing only in whether the
+ * pane behind the text is blurred. It is the "reduce motion" of the glass design, which is why it
+ * defaults to letting the device decide instead of asking the reader to decide at first launch.
+ *
+ * ### Why the resolved mode is shown as its own line
+ * `Auto` is not one thing: it resolves to Full on a healthy device and to Off on a device the
+ * platform reports as low on memory, or while battery saver is on. A row that silently ignored the
+ * reader's tap would look broken, so the resolution is stated in words under the chips.
+ *
+ * ### Why it is written straight through here
+ * [GlassModeController] persists to `SharedPreferences` and holds one snapshot state, so this
+ * section is self-contained: no ViewModel, no data source, no Hilt binding. It follows the pattern
+ * `NotificationsSection` already uses for a setting that is a platform fact rather than app state.
+ */
+@Composable
+private fun GlassSection(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
+    // Re-read on entry, so the row reports the device's conditions as they are *now*: battery saver
+    // can be switched on from the notification shade while the app is in the background.
+    DisposableEffect(context) {
+        GlassModeController.refresh(context)
+        onDispose { }
+    }
+
+    // Local state, not the controller's: the controller holds the *resolved* mode, which under
+    // Auto is not the reader's choice. The chip has to show what was chosen, or tapping Auto on a
+    // low-memory device appears to do nothing.
+    var stored by remember(context) {
+        mutableStateOf(GlassModeStore(SharedPreferencesGlassModeStorage(context)).stored())
+    }
+    val effective = GlassModeController.effective.value
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        SectionHeader(title = SECTION_GLASS, subtitle = GLASS_SUBTITLE)
+
+        // Two rows of two rather than four across: 360 dp is the narrowest screen this app runs on,
+        // and four chips with their check icons and padding do not fit in it without truncating
+        // "Reduced".
+        GlassMode.entries.chunked(2).forEach { pair ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                pair.forEach { mode ->
+                    FilterChip(
+                        selected = stored == mode,
+                        onClick = {
+                            stored = mode
+                            GlassModeController.select(context, mode)
+                        },
+                        label = { Text(text = glassModeLabel(mode)) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(GLASS_TAG_PREFIX + mode.name.lowercase()),
+                    )
+                }
+                // Keeps the last odd chip at half width instead of full width, so a one-item row
+                // cannot render wider than the two-item row above it.
+                if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        Text(
+            text = glassModeSummary(effective),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = GLASS_CHANGES_NOTHING_ELSE,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** `Auto` / `Full` / `Reduced` / `Off`. Short enough for a chip on a 360 dp screen. */
+private fun glassModeLabel(mode: GlassMode): String = when (mode) {
+    GlassMode.AUTO -> "Auto"
+    GlassMode.FULL -> "Full"
+    GlassMode.REDUCED -> "Reduced"
+    GlassMode.OFF -> "Off"
+}
+
+/**
+ * What the app is drawing right now.
+ *
+ * Stated in words because `Auto` resolves to two different answers depending on the device, and a
+ * chip that appears not to respond is worse than no chip at all.
+ */
+private fun glassModeSummary(effective: GlassMode): String = when (effective) {
+    GlassMode.FULL -> GLASS_NOW_FULL
+    GlassMode.REDUCED -> GLASS_NOW_REDUCED
+    GlassMode.OFF -> GLASS_NOW_OFF
+    // Unreachable in practice — `GlassModeController` resolves before it hands anything out — but a
+    // blank line under a preference would read as a rendering fault, so it names the fallback.
+    GlassMode.AUTO -> GLASS_NOW_AUTO
+}
+
 // ------------------------------------------------------------------------------- speech
 
 /**
@@ -712,6 +831,18 @@ private const val NOTIFICATIONS_PRE_33 =
 private const val NOTIFICATIONS_ONLY_FOR =
     "The permission is used for that alert and nothing else. No other app feature touches it."
 
+private const val SECTION_GLASS = "Glass effects"
+private const val GLASS_SUBTITLE =
+    "Blurred panels behind the app's cards. How much of it is drawn depends on this device, and on " +
+        "nothing else."
+private const val GLASS_NOW_FULL = "Right now the app is drawing full glass effects."
+private const val GLASS_NOW_REDUCED = "Right now the app is drawing reduced glass effects."
+private const val GLASS_NOW_OFF = "Right now the app is drawing plain surfaces, with no glass."
+private const val GLASS_NOW_AUTO = "Right now the app is choosing for itself."
+private const val GLASS_CHANGES_NOTHING_ELSE =
+    "This changes how the app looks and nothing else. Every figure, source and disclosure you see " +
+        "is the same in all four settings."
+
 private const val SECTION_SPEECH = "Voice search"
 private const val SPEECH_SUBTITLE =
     "Say a company name instead of typing it. Romanised Hindi and English are both understood."
@@ -775,6 +906,7 @@ private const val NOTIFICATION_BUTTON_TAG = "mia_settings_notifications"
 private const val CLEAR_CACHE_TAG = "mia_settings_clear_cache"
 private const val BUILD_BRIEF_TAG = "mia_settings_build_brief"
 private const val SHARE_ENTRY_TAG = "mia_settings_share_entry"
+private const val GLASS_TAG_PREFIX = "mia_settings_glass_"
 
 // Lazy-list keys.
 private const val ABOUT_KEY = "settings.about"
@@ -782,6 +914,7 @@ private const val DISCLAIMER_KEY = "settings.disclaimer"
 private const val MEANING_KEY = "settings.meaning"
 private const val COVERAGE_KEY = "settings.coverage"
 private const val NOTIFICATIONS_KEY = "settings.notifications"
+private const val GLASS_KEY = "settings.glass"
 private const val SPEECH_KEY = "settings.speech"
 private const val REFRESH_KEY = "settings.refresh"
 private const val CACHE_KEY = "settings.cache"
