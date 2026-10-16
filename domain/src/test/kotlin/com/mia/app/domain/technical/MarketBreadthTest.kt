@@ -61,7 +61,7 @@ class MarketBreadthTest {
 
         val breadth = MarketBreadth.compute(day, asOf = session)
 
-        assertEquals(3.0, breadth.advanceDeclineRatio.valueOrNull(), 1e-9)
+        assertEquals(3.0, breadth.advanceDeclineRatio.valueOrNull()!!, 1e-9)
     }
 
     @Test
@@ -228,7 +228,7 @@ class MarketBreadthTest {
         assertEquals(1, breadth.smaExcluded)
         assertEquals(1, breadth.aboveSma50.valueOrNull())
         // 1 of 3, and the denominator is the *eligible* three rather than the four in the file.
-        assertEquals(100.0 / 3.0, breadth.percentAboveSma50.valueOrNull(), 1e-9)
+        assertEquals(100.0 / 3.0, breadth.percentAboveSma50.valueOrNull()!!, 1e-9)
     }
 
     @Test
