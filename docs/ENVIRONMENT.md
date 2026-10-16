@@ -39,10 +39,41 @@ guarantee untestable in CI-sized environments.
 | JDK | **21** (Temurin 21.0.12.1) | Newest LTS AGP 8.13 supports reliably |
 | Gradle | 9.8.0 | via `./gradlew` |
 | Kotlin | 2.2.21 | Room 2.8.x needs Kotlin 2.0+ / KSP2 |
-| AGP / compileSdk / minSdk | 8.13.2 / 36 / 26 | minSdk 26 gives `java.time` without desugaring |
+| AGP / compileSdk / minSdk | 8.13.2 / 36 / **31** | minSdk 31 guarantees `RenderEffect` blur everywhere — see below |
 | JUnit | 5.11.4 | |
 
 Version pins live in `gradle/libs.versions.toml`.
+
+### Why minSdk is 31, not 26
+
+minSdk was **26** through v1 and is **31** from the glassmorphism workstream (planv2.md §2). The
+owner decision: a real `RenderEffect.createBlurEffect` is API 31+, and the app's entire visual
+language is a blurred backdrop behind translucent surfaces. Shipping an API-26 fallback for a
+feature that is the point of the redesign costs more than it buys.
+
+**What this costs:** devices on Android 8.0–11 (API 26–30) can no longer install the app. That is a
+real loss of reach and it was accepted knowingly, not overlooked.
+
+`java.time` also arrives without desugaring at API 26+ — that reason no longer drives the floor.
+
+### Everything is verified in CI, not locally
+
+**AGENTS.MD rule 4: no build runs on the authoring machine.** No `assembleDebug`, no lint, no
+Gradle build at all. All verification happens in GitHub Actions, which is why the repository's
+workflow carries real SDK-install logic instead of relying on the runner image.
+
+The commands used to verify, all through `gh`:
+
+```bash
+gh pr create --base main --head <branch> --title "..." --body "..."
+gh run list --branch <branch> --limit 1        # find the run
+gh run watch <run-id> --exit-status            # wait for it
+gh run view <run-id> --log-failed              # read only the failing steps
+gh workflow run verify-live.yml                # on-demand source probe, no schedule
+```
+
+`gh run view --log-failed` is the one that matters: a full Android build log is thousands of lines,
+and the failure is almost never in the first fifty.
 
 ### JDK 21 is a hard requirement
 

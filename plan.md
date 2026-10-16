@@ -1,5 +1,10 @@
 # Indian EOD Stock Analysis App — Implementation Plan
 
+> **v1 — superseded by [planv2.md](planv2.md) (2026-10-11).** Kept as the historical specification
+> the v1 engine was actually built from. Its locked owner decisions (§2) still hold; do not
+> re-litigate them without the owner. Where v2 changed direction — the projection gate, minSdk, the
+> detector/track-record split — planv2.md and the commit messages win.
+>
 > **Status:** Ready for subagent implementation
 > **Owner decisions captured:** see §2. Do not re-litigate these.
 > **All empirical claims in this document were verified by live testing** (see §14 for the evidence log). Where something is unverified, it is marked `UNVERIFIED` and must be treated as a task, not a fact.

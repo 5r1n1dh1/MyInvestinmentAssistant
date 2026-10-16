@@ -85,8 +85,8 @@ Android SDK.
 ### The detector ↔ scorer seam
 
 Detectors never compute a score. They emit **weighted measures**; the scorer turns measures into a
-breakdown (geometry 40 / structure 25 / confirmation 20 / context 15). Every one of the 12 patterns
-is therefore comparable, and a new pattern is mechanical to add:
+breakdown (geometry 40 / structure 25 / confirmation 20 / context 15). Every pattern is therefore
+comparable, and a new pattern is mechanical to add:
 
 ```kotlin
 interface PatternDetector {
@@ -96,13 +96,30 @@ interface PatternDetector {
 ```
 
 Pivots come from **one** shared zigzag pass (plan.md §6.2) — the single biggest performance win, and
-the reason a 12-detector scan is fast enough to run on-device.
+the reason a full scan is fast enough to run on-device.
 
-### The 12 patterns
+### 13 detectors, 14 evaluated rows, 9 with a track record
 
-5 candlestick (bullish/bearish engulfing, hammer, shooting star, morning/evening star) ·
-4 reversal (H&S, inverse H&S, double top, double bottom) ·
-3 continuation (ascending triangle, descending triangle, bull/bear flag)
+These are three different counts and conflating them is how this section used to mislead.
+
+| Count | What it is |
+|---|---|
+| **13** | detector instances wired in `DetectorRegistry.all()` |
+| **14** | evaluated pattern rows — `FlagDetector` emits both a bull and a bear flag from one pass |
+| **9** | patterns that can actually enter the track record |
+
+The nine with live measurements: **Rising Wedge, Head & Shoulders, Inverse Head & Shoulders, Double
+Top, Double Bottom, Ascending Triangle, Descending Triangle, Bull Flag, Bear Flag.**
+
+The five candlestick detectors still run on every scan — but a candle formation has no measured
+move, and `OutcomeTracker` refuses any match that lacks one, so their matches can never reach the
+accuracy ledger. The catalogue lists them as **glossary-only**: teaching rows, not scored rows. That
+is a labelling decision, not a broken detector, and it is argued in full in `PatternCatalogData.kt`.
+
+A separate measured fact worth knowing: of the patterns once presented as equally live, **8 of 14
+never produce a candidate on real data** (commit `fedd20f`). Every one of those zero counts is a
+strictness gate doing its job, and the Patterns tab now reports the per-gate census rather than
+quietly showing an empty list.
 
 Rules, tolerances and failure-mode penalties were extracted from the project's investing textbook
 into **[docs/spec/](docs/spec/)** (`patterns-spec.md`, `scoring-spec.md`, `redflags-spec.md`) — so
@@ -113,10 +130,27 @@ prose are marked `[derived]` so a reviewer can argue with them.
 
 ## Building it
 
+Everything is built and tested in **GitHub Actions** — this repository's working rule is that no
+build runs on the authoring machine. See [AGENTS.MD](AGENTS.MD) rule 4.
+
 ```bash
-./gradlew :domain:test :data:test    # 1,337 tests — no Android SDK needed
-./gradlew :app:assembleDebug         # needs an Android SDK (SDK 36, JDK 21)
+# locally you only ever need this (and the wrapper verifies the toolchain):
+./gradlew :domain:test :data:test -PskipAndroid   # engine suites, no Android SDK needed
 ```
+
+Pushing or opening a PR runs three CI jobs:
+
+| Job | Runs | Purpose |
+|---|---|---|
+| `changes` | always | diffs the PR against base with plain `git` (no third-party action) |
+| `jvm` | always | `:domain:test :data:test -PskipAndroid` — the cheapest real signal |
+| `android` | only when `:app` / `:android-data` / gradle files changed | SDK install, compile, APK |
+
+So an engine-only change is verified in about three minutes; a UI change pays the full SDK cost.
+
+There is also an on-demand probe for the free data sources:
+`gh workflow run verify-live.yml`. It has no schedule — it costs nothing until someone asks for it.
+Latest findings: **[docs/LIVE-PROBE.md](docs/LIVE-PROBE.md)**.
 
 See **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)** for the toolchain and setup.
 
@@ -222,9 +256,12 @@ it.
 | Phase | State |
 |---|---|
 | P0 scaffold · P1 symbol book · P2 bhavcopy · P5 fundamentals | ✅ complete, fixture-tested |
-| P3 history · P7 pattern engine · P8 all 12 detectors · P6 red flags · P9 accuracy | ✅ complete, JVM-tested, **P7 gate passed** |
-| P4 technicals UI · P10 workers | ⚠️ written, **never compiled** — no Android SDK on this machine |
-| P11 voice search + share-as-image | ✅ written, ⚠️ never compiled |
+| P3 history · P7 pattern engine · P8 all 13 detectors · P6 red flags · P9 accuracy | ✅ complete, JVM-tested, **P7 and P3 gates both passed** |
+| P4 technicals UI · P10 workers | ✅ **compiled in CI** (run 38132317377, 2026-10-11) |
+| P11 voice search + share-as-image | ✅ **compiled in CI** |
+| `:app` + `:android-data` first compile | ✅ 2026-10-11 — the first build of these modules in any environment |
 
-**Read [docs/VERIFICATION.md](docs/VERIFICATION.md) before trusting any of it.** Two things are
-open: the P3 gate needs a network Yahoo answers on, and the Android modules need a real build.
+**Both open items from the last review are now closed by measurement.** The P3 gate executes —
+the Yahoo cookie+crumb handshake answers 200 and the chart API returns data
+([docs/LIVE-PROBE.md](docs/LIVE-PROBE.md)). The Android modules compile in CI on every push and
+pull request, which is now the build gate for the whole repository.

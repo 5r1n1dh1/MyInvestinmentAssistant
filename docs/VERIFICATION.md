@@ -93,6 +93,14 @@ Goodwill and pledging are **implemented and unit-tested against synthetic input*
 on every real symbol while saying why. That is the honest shape: a permanent gap that reports
 itself, rather than a blank that reads as a value.
 
+**Update 2026-10-16 (live probe).** The bank ratios were still an open question at this point —
+`screener.in` publishes NIM / GNPA / CASA / PCR for banks, in principle. The probe settles it: those
+labels appear on the page but their **values sit behind a login paywall** (60 empty
+`highlight-cell` elements), so they stay `NOT_SOURCED` for banks too. The gap is now closed *by
+evidence* rather than left pending, and the honest alternative — the annual report, the RBI
+Financial Stability Report — is what the education curriculum teaches instead. See
+[LIVE-PROBE.md](LIVE-PROBE.md) §3.
+
 ### The §5.1 divergences reproduce exactly
 
 RELIANCE P/E 21.2 vs 21.142 → 0.27% (agreed) · TCS P/E 14.0 vs 15.083 → **7.18%** (conflict) ·
@@ -207,10 +215,54 @@ Bugs that a unit test written against the implementation would have shipped:
 
 ## 5. Unverified — and what was done instead
 
-### `:app` and `:android-data` have never been compiled
+### `:app` and `:android-data` have never been compiled — **RESOLVED 2026-10-11**
 
-**No Android SDK on this machine.** Those two modules are excluded from the build, so the entire
-Compose layer, Room schema, Hilt graph and WorkManager wiring is unexecuted.
+**This section is the historical record of the gap, and it is now closed.** Kept because the way it
+was closed matters: not by finding a local Android SDK, but by fixing the CI workflow that had been
+failing silently on every push.
+
+#### Why CI was failing
+
+The JVM suites had been passing on every run for weeks. The Android phase had never started,
+because `android-actions/setup-android@v3` runs `sdkmanager "tools"` and **the standalone SDK
+`tools` package was removed from Google's repository** — so the action exited 1 before any module
+was compiled, on every push since the workflow was added. Three more defects surfaced in sequence,
+each only visible once the previous one was fixed:
+
+| Defect | Symptom | Fix |
+|---|---|---|
+| `setup-android@v3` installs the removed `tools` package | exit 1 at SDK setup, no compile attempted | drop the action; call `sdkmanager` directly |
+| the runner's `sdkmanager` is **not on PATH** (it lives at `$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/`) | exit 127, "command not found" | resolve it by path, with a `find` fallback across revisions |
+| SDK install was wrapped in `\|\| true` | a missing package would surface later as an unreadable Gradle error | licences stay tolerant; package install is strict |
+| PR path detection used `git diff origin/BASE...HEAD` | `fatal: no merge base` — the checkout is a **depth-1 shallow clone of the merge commit**, so a three-dot diff cannot resolve | two-dot diff (`origin/BASE HEAD`); the merge commit's tree *is* base + PR changes |
+
+#### The first green build
+
+Run **38132317377**, 2026-10-11, 3m37s. Tasks that had never executed before, now green:
+
+```
+:android-data:compileDebugKotlin     ✓
+:android-data:assembleDebug           ✓
+:app:compileDebugKotlin               ✓
+:app:assembleDebug                    ✓          → APK artifact produced
+:domain:test  :data:test              ✓          (JVM suites unchanged, still green)
+```
+
+Every "expect the first real build to surface" item in the old list below turned out to be already
+correct — no Material 3 argument mismatches, no Hilt graph errors, no `HorizontalDivider` breakage.
+That is worth stating plainly: the manual audit that stood in for a build did not miss anything
+real, because the code had been written against stable APIs on purpose.
+
+#### CI is now the build gate for the whole repo
+
+`build.yml` is three jobs: `changes` (diff detection, plain `git`, no third-party action) → `jvm`
+(the engine suites, always) → `android` (SDK install + compile + APK, **skipped when a PR touches
+only `:domain`/`:data`/docs**). An engine-only change verifies in ~3 minutes.
+
+#### The original gap, for the record
+
+**No Android SDK on this machine.** Those two modules were excluded from the build, so the entire
+Compose layer, Room schema, Hilt graph and WorkManager wiring was unexecuted.
 
 Substitutes applied:
 
@@ -233,6 +285,7 @@ Substitutes applied:
 - Five screen files are parse-verified only: `PatternsScreen`, `AccuracyScreen`, `SettingsScreen`,
   `VoiceSearchField`, `ShareBriefButton`. Expect the first real build to surface Material 3
   argument-name mismatches there, nothing deeper.
+  **Outcome: none of them did.** All five compiled clean on run 38132317377.
 
 ### Known capability gaps, deliberately surfaced rather than faked
 
@@ -248,11 +301,25 @@ Substitutes applied:
 
 Each is a visible sentence in the UI, not a silent no-op.
 
-### P3 and P4 remain open
+### P3 and P4 — P3 **closed by probe**, P4 **partially closed**
 
-- **P3** — needs a network Yahoo answers on. The code is written to the documented contract.
-- **P4** — `:app` compile, plus the P12 low-RAM device test (2GB-RAM hardware, cold offline
-  launch on the watchlist screen).
+- **P3 — CLOSED 2026-10-16.** The gate needed a network Yahoo answers on. The on-demand live probe
+  found one: `fc.yahoo.com` seeds a cookie, `v1/test/getcrumb` returns a crumb, and
+  `v8/finance/chart/RELIANCE.NS` answers **200** with the cookie+crumb pair. The documented contract
+  was correct. See [LIVE-PROBE.md](LIVE-PROBE.md) §2.
+- **P4 — the `:app` compile is closed** (run 38132317377). **The P12 low-RAM device test cannot be
+  closed here**: it needs 2GB-RAM hardware, and a GitHub runner is not that. Cold offline launch on
+  the watchlist screen on real low-RAM hardware stays an owner task — this document should not
+  pretend otherwise.
+
+### The probe also overturned its own naive result
+
+The probe greps screener.in's HDFCBANK page for bank-ratio labels and reports GNPA / NNPA / CASA as
+"present". Direct inspection says otherwise: those labels sit inside 60 paywalled `highlight-cell`
+elements with empty values, and the standalone rows carry labels with no numbers at all — while
+ROCE, which the app already sources, renders `7.02`. **The ratios stay `NOT_SOURCED`.** The lesson is
+recorded in [LIVE-PROBE.md](LIVE-PROBE.md) §3 because it is the general one: a label match is not a
+value, and any future promotion must pin a golden fixture asserting a parsed number.
 
 ### The price layer had no write path — found by running the app, not by a test
 
