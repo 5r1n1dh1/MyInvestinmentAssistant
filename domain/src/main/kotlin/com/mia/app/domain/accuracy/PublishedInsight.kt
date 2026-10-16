@@ -40,7 +40,7 @@ import com.mia.app.domain.pattern.ProjectionCalibration
 object PublishedInsight {
 
     /**
-     * Symbols the published measurements walked, and windows it visited.
+     * Large caps the published measurements walked.
      *
      * Named so the panel can say what the sample was instead of implying it was "the market".
      */

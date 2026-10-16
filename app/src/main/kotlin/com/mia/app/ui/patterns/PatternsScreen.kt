@@ -37,12 +37,14 @@ import com.mia.app.domain.model.BreakoutTrigger
 import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.Match
 import com.mia.app.domain.model.MatchScoreLabels
+import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.OutcomeTrackerPolicy
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.EvaluationOutcome
 import com.mia.app.domain.ratios.Freshness
 import com.mia.app.domain.ratios.FreshnessKind
 import com.mia.app.domain.ratios.FreshnessPolicy
@@ -247,6 +249,8 @@ fun PatternsScreen(
             if (state.scanNotes.isNotEmpty()) {
                 item(key = NOTES_KEY) { NotesSection(state) }
             }
+
+            item(key = CENSUS_KEY) { DetectorCensusSection(state) }
 
             if (state.flagCoverageIncomplete) {
                 item(key = FLAG_COVERAGE_KEY) {
@@ -1023,6 +1027,114 @@ private fun NotesSection(state: PatternsUiState, modifier: Modifier = Modifier) 
     }
 }
 
+// ------------------------------------------------------------------------------- census
+
+/**
+ * "What fires, and what does not" — the detector-strictness census (gap A5).
+ *
+ * ### The failure this fixes
+ * Search a large cap, see an empty list, and conclude the app is broken. Eight of the fourteen
+ * evaluated patterns produce no candidate on real Indian large-cap daily data — and every one of
+ * them is **correctly strict**, with each threshold traced to a line in the textbook the app is
+ * built from. That is a measurement, and until now it lived in a test file where no reader could
+ * reach it. So it is shown here: per pattern, how many windows reached that pattern's own shape gate,
+ * how many candidates survived every later gate, and which gate took the rest.
+ *
+ * ### Provenance, stated on the panel itself
+ * The census's provenance is `PUBLISHED_FIXTURE` and the badge says so in the first line. This is
+ * the engine measured on 20 large caps — evidence about the engine, and about nothing at all about
+ * the stock named in the header above.
+ *
+ * ### The live half
+ * The last line is computed from this screen's own scan: how many patterns matched, how many scored
+ * below the render gate, and how many could not be evaluated **on this stock in this window**. Two
+ * different scopes, both named, so the reader is never left guessing which is which.
+ */
+@Composable
+private fun DetectorCensusSection(state: PatternsUiState, modifier: Modifier = Modifier) {
+    val census = state.detectorCensus
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        SectionHeader(title = SECTION_CENSUS, subtitle = CENSUS_SUBTITLE)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(MiaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                Text(
+                    text = census.provenance.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = census.headline(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                census.rows.forEach { row ->
+                    Text(
+                        text = row.label(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Text(
+                    text = CENSUS_STRICTNESS_NOTE,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = census.sourceNote,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                onThisStockCensusLine(state)?.let { line ->
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The same census restricted to the stock on screen, over the analysed window.
+ *
+ * Counts, not rates: the three states are counts of patterns, and a share of fourteen patterns would
+ * be a percentage on screen whose denominator is a number of detectors rather than a number of
+ * outcomes.
+ */
+private fun onThisStockCensusLine(state: PatternsUiState): String? {
+    val evaluation = state.evaluation ?: return null
+    val outcomes = evaluation.outcomesFor()
+    val matched = outcomes.count { it is EvaluationOutcome.Matched }
+    val nearMiss = outcomes.count { it is EvaluationOutcome.NearMiss }
+    val blocked = outcomes.count { it is EvaluationOutcome.CannotEvaluate }
+    val notEvaluated = outcomes.count { it is EvaluationOutcome.NotEvaluated }
+    val window = state.windowBars ?: state.barCount
+    return "On ${state.symbol.ifEmpty { NOT_AVAILABLE_SYMBOL }} over the " +
+        "${evaluation.windowBars}-bar window this scan analysed: $matched matched, $nearMiss scored " +
+        "below the ${MatchScorePolicy.RENDER_THRESHOLD} render gate, $blocked could not be " +
+        "evaluated, and $notEvaluated are not looked for by the app. " +
+        if (state.windowBars != null) {
+            "That is a window of the stored series, not the whole one ($window bars stored)."
+        } else {
+            "That is the whole stored series, $window bars."
+        }
+}
+
 // ------------------------------------------------------------------------------- helpers
 
 /** A label beside a value. Identical everywhere on this screen so the columns line up. */
@@ -1105,6 +1217,17 @@ private fun suppressedSubtitle(count: Int): String =
         "Each reason below is the detector's own."
 
 private const val SECTION_NOTES = "What the scan could not measure"
+
+private const val SECTION_CENSUS = "What fires, and what does not"
+private const val CENSUS_SUBTITLE =
+    "Which patterns produce a candidate on real data, and where the ones that did not were lost. " +
+        "Every threshold below is the textbook one, so an empty list here is strictness rather than " +
+        "a fault."
+private const val CENSUS_STRICTNESS_NOTE =
+    "These counts are why an empty pattern list is not a fault: the gates that removed the " +
+        "candidates are the textbook shape rules, and loosening one to make a number go up would " +
+        "fit the engine to a single sample rather than to the pattern."
+
 private const val SECTION_FLAG_COVERAGE = "Red-flag coverage"
 private const val NOT_EVALUATED = "Not evaluated —"
 private const val FAILED = "Failed —"
@@ -1149,5 +1272,6 @@ private const val PATH_KEY = "patterns.path"
 private const val TRIGGER_KEY = "patterns.trigger"
 private const val SUPPRESSED_KEY = "patterns.suppressed"
 private const val NOTES_KEY = "patterns.notes"
+private const val CENSUS_KEY = "patterns.census"
 private const val FLAG_COVERAGE_KEY = "patterns.flag_coverage"
 private const val FOOTER_KEY = "patterns.footer"

@@ -1,5 +1,8 @@
 package com.mia.app.ui.accuracy
 
+import com.mia.app.domain.accuracy.PublishedInsight
+import com.mia.app.domain.accuracy.TrackRecordInsight
+import com.mia.app.domain.accuracy.TrackRecordInsightReport
 import com.mia.app.domain.accuracy.TrackRecordContext
 import com.mia.app.domain.model.AccuracyReport
 import com.mia.app.domain.model.HitRate
@@ -79,6 +82,24 @@ interface AccuracyDataSource {
      * not.
      */
     suspend fun trackedTimeframes(): List<Timeframe> = emptyList()
+
+    /**
+     * The distance-bucket calibration table, and the measured reason the rate is what it is.
+     *
+     * ### Why the default is the **published** measurement
+     * Both figures need the stored outcomes *and* the stored bars that were on the chart when each
+     * projection was made — the breakout close is what the distance is measured from, and no
+     * repository read exposes it. An implementation that can supply both should override this and
+     * return a [TrackRecordInsightReport] built by [TrackRecordInsight.fromOutcomes], which is
+     * labelled `DEVICE_STORED`. Until then the default returns the published fixture measurement,
+     * which is labelled `PUBLISHED_FIXTURE` and says so in the copy the screen renders.
+     *
+     * Defaulting to the published table rather than to nothing is deliberate: a fresh install has no
+     * outcomes at all, and an empty calibration panel on a product whose claim is "we publish our
+     * own record" is indistinguishable from having no record. The provenance label is what keeps the
+     * default honest, and it is a field on the value rather than a caption a screen could forget.
+     */
+    suspend fun trackRecordInsight(): TrackRecordInsightReport = PublishedInsight.REPORT
 }
 
 /**

@@ -2,6 +2,7 @@ package com.mia.app.domain.accuracy
 
 import com.mia.app.domain.compliance.AdviceLanguage
 import com.mia.app.domain.compliance.HonestyContract
+import com.mia.app.domain.model.AccuracyReport
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Direction
 import com.mia.app.domain.model.HitRate
@@ -250,7 +251,7 @@ data class ReachExplanation(
  * fixture walk-forward, so the two can be compared like for like instead of by eye.
  *
  * ### The one derived quantity everything rests on
- * [projectionBar] finds the bar a projection was made on, by date, symbol and timeframe. From its
+ * [settledSamples] locates the bar a projection was made on, by date, symbol and timeframe. From its
  * close come the target distance and the favourable excursion, which is why both figures are
  * unavailable (rather than approximate) when that bar is not stored: an outcome whose projection bar
  * has been pruned is counted as unmeasured and left out, never guessed at.
@@ -391,7 +392,7 @@ object TrackRecordInsight {
      * most want. Ties are broken by scope then by sample count so the sentence never wobbles between
      * renders.
      */
-    fun nearestToReportable(report: com.mia.app.domain.model.AccuracyReport): HitRate? =
+    fun nearestToReportable(report: AccuracyReport): HitRate? =
         report.perSymbolAndPattern.plus(report.perPattern).plus(report.perSymbol)
             .filterNot { it.isReportable }
             .minWithOrNull(

@@ -3,6 +3,8 @@ package com.mia.app.ui.patterns
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mia.app.domain.accuracy.PatternCensus
+import com.mia.app.domain.accuracy.PublishedCensus
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.Match
@@ -175,6 +177,20 @@ data class PatternsUiState(
 
     /** The threshold a match must clear to be projected at all. */
     val projectThreshold: Int get() = MatchScorePolicy.PROJECT_THRESHOLD
+
+    /**
+     * The detector-strictness census: which patterns produce a candidate on real data, and where the
+     * ones that did not were lost.
+     *
+     * ### Why it is a constant and not a read
+     * The census is a **published measurement** over the app's own committed NSE fixture, recomputed
+     * by a test on every build. It is not this device's data, and it carries
+     * [com.mia.app.domain.accuracy.InsightProvenance.PUBLISHED_FIXTURE] so the panel says so on
+     * screen. A per-device census would need a candidate count per `(symbol, pattern)` across every
+     * tracked stock, which no repository read exposes today — and inventing one from this screen's
+     * single stock would be a different measurement wearing the same label.
+     */
+    val detectorCensus: PatternCensus get() = PublishedCensus.CENSUS
 
     // --------------------------------------------------------- Pattern Explorer, derived
 
