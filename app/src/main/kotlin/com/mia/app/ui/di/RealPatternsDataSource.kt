@@ -6,6 +6,7 @@ import com.mia.app.data.android.repo.CandleSeries
 import com.mia.app.data.android.repo.DataFailure
 import com.mia.app.data.android.repo.DataResult
 import com.mia.app.data.android.repo.DetectorRegistry
+import com.mia.app.data.android.repo.IndexRepository
 import com.mia.app.data.android.repo.RedFlagRepository
 import com.mia.app.data.android.repo.todayInMarket
 import com.mia.app.domain.model.Candle
@@ -68,11 +69,21 @@ import javax.inject.Singleton
  * `withContext(MiaBackgroundDispatcher)`, so there is one hop rather than one per call, and
  * [projections] runs inside that same context.
  *
- * ### `benchmarkCandles = null`, and why that is not a zero
- * No index series is loaded on device, so the relative-strength CONTEXT measure has no input.
+ * ### The benchmark, and why `null` is still a normal answer
+ * The Context factor's relative-strength component is fed from the on-device `index_candles`
+ * cache via [IndexRepository]. That cache is populated once a day by `EodRefreshWorker`, so
+ * **before the first successful fetch — and on any device whose Yahoo requests never succeed —
+ * there is no benchmark**, and `null` remains the correct value to pass.
+ *
  * `null` means "no benchmark" to the engine, which unscores that factor and records it in
- * `PatternScanResult.notes`; `scoring-spec.md` §6 X4 forbids substituting a strength of zero, and this
- * is the substitution that is being avoided.
+ * `PatternScanResult.notes`; `scoring-spec.md` §6 X4 forbids substituting a strength of zero, and
+ * this is the substitution that is being avoided. The read is wrapped in [runCatching] for the
+ * same reason: a storage problem here must degrade to the honest unscored state, not fail a scan
+ * whose real subject is chart geometry.
+ *
+ * An **empty list** is never substituted. `null` and `emptyList()` reach the same engine path
+ * while meaning different things — "no benchmark" against "a benchmark that shares no dates" —
+ * and only the first of those can be reported to the reader.
  */
 @Singleton
 class RealPatternsDataSource @Inject constructor(
@@ -80,6 +91,7 @@ class RealPatternsDataSource @Inject constructor(
     private val detectorRegistry: DetectorRegistry,
     private val redFlagRepository: RedFlagRepository,
     private val accuracyRepository: AccuracyRepository,
+    private val indexRepository: IndexRepository,
     @MiaBackgroundDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : PatternsDataSource {
 
@@ -135,7 +147,13 @@ class RealPatternsDataSource @Inject constructor(
                 detectors = detectorRegistry.all(),
                 options = PatternScanOptions(
                     symbol = ticker,
-                    benchmarkCandles = null,
+                    // See the class KDoc: `null` is the honest "no benchmark" state and is what a
+                    // device without a stored index series passes. `asBenchmarkCandles()` returns
+                    // `null` for an empty series so that case cannot be mistaken for a benchmark.
+                    benchmarkCandles = runCatching { indexRepository.benchmark() }
+                        .getOrNull()
+                        ?.valueOrNull()
+                        ?.asBenchmarkCandles(),
                     collectDiagnostics = false,
                 ),
             )

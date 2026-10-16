@@ -35,9 +35,11 @@ class MiaConverters {
  * The one database — plan.md §5.2.
  *
  * ### Version and migrations
- * * [DATABASE_VERSION] is `3`. v1 was the plan.md §5.2 table set; v2 adds
+ * * [DATABASE_VERSION] is `4`. v1 was the plan.md §5.2 table set; v2 adds
  *   `statement_rows`, `derived_metrics` and `watchlist`; v3 adds `ratios.industry`, the
- *   screener.in classification that sector resolution needs (see `DatabaseMigrations`).
+ *   screener.in classification that sector resolution needs; v4 adds `index_candles`, the
+ *   benchmark series that finally gives `PatternScanOptions.benchmarkCandles` something to be
+ *   (see `DatabaseMigrations`).
  * * **`fallbackToDestructiveMigration()` is never called, anywhere.** The `candles` table is
  *   write-once: its 500 daily bars per symbol cost a Yahoo round-trip per symbol to rebuild
  *   (plan.md §3.2, §13), and `outcomes` is the app's published track record (plan.md §6.1),
@@ -65,6 +67,7 @@ class MiaConverters {
         BhavcopyCacheEntity::class,
         WatchlistEntity::class,
         WorkStateEntity::class,
+        IndexCandleEntity::class,
     ],
     version = MiaDatabase.DATABASE_VERSION,
     exportSchema = true,
@@ -86,12 +89,14 @@ abstract class MiaDatabase : RoomDatabase() {
 
     abstract fun workStateDao(): WorkStateDao
 
+    abstract fun indexDao(): IndexDao
+
     companion object {
         /** File name of the on-device database. */
         const val DATABASE_NAME: String = "mia.db"
 
-        /** plan.md §5.2 + the three extension tables documented on the entities. */
-        const val DATABASE_VERSION: Int = 3
+        /** plan.md §5.2 + the four extension tables documented on the entities. */
+        const val DATABASE_VERSION: Int = 4
 
         /** Applied at open time; see the class KDoc. */
         val CALLBACK: Callback = object : Callback() {

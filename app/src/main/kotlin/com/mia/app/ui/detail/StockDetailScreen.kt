@@ -43,7 +43,8 @@ import com.mia.app.ui.theme.MiaSpacing
  * exists.
  *
  * ```
- *  header      symbol, company name, 1D/1W toggle, last close + day change, as-of chip
+ *  header      symbol, company name, 1D/1W toggle, last close + day change,
+ *              market context (index band, traded value), as-of chip
  *  TabRow      Fundamentals | Technicals
  *  slot        the selected tab
  * ```
@@ -196,6 +197,14 @@ private fun DetailHeader(
         state.errorReason?.let { reason ->
             HeaderError(reason = reason, onRetry = onRetry)
         }
+
+        // Market context: the published index band and the traded-value measurement.
+        //
+        // Below the as-of chip on purpose. The as-of chip is the provenance of *every* number on
+        // this header, so it comes first; the context row qualifies those numbers rather than
+        // being a peer of them. [StockContextChips] renders nothing when it has no measurement,
+        // so an ordinary large cap gets no extra lines here.
+        StockContextChips()
 
         val freshness = state.freshness
         if (state.asOf != null && freshness != null) {

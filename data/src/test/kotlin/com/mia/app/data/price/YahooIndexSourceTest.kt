@@ -127,7 +127,10 @@ class YahooIndexSourceTest {
                 request.url.contains(YahooEndpoints.SESSION_URL) ->
                     FakeHttpTransport.status(404).copy(setCookies = listOf(cookie))
                 request.url.contains("/v1/test/getcrumb") ->
-                    FakeHttpTransport.status(429, mapOf("Retry-After" to listOf("1")))
+                    FakeHttpTransport.ok(
+                        ByteArray(0),
+                        code = 429,
+                    ).copy(headers = mapOf("Retry-After" to listOf("1")))
                 else -> error("the chart must not be requested without a crumb")
             }
         }

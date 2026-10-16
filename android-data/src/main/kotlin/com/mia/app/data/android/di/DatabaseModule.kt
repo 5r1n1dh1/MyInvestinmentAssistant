@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import com.mia.app.data.android.db.CandleDao
 import com.mia.app.data.android.db.DatabaseMigrations
 import com.mia.app.data.android.db.FundamentalsDao
+import com.mia.app.data.android.db.IndexDao
 import com.mia.app.data.android.db.MarketDao
 import com.mia.app.data.android.db.MiaDatabase
 import com.mia.app.data.android.db.PatternDao
@@ -72,6 +73,10 @@ object DatabaseModule {
 
     @Provides
     fun provideWorkStateDao(database: MiaDatabase): WorkStateDao = database.workStateDao()
+
+    /** The benchmark index cache. Its own DAO, separate from `candles` — see `IndexCandleEntity`. */
+    @Provides
+    fun provideIndexDao(database: MiaDatabase): IndexDao = database.indexDao()
 
 
 }
