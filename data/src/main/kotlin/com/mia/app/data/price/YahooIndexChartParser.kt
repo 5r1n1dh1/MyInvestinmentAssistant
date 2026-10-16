@@ -96,7 +96,11 @@ internal data class IndexQuoteBlock(
  *    notes, because a wrong-zone parse is invisible otherwise.
  * 4. **Rows are de-duplicated and sorted.** `relativeStrength` sorts internally, but the engine's
  *    `Candle.lastOrNull()?.date` "as of" read assumes ascending order, so a descending payload
- *    must not be passed on as-is.
+ *    must not be passed on as-is. A repeated timestamp keeps the **first** value, which is what
+ *    `YahooChartParser` does for equities: the first row is the one Yahoo emitted for that
+ *    session, and a later row repeating the timestamp is a duplicate emission rather than a
+ *    correction. Either choice is defensible; the same choice in both parsers is not optional,
+ *    because the two must never disagree about what a duplicated date means.
  *
  * ### Never throws
  * Malformed JSON, an absent `chart` object, a populated `chart.error`, an empty timestamp array
@@ -209,7 +213,7 @@ object YahooIndexChartParser {
             notes += "payload was not in ascending timestamp order; sorted ${timestamps.size} row(s)"
         }
         if (order.duplicates > 0) {
-            notes += "${order.duplicates} duplicate timestamp(s) collapsed, last value kept"
+            notes += "${order.duplicates} duplicate timestamp(s) collapsed, first value kept"
         }
 
         val candles = ArrayList<Candle>(timestamps.size)

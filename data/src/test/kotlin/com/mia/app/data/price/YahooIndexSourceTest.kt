@@ -276,6 +276,8 @@ class YahooIndexSourceTest {
     fun `a 429 refreshes the session and retries exactly once`() = runTest {
         // A stale crumb is the likeliest cause of a 429, so retrying with the *same* session would
         // be the same request again. One retry, then the failure is reported as a rate limit.
+        // Both hosts rate-limit the first round — otherwise the query2 fallback answers inside
+        // round 0 and the retry path is never exercised at all.
         var charts = 0
         val t = FakeHttpTransport { request ->
             when {
@@ -284,7 +286,7 @@ class YahooIndexSourceTest {
                 request.url.contains("/v1/test/getcrumb") -> FakeHttpTransport.text(crumb)
                 else -> {
                     charts++
-                    if (charts == 1) FakeHttpTransport.status(429) else FakeHttpTransport.text(goodChart)
+                    if (charts <= 2) FakeHttpTransport.status(429) else FakeHttpTransport.text(goodChart)
                 }
             }
         }
@@ -292,7 +294,7 @@ class YahooIndexSourceTest {
         val result = source(t).daily(IndexSymbol.NIFTY_50)
 
         assertTrue(result.isUsable, result.unavailableReason)
-        assertEquals(2, charts, "exactly one retry after a 429")
+        assertEquals(3, charts, "two rate-limited rounds, then exactly one retry")
         assertEquals(
             2,
             t.requests.count { it.url.contains("fc.yahoo.com") },

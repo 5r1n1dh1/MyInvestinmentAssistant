@@ -162,7 +162,7 @@ class YahooIndexChartParserTest {
     }
 
     @Test
-    fun `a duplicate timestamp is collapsed and the later value is kept`() {
+    fun `a duplicate timestamp is collapsed and the first value is kept`() {
         val result = parse()
         val dates = result.candles.map { it.date }
 
@@ -171,9 +171,11 @@ class YahooIndexChartParserTest {
             result.health.notes.any { it.contains("1 duplicate timestamp") },
             result.health.notes.toString(),
         )
-        // The later of the two duplicate rows carried the higher close, and that is the one kept.
+        // 25,988.95 and 26,011.3 share the 2026-03-23 timestamp. The first wins, matching
+        // `YahooChartParser`'s own de-duplication for equities: one parser must not read a
+        // duplicated date as a correction while the other reads it as an error.
         assertEquals(
-            26011.3,
+            25988.95,
             result.candles.last { it.date == LocalDate.parse("2026-03-23") }.close,
         )
     }

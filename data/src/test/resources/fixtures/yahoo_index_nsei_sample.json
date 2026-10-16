@@ -3,7 +3,7 @@
     "SYNTHETIC fixture, hand-authored from the Yahoo v8 finance/chart schema. Not a capture.",
     "Modelled on fixtures/yahoo_chart_reliance_2y_1d_sample.json, reduced to the fields an",
     "index parse uses and extended to 64 sessions so it clears IndexEndpoints.MIN_USABLE_BARS.",
-    "",
+    "  row 58  -> repeats row 57's timestamp -> duplicate collapsed, first value kept",
     "Deliberate quirks, each defended by a test in YahooIndexChartParserTest:",
     "  row 2   -> open/high/low are null  -> collapsed to O=H=L=C=close, counted as collapsed",
     "  row 3   -> close is null           -> dropped, counted in rowsDropped",

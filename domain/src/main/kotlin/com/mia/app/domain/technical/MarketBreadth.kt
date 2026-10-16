@@ -247,10 +247,10 @@ object MarketBreadth {
                 extremesEligible++
                 // `>=` / `<=`: an unchanged close at the window high is still *at* the high. A
                 // strict `>` would report a flat market as having no extremes at all.
-                val highest = window.max()
-                val lowest = window.min()
-                if (close >= highest) newHighs++
-                if (close <= lowest) newLows++
+                val highest = window.maxOrNull()
+                val lowest = window.minOrNull()
+                if (highest != null && close >= highest) newHighs++
+                if (lowest != null && close <= lowest) newLows++
             }
 
             if (window.size >= SMA_PERIOD) {

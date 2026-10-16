@@ -80,10 +80,14 @@ object IndexCohortNotes {
      * The honest form of "not in any of NSE's three published lists". Naming the lists keeps the
      * statement checkable, and it is *not* the same claim as "this is a small cap" — a company
      * outside all three is simply outside all three.
+     *
+     * The vintage is interpolated from [IndexCohort.BUNDLED_AS_OF] rather than typed in, so a
+     * refreshed bundle cannot leave a hard-coded date claiming to be the file's.
      */
-    const val NOT_IN_ANY_INDEX: String =
-        "Not a constituent of NIFTY 50, NIFTY MIDCAP 150 or NIFTY SMALLCAP 250 as of " +
-            "2026-10-04."
+    val NOT_IN_ANY_INDEX: String =
+        "Not a constituent of ${IndexCohort.NIFTY_50.label}, " +
+            "${IndexCohort.MIDCAP_150.label} or ${IndexCohort.SMALLCAP_250.label} as of " +
+            "${IndexCohort.BUNDLED_AS_OF}."
 }
 
 /**
