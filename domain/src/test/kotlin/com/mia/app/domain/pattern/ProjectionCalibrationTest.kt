@@ -51,28 +51,31 @@ import kotlin.test.assertTrue
 class ProjectionCalibrationTest {
 
     @Test
-    fun `a level within three percent is reached far more often than the no-pattern base rate`() {
+    fun `a level within three percent is reached more often than one of the same size by chance`() {
         val table = ProjectionFixture.calibration
         println(ProjectionFixture.report())
         val tight = table.bucket(DistanceBucket.WITHIN_3)
-        val rate = assertNotNull(tight.hitRatePct(H5), "the ≤3 % bucket has no candidates")
-        val base = assertNotNull(table.baseRatePct(H5), "no base rate was computed")
+        val rate = assertNotNull(tight.hitRatePct(H5), "the within-3 % bucket has no candidates")
+        // The control has to be the **same size**. A base rate is a function of how far the level
+        // sits: a level 5 % away is touched 10 % of the time with no pattern, a level 1 % away 68 %.
+        // Quoting 82 % against the 5 % control would be a comparison of two different questions.
+        val base = assertNotNull(sameSizeBaseRate(3.0)[H5], "no base rate was computed")
 
         assertTrue(tight.samples >= 100, "only ${tight.samples} candidates within 3 % — too few to claim anything")
         assertTrue(
-            rate > 60.0,
+            rate > 70.0,
             "a level within 3 % was reached only ${"%.1f".format(rate)} % of the time (n=${tight.samples}); " +
                 "the measurement this gate rests on put it at 82 %",
         )
         assertTrue(
-            base < 20.0,
-            "the no-pattern base rate at five bars is ${"%.1f".format(base)} % — a base rate that high " +
-                "would leave no room for the pattern to add anything",
+            rate > base,
+            "a level within 3 % was reached ${"%.1f".format(rate)} % of the time against " +
+                "${"%.1f".format(base)} % for a level of the same size with no pattern involved",
         )
         assertTrue(
-            rate >= base * 3,
-            "the lift over the base rate is only ${"%.1f".format(rate - base)} points (${"%.1f".format(rate)} % " +
-                "against a ${"%.1f".format(base)} % base rate)",
+            base < 60.0,
+            "the no-pattern base rate for a 3 % level is ${"%.1f".format(base)} % — a control that high " +
+                "would leave almost nothing for the pattern to add",
         )
     }
 
@@ -125,33 +128,47 @@ class ProjectionCalibrationTest {
     }
 
     @Test
-    fun `every bucket inside the gate beats the no-pattern base rate of the same size`() {
+    fun `every bucket inside the gate beats chance at its own level size`() {
         // DISTANCE_MAX = 5 % is the edge the gate draws, so the claim that justifies it is: inside
-        // that edge, a level the app drew is reached several times more often than a level of the
-        // *same size* drawn with no pattern at all. The control is drawn at each bucket's own edge —
-        // comparing a 1 % level against a 5 % base rate would flatter the pattern for the wrong
-        // reason.
+        // that edge, a level the app drew is reached more often than a level of the *same size*
+        // drawn with no pattern at all. The control is redrawn at each bucket's own edge — comparing
+        // a 1 % level against a 5 % base rate would flatter the pattern for the wrong reason, and it
+        // would flatter it a lot: a 1 % level is touched 68 % of the time by chance.
         val table = ProjectionFixture.calibration
-        DistanceBucket.entries
+        val admitted = DistanceBucket.entries
             .filter { it.maxPercent != null && it.maxPercent <= ProjectionGate.DISTANCE_MAX_PERCENT }
-            .forEach { bucket ->
-                val rate = assertNotNull(table.bucket(bucket).hitRatePct(H5), "${bucket.label} is empty")
-                val base = assertNotNull(
-                    ProjectionCalibration.baseRatesPct(
-                        candlesBySymbol = ProjectionFixture.candlesBySymbol,
-                        horizons = ProjectionCalibration.HORIZONS,
-                        distancePercent = bucket.maxPercent!!,
-                    )[H5],
-                    "no base rate was computed for ${bucket.label}",
-                )
-                assertTrue(
-                    rate >= base * 2,
-                    "${bucket.label} was reached ${"%.1f".format(rate)} % of the time against a " +
-                        "${"%.1f".format(base)} % base rate at the same level size — the gate would be " +
-                        "admitting a level that is no better than chance",
-                )
-            }
+        assertTrue(admitted.isNotEmpty())
+
+        admitted.forEach { bucket ->
+            val rate = assertNotNull(table.bucket(bucket).hitRatePct(H5), "${bucket.label} is empty")
+            val base = assertNotNull(sameSizeBaseRate(bucket.maxPercent!!)[H5], "no control for ${bucket.label}")
+            assertTrue(
+                rate > base,
+                "${bucket.label} was reached ${"%.1f".format(rate)} % of the time against " +
+                    "${"%.1f".format(base)} % for a level of the same size with no pattern involved — " +
+                    "the gate would be admitting a level that is no better than chance",
+            )
+        }
+
+        // And at the gate's own edge the lift is still large, which is the number that justifies
+        // DISTANCE_MAX: 65 % against a 10 % control on this fixture.
+        val edge = assertNotNull(table.bucket(DistanceBucket.WITHIN_5).hitRatePct(H5))
+        val edgeBase = assertNotNull(sameSizeBaseRate(ProjectionGate.DISTANCE_MAX_PERCENT)[H5])
+        assertTrue(
+            edge >= edgeBase * 3,
+            "the bucket the gate stops at (within 5 %) was reached ${"%.1f".format(edge)} % of the time " +
+                "against a ${"%.1f".format(edgeBase)} % control — the gate's outer edge is no longer " +
+                "where the pattern adds anything",
+        )
     }
+
+    /** The no-pattern touch rate at [distancePercent], over the same bars and the same stride. */
+    private fun sameSizeBaseRate(distancePercent: Double): Map<Int, Double> =
+        ProjectionCalibration.baseRatesPct(
+            candlesBySymbol = ProjectionFixture.candlesBySymbol,
+            horizons = ProjectionCalibration.HORIZONS,
+            distancePercent = distancePercent,
+        )
 
     @Test
     fun `everyPublishedRateCarriesItsSampleSize`() {
