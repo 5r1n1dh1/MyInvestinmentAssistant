@@ -5,7 +5,7 @@
   (`com.mia.app.ui.theme.MiaTheme`).
 
   `android:Theme.Material.Light.NoActionBar` is used rather than a DayNight variant because
-  DayNight platform themes only exist from API 29 and `minSdk` is 26 — and the dark-mode window
+  DayNight platform themes only exist from API 29 and `minSdk` is 31 — and the dark-mode window
   background is handled by `values-night/colors.xml` instead.
 
   `windowLightStatusBar` / `windowLightNavigationBar` are left alone: `MainActivity` calls

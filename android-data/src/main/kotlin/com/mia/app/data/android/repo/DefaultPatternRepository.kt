@@ -41,6 +41,7 @@ class DefaultPatternRepository @Inject constructor(
     private val patternDao: PatternDao,
     private val symbolDao: SymbolDao,
     private val detectors: DetectorRegistry,
+    private val indexRepository: IndexRepository,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : PatternRepository {
 
@@ -115,12 +116,31 @@ class DefaultPatternRepository @Inject constructor(
             )
         }
 
+// The benchmark, read once per scan from the on-device `index_candles` cache.
+        //
+        // `null` here is a **real, expected** state — it is what the device reports before the
+        // first index fetch, and forever on a device whose Yahoo requests all fail. The engine
+        // treats it as "no benchmark": it unscores the Context factor's relative-strength
+        // component and writes "No index benchmark — relative strength unscored" into its notes,
+        // which this repository passes straight through to `PatternScan.notes`. That honesty is
+        // the reason the read is wrapped in `runCatching` and why an empty list is never
+        // substituted: an empty `benchmarkCandles` would reach the same code path while meaning
+        // something different entirely (a benchmark exists but shares no dates), and would
+        // unscore the factor with no stated reason at all.
+        val benchmark = runCatching { indexRepository.benchmark() }
+            .getOrNull()
+            ?.valueOrNull()
+            ?.asBenchmarkCandles()
+
         // The indicator snapshot is built **here** and handed to the engine through its injection
         // seam, rather than being built twice. Two reasons, and the second is the one that matters:
         // the snapshot carries `trendRegime`, which is half of the projection gate, and a stored
         // row's `verdict` column has to be written from the same regime the engine judged on — not
         // from a `null` that could only ever have produced `RENDER`.
-        val snapshot = IndicatorSnapshot.of(candles)
+        //
+        // Built with the same benchmark the engine would have used, so handing it over changes
+        // nothing about the scan and only saves the second fused pass.
+        val snapshot = IndicatorSnapshot.of(candles, benchmark)
 
         val result = PatternEngine.run(
             candles = candles,
@@ -128,10 +148,7 @@ class DefaultPatternRepository @Inject constructor(
             detectors = detectors.all(),
             options = PatternScanOptions(
                 symbol = symbol,
-                // No index benchmark is loaded on device. `null` must read as "no benchmark",
-                // never as a relative strength of zero (scoring-spec.md §6, X4), which is what
-                // the engine's CONTEXT notes state.
-                benchmarkCandles = null,
+                benchmarkCandles = benchmark,
                 collectDiagnostics = false,
                 snapshotFactory = { _, _ -> snapshot },
             ),
