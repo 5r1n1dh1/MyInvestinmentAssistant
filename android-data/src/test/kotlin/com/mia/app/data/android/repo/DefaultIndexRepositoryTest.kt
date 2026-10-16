@@ -94,11 +94,13 @@ class DefaultIndexRepositoryTest {
     )
 
     /**
-     * Typed on the interface, not on [FakeIndexSource].
+     * Takes the [IndexSource] *interface*, not [FakeIndexSource].
      *
-     * The repository takes an `IndexSource`, and the "a thrown source becomes a typed failure"
-     * test needs a source that is nothing like the happy-path fake — an anonymous object that
-     * throws. Narrowing this parameter to the fake made that test fail to compile.
+     * It is tempting to narrow this to the fake, since almost every test wants one — but two tests
+     * below deliberately hand in an anonymous `IndexSource` that throws or fails, and a helper
+     * typed to the fake silently refuses them. The production constructor already takes the
+     * interface, so the helper now matches it and the tests can say what they mean: "whatever the
+     * source does, the repository turns it into a typed failure".
      */
     private fun TestScope.repository(dao: FakeIndexDao, source: IndexSource) =
         DefaultIndexRepository(dao, source, UnconfinedTestDispatcher(testScheduler))
