@@ -268,11 +268,15 @@ object ProjectionCalibration {
         var windows = 0
         var incomplete = 0
 
-        for ((symbol, series) in candlesBySymbol.sortedBy { it.key }) {
-            if (series.size < minHistoryBars) continue
+        // Sorted so the walk is reproducible whatever order the caller's map is in.
+        val series = candlesBySymbol.entries.sortedBy { it.key }
+        for (entry in series) {
+            val symbol = entry.key
+            val bars = entry.value
+            if (bars.size < minHistoryBars) continue
             var i = warmupBars
-            while (i < series.size) {
-                val window = series.subList(0, i + 1)
+            while (i < bars.size) {
+                val window = bars.subList(0, i + 1)
                 // The engine computes the indicator snapshot once per scan; capturing it through
                 // the documented seam is cheaper than recomputing it here, and guarantees the
                 // regime used is the regime the gate actually saw.
@@ -302,7 +306,7 @@ object ProjectionCalibration {
                         match = match,
                         lastClose = lastClose,
                         projectedOn = window.last().date,
-                        future = series.subList(i + 1, series.size),
+                        future = bars.subList(i + 1, bars.size),
                         // The engine's own gate, asked per candidate: the per-match verdict and the
                         // window-level verdict are the same rule applied to different matches.
                         verdict = PatternEngine.verdictFor(match, timeframe, window.size, lastClose, regime, options),
@@ -384,7 +388,7 @@ object ProjectionCalibration {
             total[h] = 0
         }
 
-        for (entry in candlesBySymbol.sortedBy { it.key }) {
+        for (entry in candlesBySymbol.entries.sortedBy { it.key }) {
             val series = entry.value
             if (series.size < minHistoryBars) continue
             var i = warmupBars
