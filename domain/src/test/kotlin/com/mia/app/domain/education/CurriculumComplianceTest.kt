@@ -333,7 +333,7 @@ class CurriculumComplianceTest {
 
     @Test
     fun `both curricula are as long as the brief requires`() {
-        assertEquals(99, BEGINNER_MODULES.size, "POSITIVE CONTROL: this run must fail")
+        assertEquals(8, BEGINNER_MODULES.size, "the beginner level lost or gained a module")
         assertEquals(9, INTERMEDIATE_MODULES.size, "the intermediate level lost or gained a module")
         assertEquals(31, BEGINNER_MODULES.sumOf { it.lessons.size }, "beginner lesson count")
         assertEquals(35, INTERMEDIATE_MODULES.sumOf { it.lessons.size }, "intermediate lesson count")
