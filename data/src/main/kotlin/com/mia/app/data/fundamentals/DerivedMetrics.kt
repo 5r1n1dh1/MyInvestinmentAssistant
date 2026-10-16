@@ -3,6 +3,8 @@ package com.mia.app.data.fundamentals
 import com.mia.app.data.fundamentals.ScreenerHtml.ParsedTable
 import com.mia.app.domain.model.CashFlowDerived
 import com.mia.app.domain.ratios.RatioExtras
+import com.mia.app.domain.ratios.ShareholdingMetrics
+import com.mia.app.domain.ratios.ShareholdingPattern
 import com.mia.app.domain.redflag.fundamentals.RatiosCardSeries
 
 /**
@@ -71,6 +73,24 @@ object DerivedMetrics {
         val ratiosCard: RatiosCard = RatiosCard.EMPTY,
         /** The card's per-fiscal-year series, ready for the domain. */
         val ratioCard: RatioCardDerived = RatioCardDerived(),
+        /**
+         * The `shareholding` card's holder rows, resolved to quarters.
+         *
+         * ### Why this is here at all
+         * The card was parsed from the first day this module existed and only one of its six rows —
+         * `Promoters` — was ever consumed. `FIIs` and `DIIs` are published for **all five** golden
+         * fixtures, so the institutional-ownership card was built out of data the parser was
+         * already reading and discarding. Which rows it publishes is recorded in [notes] rather than
+         * inferred, because the one fixture that breaks the pattern (HDFCBANK publishes FIIs and
+         * DIIs but **no** `Promoters` row) is exactly the case where "assume the usual three rows"
+         * would hand a bank a card full of blanks.
+         *
+         * It is a projection rather than a snapshot field because the quarterly headers are needed
+         * to date a figure and the headers are not part of `AnnualRow`. Carried beside [sections]
+         * for the same reason [ratioCard] is: it is a resolved read of one section, not a statement
+         * row.
+         */
+        val shareholdingPattern: ShareholdingPattern = ShareholdingPattern.EMPTY,
     )
 
     // Row keys. `labelKey` lower-cases and drops punctuation, so these are the shapes a
@@ -158,6 +178,12 @@ object DerivedMetrics {
                 "CashFlowDerived.promoterPledgePercent stays null, never 0"
         }
 
+        val shareholdingPattern = ShareholdingMetrics.of(
+            shareholding?.years.orEmpty(),
+            shareholding?.rows.orEmpty(),
+        )
+        notes += shareholdingNotes(shareholding, shareholdingPattern)
+
         val derived = CashFlowDerived(
             cfoByYear = cfo,
             patByYear = netProfit,
@@ -181,7 +207,48 @@ object DerivedMetrics {
             notes = notes,
             ratiosCard = ratiosCard,
             ratioCard = ratioCard(ratiosCard),
+            shareholdingPattern = shareholdingPattern,
         )
+    }
+
+    /**
+     * What the shareholding card published, and what became of it — reported on every parse.
+     *
+     * Three facts the tab must not have to guess:
+     *
+     * 1. the card publishes a **quarterly** series, and the last column is the most recent
+     *    quarter (not a fiscal year — `DerivedMetrics.latestValue` exists because that is not
+     *    obvious from a row labelled like a date series);
+     * 2. which holder rows it carries — all five fixtures publish `FIIs` and `DIIs`, and only
+     *    HDFCBANK omits `Promoters`;
+     * 3. that the numbers are read, not guessed, so a reader can tell a 0 from an absence.
+     */
+    private fun shareholdingNotes(
+        table: ParsedTable?,
+        pattern: ShareholdingPattern,
+    ): List<String> {
+        if (table == null) {
+            return listOf(
+                "section '${ScreenerHtml.SHAREHOLDING}' is absent from this page, so FII and DII " +
+                    "holdings are absent rather than 0",
+            )
+        }
+        val rows = table.rows.map { it.label.trim() }.filter { it.isNotEmpty() }
+        val notes = mutableListOf<String>()
+        notes += "the '${ScreenerHtml.SHAREHOLDING}' card publishes ${table.years.size} quarterly " +
+            "column(s) (${table.years.firstOrNull()} … ${table.years.lastOrNull()}) and these " +
+            "holder rows: ${rows.joinToString(", ").ifEmpty { "none" }}"
+        for (series in listOf(pattern.fii, pattern.dii, pattern.promoters)) {
+            if (series.isEmpty) {
+                notes += "the shareholding card publishes no '${series.holder}' row, so its holding " +
+                    "is absent rather than 0 — a category the company does not disclose is not the " +
+                    "same as a category it does not hold"
+            } else if (series.isUndated) {
+                notes += "the '${series.holder}' row is present but no column header resolved to a " +
+                    "quarter, so its figures cannot be dated and are not attributed to a period"
+            }
+        }
+        return notes
     }
 
     /**

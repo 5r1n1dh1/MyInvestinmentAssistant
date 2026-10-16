@@ -8,6 +8,7 @@ import com.mia.app.domain.model.Ratios
 import com.mia.app.domain.model.Sector
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.ratios.SectorResolver
+import com.mia.app.domain.ratios.ShareholdingPattern
 import org.jsoup.nodes.Document
 import java.time.LocalDate
 import java.time.ZoneId
@@ -45,6 +46,15 @@ data class FundamentalsParseResult(
     val ratiosCard: RatiosCard = RatiosCard.EMPTY,
     /** [ratiosCard] keyed by fiscal year, plus the domain's `RatioExtras` / `RatiosCardSeries`. */
     val ratioCard: RatioCardDerived = RatioCardDerived(),
+    /**
+     * The `shareholding` card's FII / DII / promoter rows, resolved to quarters.
+     *
+     * Carried for the same reason [ratioCard] is: the quarterly **column headers** are what date a
+     * shareholding figure, and they are not part of `AnnualRow`, so a caller that only gets the
+     * snapshot cannot date one. Without this the parser would read the card and every consumer would
+     * have to guess a quarter — which is what the FII/DII card refuses to do.
+     */
+    val shareholdingPattern: ShareholdingPattern = ShareholdingPattern.EMPTY,
 ) {
     val isOk: Boolean get() = health.ok
 }
@@ -169,6 +179,7 @@ object FundamentalsParserFacade {
             sections = tables.mapNotNull { (id, table) -> table?.let { id to it } }.toMap(),
             ratiosCard = ratiosCard,
             ratioCard = derived.ratioCard,
+            shareholdingPattern = derived.shareholdingPattern,
         )
     }
 

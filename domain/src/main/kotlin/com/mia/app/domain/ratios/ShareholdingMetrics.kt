@@ -165,6 +165,17 @@ object ShareholdingMetrics {
         latest(pattern.dii, "DII holding")
 
     /**
+     * The latest published promoter holding, in percent.
+     *
+     * The same read [RatioComputation.promoterHolding] performs, over a card that has already been
+     * dated. Two entry points exist because the older one takes the raw `(periods, rows)` pair and
+     * is reachable from a snapshot while this one takes an already-resolved card; both go through
+     * [seriesOf], so they cannot disagree.
+     */
+    fun promoterHolding(pattern: ShareholdingPattern): Computation<Double> =
+        latest(pattern.promoters, "promoter holding")
+
+    /**
      * The change in the FII share between the two most recent published quarters, in
      * **percentage points**.
      *

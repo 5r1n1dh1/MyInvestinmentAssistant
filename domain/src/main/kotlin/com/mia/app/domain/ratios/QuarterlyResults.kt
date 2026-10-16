@@ -147,7 +147,15 @@ object QuarterlyResults {
         }.sortedBy { it.sortKey }
 
     /**
-     * [metric] across the published quarters, with both comparisons where the endpoints exist.
+     * [metric] across the published quarters, with both comparisons made against the **exact**
+     * endpoints they claim: the immediately preceding calendar quarter, and the same calendar
+     * quarter a year earlier.
+     *
+     * A gap in the published series is therefore a missing comparison, not a bridged one — the same
+     * rule `RatioComputation.revenueGrowth` applies to annual columns, and for the same reason:
+     * comparing `Jun 2026` with `Dec 2025` because `Mar 2026` was unreadable would report a
+     * two-quarter move as a one-quarter one. Every skipped endpoint is named in
+     * [QuarterlyComparison.notes].
      *
      * A null [QuarterlyComparison.latest] with a populated [QuarterlyComparison.notes] is the
      * documented way to say "this page publishes no such row" — `Computation`'s own contract
@@ -165,7 +173,10 @@ object QuarterlyResults {
             )
         }
         val latest = points.last()
-        val previousQuarter = points.getOrNull(points.size - 2)
+        // Strictly the chronologically adjacent quarter, never "the point before this one". With a
+        // gap in the series those differ, and silently bridging it would report a two-quarter move
+        // as a one-quarter one — the same failure `RatioComputation.revenueGrowth` refuses.
+        val previousQuarter = points.firstOrNull { it.sortKey == latest.sortKey - 1L }
         val sameQuarterPriorYear = points.firstOrNull {
             it.year == latest.year - 1 && it.quarter == latest.quarter
         }
@@ -254,9 +265,10 @@ object QuarterlyResults {
      */
     private fun absentReason(metric: QuarterlyMetric): String = when (metric) {
         QuarterlyMetric.OPERATING_PROFIT ->
-            "this page's quarterly table publishes no 'Operating Profit' row. A bank publishes " +
-                "'Financing Profit' and 'Financing Margin %' instead, which are not an operating " +
-                "margin, so no figure is shown here rather than a substituted one (plan.md §7.3)"
+            "this page's quarterly table publishes no 'Operating Profit' row, so the figure is " +
+                "absent rather than 0. A bank publishes 'Financing Profit' and 'Financing Margin %' " +
+                "instead, which are not an operating margin, so no figure is shown here rather than " +
+                "a substituted one (plan.md §7.3)"
         QuarterlyMetric.SALES ->
             "this page's quarterly table publishes no 'Sales' or 'Revenue' row, so the figure is " +
                 "absent rather than 0"
