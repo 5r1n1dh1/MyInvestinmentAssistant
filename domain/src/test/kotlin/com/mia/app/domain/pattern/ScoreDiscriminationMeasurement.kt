@@ -22,13 +22,21 @@ import kotlin.test.Test
  * **Phase 0 measurement: does the match score discriminate at all?**
  *
  * ### Why this is measured before anything else
- * `MatchScorePolicy.PROJECT_THRESHOLD = 70` gates alerts, and `RENDER_THRESHOLD = 50` gates display.
- * Those numbers are used to decide what a reader sees, so the score is already making a claim: a 72
- * should behave differently from a 52.
+ * `MatchScorePolicy.RENDER_THRESHOLD = 50` gated display, and beside it a `PROJECT_THRESHOLD = 70`
+ * gated alerts. Those numbers are used to decide what a reader sees, so the score is already making
+ * a claim: a 72 should behave differently from a 52.
  *
- * Nothing in the codebase has ever checked that. If the score is decorative, then every search for
+ * Nothing in the codebase had ever checked that. If the score is decorative, then every search for
  * "edge" through a score threshold is filtering on noise, and that has to be known before another
  * detector is written rather than after.
+ *
+ * ### What it found, and what was done about it
+ * The score ran **backwards** (higher score, lower hit rate, monotonic across all six horizons), and
+ * the 70-point gate was unreachable — 68 was the highest score in 875 samples. The measured signal
+ * was target distance: a level within 3 % of the close is reached 83 % of the time inside five bars
+ * against a 10 % base rate. Projection is now gated on that distance
+ * (`ProjectionGate.DISTANCE_MAX`), and the score gates display only. The numbers below are kept
+ * exactly as measured so the change stays checkable against its own evidence.
  *
  * ### How it is measured
  * Walk-forward over the real fixture, 5-bar stride so no two outcomes share a bar, all nine
@@ -229,11 +237,13 @@ class ScoreDiscriminationMeasurement {
         println("  (base rate at the same horizons, no pattern: 1% 3% 5% 10% 22% 38%)")
 
         println()
-        println("--- PROJECT_THRESHOLD reachability ---")
-        println("  PROJECT_THRESHOLD = ${MatchScorePolicy.PROJECT_THRESHOLD}")
+        println("--- the retired score gate: PROJECT_THRESHOLD = $LEGACY_PROJECT_THRESHOLD ---")
         println("  highest score ever seen: ${samples.maxOf { it.score }}")
-        println("  samples at or above it: ${samples.count { it.score >= MatchScorePolicy.PROJECT_THRESHOLD }}")
-        println("  => the project-and-alert path is ${if (samples.none { it.score >= MatchScorePolicy.PROJECT_THRESHOLD }) "UNREACHABLE" else "reachable"}")
+        println("  samples at or above it: ${samples.count { it.score >= LEGACY_PROJECT_THRESHOLD }}")
+        println(
+            "=> the project-and-alert path was " +
+                "${if (samples.none { it.score >= LEGACY_PROJECT_THRESHOLD }) "UNREACHABLE" else "reachable"}",
+        )
 
         println()
         println("--- score distribution ---")
@@ -278,6 +288,15 @@ class ScoreDiscriminationMeasurement {
         const val OutcomeHorizon: Int = 5
         const val MAX_HORIZON: Int = 20
         const val STRIDE: Int = 5
+
+        /**
+         * The score gate this file retired, written out rather than read.
+         *
+         * `MatchScorePolicy.PROJECT_THRESHOLD` is deprecated now that projection is gated by
+         * measured-move distance (`ProjectionGate`). This measurement is the evidence for that
+         * change, so it keeps reporting the number it measured — as history, not as policy.
+         */
+        const val LEGACY_PROJECT_THRESHOLD: Int = 70
 
         /** The app's four chips, plus 20 to see where the curve stops meaning anything. */
         val HORIZONS: List<Int> = listOf(1, 2, 3, 5, 10, 20)

@@ -299,13 +299,14 @@ object PatternEngine {
         notes += dataQualityNotes(snapshot, candles, regime, pivots)
 
         // --- gate ------------------------------------------------------------------------
+        // The breakout close every measured-move level is drawn from. Taken once, because the
+        // distance gate compares against it for every candidate.
+        val lastClose = candles.lastOrNull()?.close ?: 0.0
         val kept = ArrayList<Match>()
         val suppressed = ArrayList<SuppressedMatch>()
 
         for (match in all) {
-            val direction = resolveDirection(match, options.directionResolver)
-            val aligned = regimeAligned(regime, direction, match.category)
-            val verdict = MatchScorePolicy.verdict(match.score, timeframe, barCount, aligned)
+            val verdict = verdictFor(match, timeframe, barCount, lastClose, regime, options)
 
             // The score's innards travel with every suppression, whatever the cause. A reader who
             // asks "why did nothing match?" needs the same breakdown whether the answer is "scored
@@ -355,7 +356,7 @@ object PatternEngine {
         if (insufficientHistory) {
             notes += notEnoughHistoryReason(timeframe, barCount)
         }
-        notes += rankingNotes(ranked, timeframe, barCount, regime)
+        notes += rankingNotes(ranked, timeframe, barCount, lastClose, regime, options)
         notes += unscoredFactorNotes(ranked)
 
         return PatternScanResult(
@@ -366,7 +367,7 @@ object PatternEngine {
             verdict = when {
                 insufficientHistory -> MatchScorePolicy.Verdict.NOT_ENOUGH_HISTORY
                 ranked.isEmpty() -> MatchScorePolicy.Verdict.SUPPRESS
-                else -> MatchScorePolicy.verdict(ranked.first().score, timeframe, barCount, regimeAlignedFor(ranked.first(), options, regime))
+                else -> verdictFor(ranked.first(), timeframe, barCount, lastClose, regime, options)
             },
             insufficientHistory = insufficientHistory,
             minBarsRequired = minBarsRequired,
@@ -374,6 +375,36 @@ object PatternEngine {
             pivots = pivots,
             notes = notes.distinct(),
             diagnostics = diagnostics ?: emptyList(),
+        )
+    }
+
+    /**
+     * The one gate, applied the one way.
+     *
+     * Every caller — the per-match loop above, the window-level [PatternScanResult.verdict], and
+     * any test asking whether a gate *could* be satisfied — goes through this function, so there is
+     * no second copy of the rule to drift. That is the whole point: the bug this replaced was a
+     * threshold no input could reach, and nothing caught it because the rule lived in one place
+     * that nothing exercised.
+     *
+     * @param lastClose the breakout close, i.e. the last bar of the window.
+     * @param regime the resolved trend regime; `options.regimeOverride` wins, exactly as in [run].
+     */
+    fun verdictFor(
+        match: Match,
+        timeframe: Timeframe,
+        barCount: Int,
+        lastClose: Double,
+        regime: TrendRegime,
+        options: PatternScanOptions = PatternScanOptions.DEFAULT,
+    ): MatchScorePolicy.Verdict {
+        val aligned = regimeAligned(regime, resolveDirection(match, options.directionResolver), match.category)
+        return MatchScorePolicy.verdict(
+            score = match.score,
+            timeframe = timeframe,
+            barCount = barCount,
+            regimeAligned = aligned,
+            projectable = ProjectionGate.admits(match, lastClose, timeframe, barCount, aligned),
         )
     }
 
@@ -434,38 +465,69 @@ object PatternEngine {
 
     private fun latestPivotDate(match: Match) = match.pivots.lastOrNull()?.date ?: match.detectedOn
 
-    private fun regimeAlignedFor(match: Match, options: PatternScanOptions, regime: TrendRegime): Boolean? =
-        regimeAligned(regime, resolveDirection(match, options.directionResolver), match.category)
-
     /**
-     * Why the top match projects (or does not). The regime gate is invisible in a bare number,
-     * and plan.md §6.4 makes it a hard condition, so the user is told.
+     * Why the top match projects (or does not). The gate is invisible in a bare number, and
+     * plan.md §6.4 makes it a hard condition, so the user is told — including *which* gate said no,
+     * because a projection that is missing for a reason the reader cannot see reads as a bug.
      */
     private fun rankingNotes(
         matches: List<Match>,
         timeframe: Timeframe,
         barCount: Int,
+        lastClose: Double,
         regime: TrendRegime,
+        options: PatternScanOptions,
     ): List<String> {
         val top = matches.firstOrNull() ?: return emptyList()
-        val aligned = regimeAlignedFor(top, PatternScanOptions.DEFAULT, regime)
-        return when (MatchScorePolicy.verdict(top.score, timeframe, barCount, aligned)) {
+        return when (verdictFor(top, timeframe, barCount, lastClose, regime, options)) {
             MatchScorePolicy.Verdict.PROJECT -> listOf(
                 "${top.name} scored ${top.score} with the trend regime aligned — its geometry is " +
                     "projected and its breakout alert is scheduled.",
             )
 
             MatchScorePolicy.Verdict.RENDER ->
-                if (top.score >= MatchScorePolicy.PROJECT_THRESHOLD) {
-                    listOf(
-                        "${top.name} scored ${top.score} but the trend regime is not aligned — shown " +
-                            "without a projection.",
-                    )
-                } else {
-                    listOf("${top.name} scored ${top.score} — shown without a projection.")
-                }
+                listOf(renderNote(top, lastClose, timeframe, barCount, regime, options))
 
             else -> emptyList()
+        }
+    }
+
+    /**
+     * The one sentence explaining a render-only match.
+     *
+     * The score is never quoted as a reason to project — it is not a reason, any more. It is quoted
+     * only to identify the match, and the gate that said no is named. Every clause is a statement
+     * about chart geometry or about a measurement, never about what will happen next (§1.4).
+     */
+    private fun renderNote(
+        top: Match,
+        lastClose: Double,
+        timeframe: Timeframe,
+        barCount: Int,
+        regime: TrendRegime,
+        options: PatternScanOptions,
+    ): String {
+        val aligned = regimeAligned(regime, resolveDirection(top, options.directionResolver), top.category)
+        val prefix = "${top.name} scored ${top.score} — shown without a projection: "
+        return when (ProjectionGate.blocker(top, lastClose, timeframe, barCount, aligned)) {
+            ProjectionGate.Blocker.REGIME_NOT_ALIGNED ->
+                "${top.name} scored ${top.score} but the trend regime is not aligned — shown " +
+                    "without a projection."
+
+            ProjectionGate.Blocker.DISTANCE_TOO_FAR -> {
+                val pct = ProjectionGate.distance(top, lastClose)?.times(100.0) ?: 0.0
+                prefix + "the measured-move level sits ${"%.1f".format(pct)} % from the last close, " +
+                    "beyond the ${ProjectionGate.DISTANCE_MAX_PERCENT.toInt()} % the measured " +
+                    "calibration supports."
+            }
+
+            ProjectionGate.Blocker.NO_MEASURED_MOVE ->
+                prefix + "it carries no measured move, so there is no level to project."
+
+            ProjectionGate.Blocker.INSUFFICIENT_HISTORY ->
+                notEnoughHistoryReason(timeframe, barCount)
+
+            null -> "${top.name} scored ${top.score} — shown without a projection."
         }
     }
 

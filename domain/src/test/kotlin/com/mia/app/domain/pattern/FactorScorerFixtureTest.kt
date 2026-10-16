@@ -27,15 +27,26 @@ import kotlin.test.assertTrue
  * | rawPenalty | 0 | 17 | 37 |
  * | totalPenalty (cap 30) | 0 | 17 | 30 |
  * | **score** | **74** | **39** | **30** |
- * | verdict | PROJECT | SUPPRESS | SUPPRESS |
+ * | verdict | RENDER | SUPPRESS | SUPPRESS |
  *
  * B is the important negative: a formation that *looks* like an H&S and passes every shape rule
  * must score 39 and never be shown. C is the cap fixture: without the cap it would read 23.
+ *
+ * A's verdict is RENDER, not PROJECT, and that is the finding rather than an oversight. A is the
+ * most textbook-perfect formation in the spec, and it projects a level 19 % away. The retired
+ * PROJECT_THRESHOLD = 70 would have called that a projection, yet nothing in 875 real walk-forward
+ * candidates ever scored 70, so nobody found out the gate was unreachable. A textbook shape is a
+ * statement about geometry, not about how far price has to travel.
  */
 class FactorScorerFixtureTest {
 
     private val d1 = Timeframe.D1
     private val barCount = 500
+
+    private companion object {
+        /** `scoring-spec.md` §10's breakout close for example A. */
+        const val EXAMPLE_BREAKOUT_CLOSE = 995.0
+    }
 
     // --------------------------------------------------------------------- EXAMPLE A
 
@@ -55,8 +66,15 @@ class FactorScorerFixtureTest {
         // `Match.score` is always `ScoreBreakdown.total`.
         assertEquals(74, application.breakdown.total)
         assertEquals(
-            MatchScorePolicy.Verdict.PROJECT,
+            MatchScorePolicy.Verdict.RENDER,
             MatchScorePolicy.verdict(application.breakdown.total, d1, barCount, true),
+        )
+        // And the reason is geometry, not the score: A's own measured move puts the level 19 % from
+        // the 995 breakout close, far outside the calibrated distance the gate admits.
+        assertTrue(
+            ScoringFixtures.exampleAProjectedLevel < EXAMPLE_BREAKOUT_CLOSE * (1.0 - ProjectionGate.DISTANCE_MAX),
+            "example A projects to ${ScoringFixtures.exampleAProjectedLevel}, which should sit well " +
+                "outside the gate's distance",
         )
         // The measured move the book prints for the same formation.
         assertEquals(189.412, ScoringFixtures.exampleAHeight, 0.001)

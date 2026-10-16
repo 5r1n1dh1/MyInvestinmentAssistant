@@ -68,14 +68,20 @@ class PatternEngineTest {
         assertEquals(1, result.matches.size)
     }
 
-    // ----------------------------------------------------------------------------- scoring gate
+    // ---------------------------------------------------------- display and projection gates
 
     @Test
-    fun `scoreSeventyFiveWithAnAlignedRegimeProjects`() {
+    fun `aTightProjectionWithAnAlignedRegimeProjects`() {
+        val candles = rising(500)
+        val lastClose = candles.last().close
+        // The gate is measured-move distance, not the score: 2 % from the close, scoring 60.
+        val tight = tightMatch("tight", 60, lastClose)
+        assertEquals(12.0 / lastClose, ProjectionGate.distance(tight, lastClose)!!, 1e-12)
+
         val result = PatternEngine.run(
-            rising(500),
+            candles,
             Timeframe.D1,
-            listOf(detectorWith(75, direction = Direction.DOWN)),
+            listOf(fixedDetector("tight-probe", listOf(tight))),
             PatternScanOptions(regimeOverride = TrendRegime.TRENDING_DOWN),
         )
         assertEquals(MatchScorePolicy.Verdict.PROJECT, result.verdict)
@@ -84,11 +90,33 @@ class PatternEngineTest {
     }
 
     @Test
-    fun `scoreSeventyFiveWithAnUnalignedRegimeOnlyRenders`() {
+    fun `aPerfectScoreDoesNotProjectWhenItsLevelSitsFarFromTheClose`() {
+        // The bug this replaced. `PROJECT_THRESHOLD = 70` would have projected this match on its
+        // score alone, and yet no real candidate in 875 walk-forward samples ever reached 70. A
+        // textbook-perfect formation whose measured move is 42 % wide is precisely the case the
+        // distance gate exists for: shown, never projected.
         val result = PatternEngine.run(
             rising(500),
             Timeframe.D1,
             listOf(detectorWith(75, direction = Direction.DOWN)),
+            PatternScanOptions(regimeOverride = TrendRegime.TRENDING_DOWN),
+        )
+        assertEquals(MatchScorePolicy.Verdict.RENDER, result.verdict)
+        assertEquals(1, result.matches.size, "an unprojectable match is still shown, never hidden")
+        assertTrue(
+            result.notes.any { it.contains("measured-move level sits") },
+            "the reader must be told which gate said no: ${result.notes}",
+        )
+    }
+
+    @Test
+    fun `aTightProjectionWithAnUnalignedRegimeOnlyRenders`() {
+        val candles = rising(500)
+        val tight = tightMatch("tight", 60, candles.last().close)
+        val result = PatternEngine.run(
+            candles,
+            Timeframe.D1,
+            listOf(fixedDetector("tight-probe", listOf(tight))),
             PatternScanOptions(regimeOverride = TrendRegime.TRENDING_UP),
         )
         assertEquals(MatchScorePolicy.Verdict.RENDER, result.verdict)
@@ -427,6 +455,23 @@ class PatternEngineTest {
             breakdown = breakdownFor(score),
         )
     }
+
+    /**
+     * A match whose measured-move level sits [height] below [lastClose].
+     *
+     * The default [match] projects from 850 against a rising series whose last close is 599 — a
+     * level 42 % away, which no distance gate could admit. Projection tests need the opposite, so
+     * the level is built from the series' own close rather than hard-coded.
+     */
+    private fun tightMatch(name: String, score: Int, lastClose: Double, height: Double = 12.0): Match =
+        match(name, score, direction = Direction.DOWN).copy(
+            measuredMove = MeasuredMove(
+                height = height,
+                triggerLevel = lastClose - 1.0,
+                direction = Direction.DOWN,
+                projectedLevel = lastClose - height,
+            ),
+        )
 
     private fun fixedDetector(
         name: String,
