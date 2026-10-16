@@ -139,8 +139,8 @@ val BASE_RATE_MODULES: List<Module> = listOf(
 
                     The base rate is simply the share of sessions in which a price closed higher.
                     Across ${BaseRates.PUBLISHED_RETURNS} next-day returns in ${BaseRates.PUBLISHED_SYMBOLS} large caps, the
-                    price closed higher ${"%.2f" % BaseRates.ALWAYS_UP_PCT}% of the time and lower
-                    ${"%.2f" % BaseRates.ALWAYS_DOWN_PCT}% of the time. A method that always answered
+                    price closed higher ${"%.2f".format(BaseRates.ALWAYS_UP_PCT)}% of the time and lower
+                    ${"%.2f".format(BaseRates.ALWAYS_DOWN_PCT)}% of the time. A method that always answered
                     "up" would have been right about half the time, before reading a single chart.
 
                     Three conventional indicators were then measured against the same sessions —
@@ -150,13 +150,13 @@ val BASE_RATE_MODULES: List<Module> = listOf(
                     ${BaseRates.signalLines().joinToString("\n") { "  - " + it }}
 
                     Every correlation is within a rounding error of zero, and every accuracy sits
-                    between ${"%.2f" % BaseRates.ZSCORE_VS_MA50_DIRECTION_ACCURACY_PCT}% and
-                    ${"%.2f" % BaseRates.RSI14_DIRECTION_ACCURACY_PCT}%. That is what a coin does. It is also
+                    between ${"%.2f".format(BaseRates.ZSCORE_VS_MA50_DIRECTION_ACCURACY_PCT)}% and
+                    ${"%.2f".format(BaseRates.RSI14_DIRECTION_ACCURACY_PCT)}%. That is what a coin does. It is also
                     why this app refuses to print a score as if it were an outcome.
 
                     The typical next-day move was small, too: median
-                    ${"%.2f" % BaseRates.NEXT_DAY_MOVE_MEDIAN_PCT}%, mean
-                    ${"%.2f" % BaseRates.NEXT_DAY_MOVE_MEAN_PCT}%. The mean being well above the median is
+                    ${"%.2f".format(BaseRates.NEXT_DAY_MOVE_MEDIAN_PCT)}%, mean
+                    ${"%.2f".format(BaseRates.NEXT_DAY_MOVE_MEAN_PCT)}%. The mean being well above the median is
                     ordinary — a few large days pull an average up while most days stay small —
                     and it matters later, because a strategy that wins rarely and wins big is
                     betting against the shape of the distribution, not against the base rate.
@@ -174,7 +174,7 @@ val BASE_RATE_MODULES: List<Module> = listOf(
 
                     Next-day direction over the app's own committed fixture:
                     ${BaseRates.APP_REPRODUCED_UP_SESSIONS} up out of ${BaseRates.APP_REPRODUCED_TOTAL_SESSIONS} comparable
-                    sessions = ${"%.2f" % BaseRates.APP_REPRODUCED_UP_PCT}%. The fixture is
+                    sessions = ${"%.2f".format(BaseRates.APP_REPRODUCED_UP_PCT)}%. The fixture is
                     ${BaseRates.APP_FIXTURE_SESSIONS} real sessions of ${BaseRates.APP_FIXTURE_SYMBOLS} NSE large caps,
                     read from the end-of-day bhavcopy.
 
@@ -183,7 +183,7 @@ val BASE_RATE_MODULES: List<Module> = listOf(
                     A single study could be a quirk of its sample. Two that agree are a property
                     of the market being measured.
 
-                    Notice what ${"%.2f" % BaseRates.APP_REPRODUCED_UP_PCT}% is not. It is not a
+                    Notice what ${"%.2f".format(BaseRates.APP_REPRODUCED_UP_PCT)}% is not. It is not a
                     shortfall against a promise: nothing promised 50.01%. It is a number measured
                     on the data this device actually holds, which is the only kind of number this
                     app treats as true.
