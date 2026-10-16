@@ -299,6 +299,19 @@ jobs:
             rm -f "${GITHUB_WORKSPACE}/my-upload-key.jks"
           fi
 
+      # `:android-data`'s unit tests were being written and never run: the `jvm` job
+      # covers `:domain` and `:data` only (it passes -PskipAndroid, which excludes
+      # this module), and `assembleDebug` compiles the module without executing a
+      # single test. So `DefaultIndexRepositoryTest` — the test that pins the honest
+      # "no index stored → null benchmark" fallback — was verified by nothing at all.
+      # A test nobody runs is a comment.
+      #
+      # This runs BEFORE the build so a persistence or Hilt-wiring regression is
+      # reported against the test that caught it, rather than as a confusing
+      # compile failure ten steps later.
+      - name: Run android-data unit tests
+        run: ./gradlew :android-data:testDebugUnitTest --no-daemon --stacktrace
+
       - name: Decide which variants to build
         id: variants
         run: |
