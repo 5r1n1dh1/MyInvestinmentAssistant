@@ -93,7 +93,14 @@ class DefaultIndexRepositoryTest {
         rowsRequested = closes.size,
     )
 
-    private fun TestScope.repository(dao: FakeIndexDao, source: FakeIndexSource) =
+    /**
+     * Typed on the interface, not on [FakeIndexSource].
+     *
+     * The repository takes an `IndexSource`, and the "a thrown source becomes a typed failure"
+     * test needs a source that is nothing like the happy-path fake — an anonymous object that
+     * throws. Narrowing this parameter to the fake made that test fail to compile.
+     */
+    private fun TestScope.repository(dao: FakeIndexDao, source: IndexSource) =
         DefaultIndexRepository(dao, source, UnconfinedTestDispatcher(testScheduler))
 
     // --------------------------------------------------------------- the honest absence
