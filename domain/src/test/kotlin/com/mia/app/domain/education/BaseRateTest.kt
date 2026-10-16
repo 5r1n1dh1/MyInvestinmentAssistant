@@ -131,7 +131,7 @@ class BaseRateTest {
         assertEquals(1, BASE_RATE_MODULES.size, "gap E7 asks for one module, not a spread")
         val module = BASE_RATE_MODULES.single()
         assertEquals(Level.BEGINNER, module.level, "the base-rate lesson is the foundation; it is not expert content")
-        assertEquals("foundation.base-rates", module.id)
+        assertEquals("beginner.base-rates", module.id)
         assertTrue(module.title.contains("predict"), module.title)
         assertTrue(module.lessons.isNotEmpty(), "a module with no lessons renders as an empty screen")
     }

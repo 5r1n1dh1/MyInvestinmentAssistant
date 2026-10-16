@@ -121,7 +121,7 @@ object BaseRates {
 val BASE_RATE_MODULES: List<Module> = listOf(
 
     Module(
-        id = "foundation.base-rates",
+        id = "beginner.base-rates",
         level = Level.BEGINNER,
         title = "Why nobody can predict tomorrow",
         summary = "The control test: over 20,780 next-day returns across 20 large caps, every " +
@@ -130,7 +130,7 @@ val BASE_RATE_MODULES: List<Module> = listOf(
         lessons = listOf(
 
             Lesson(
-                id = "foundation.base-rates.control-test",
+                id = "beginner.base-rates.control-test",
                 title = "The control test, printed",
                 body = """
                     Before any tool can claim it finds something, the honest question is: what
@@ -167,7 +167,7 @@ val BASE_RATE_MODULES: List<Module> = listOf(
             ),
 
             Lesson(
-                id = "foundation.base-rates.reproduction",
+                id = "beginner.base-rates.reproduction",
                 title = "This app reproduced it",
                 body = """
                     ${BaseRates.APP_SOURCE}.
@@ -195,7 +195,7 @@ val BASE_RATE_MODULES: List<Module> = listOf(
             ),
 
             Lesson(
-                id = "foundation.base-rates.two-numbers",
+                id = "beginner.base-rates.two-numbers",
                 title = "Why this app keeps two numbers and never one",
                 body = """
                     Given a base rate of about half, a single blended number is always a

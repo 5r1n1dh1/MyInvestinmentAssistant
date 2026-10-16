@@ -158,6 +158,26 @@ class ExpertComplianceTest {
     // ---- grounding: the cross-references must resolve ----------------------------------------
 
     @Test
+    fun `lesson ids are dotted and name the level they sit in`() {
+        // The schema agent's convention (CurriculumStructureTest): a lesson id is the only
+        // identifier a deep link or a failure message ever shows, so it must read on its own as
+        // `level.topic.term` and must agree with the module it is filed under.
+        for (module in allModules) {
+            for (lesson in module.lessons) {
+                val segments = lesson.id.split(".")
+                assertTrue(segments.size >= 3, "${lesson.id} is not dotted as level.topic.term")
+                assertTrue(segments.all { it.isNotBlank() }, "${lesson.id} has an empty segment")
+                assertEquals(
+                    module.level.name.lowercase(),
+                    segments.first(),
+                    "${lesson.id} is filed under ${module.level} but names level segment " +
+                        "\"${segments.first()}\"",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `every relatedPattern is a name the pattern catalogue knows`() {
         val referenced = allLessons.mapNotNull { it.relatedPattern }.distinct().sorted()
         assertTrue(referenced.isNotEmpty(), "expected the expert level to cross-reference patterns")
