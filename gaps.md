@@ -8,6 +8,28 @@ not impression. Where I could not verify something, it says so.
 Reviewed: `plan.md`, `README.md`, `docs/*`, `:domain` (engine), `:data` (parsers),
 `:android-data` (persistence/workers), `:app` (Compose UI).
 
+> **This register is the original diagnosis, kept unedited as the record.** The remediation plan is
+> [planv2.md](planv2.md); the implementation is tracked in the commit history and
+> [docs/VERIFICATION.md](docs/VERIFICATION.md).
+>
+> **Resolved by measurement since this review was written:**
+>
+> | Gap | Now |
+> |---|---|
+> | **A7** doc drift — "twelve patterns" | Fixed: README + `DetectorRegistry` KDoc now state 13 detectors / 14 evaluated rows / 9 trackable, and why |
+> | **B1** no index data | **Unblocked**: the live probe proved Yahoo's cookie+crumb handshake works, so `^NSEI` is obtainable. W3 builds it. Until then `benchmarkCandles = null` remains the *correct* honest fallback |
+> | **C2** bank ratios `NOT_SOURCED` | **Closed by evidence, promotion rejected** — screener.in renders the labels but the values are behind a login paywall. The gap is permanent; the deliverable became "where to verify" ([docs/LIVE-PROBE.md](docs/LIVE-PROBE.md) §3) |
+> | **C7** no exchange event overlays | **Closed as unreachable** — announcements, bulk/block deals and ASM/GSM all 404 from GitHub's network. Stays a documented Class-B gap |
+> | **`:app`/`:android-data` never compiled** (F-adjacent) | **Resolved 2026-10-11** — CI had been failing silently on every push since `android-actions/setup-android@v3` tried to install the removed SDK `tools` package. First green full build: run 38132317377 |
+> | **P3 gate** (never executed) | **Executed and passes** — Yahoo chart API answers 200 |
+>
+> **Still open and in flight:** A1–A3 (dead + backwards score gate → W1), A4–A6 (track-record depth
+> → W2), B2–B4 (market context → W3), C1/C3–C6/C8 (fundamentals → W4), D1–D3 (technicals → W5),
+> E1–E7 (education → W6), glassmorphism (W7).
+>
+> **Cannot be closed here:** the P12 low-RAM device test needs 2GB-RAM hardware. A GitHub runner is
+> not that, and this repository will not claim otherwise.
+
 ---
 
 ## 0. What is genuinely strong (credit, then the gaps)
