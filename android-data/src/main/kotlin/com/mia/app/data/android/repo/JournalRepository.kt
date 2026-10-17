@@ -22,11 +22,27 @@ data class JournalPass(
     val resolved: Int,
     val stillOpen: Int,
     val asOf: LocalDate,
-    val reasons: List<String> = emptyList(),
+    val openReasons: List<JournalOpenReason> = emptyList(),
 ) {
     fun summary(): String =
         "$resolved entry(s) resolved as of $asOf, $stillOpen still awaiting a measurable window"
 }
+
+/**
+ * One entry that is past its review date and could not be closed, with the gate that is still shut.
+ *
+ * @property entryId so the screen can put the sentence on that entry's own card. An open entry with
+ *   a reason somewhere else on the screen is an open entry the reader has to go looking for.
+ * @property reason [com.mia.app.domain.journal.JournalResolver]'s own sentence, passed through
+ *   unchanged. This layer does not write its own explanations: it is the one that had the candles
+ *   and the settled-outcome flag in hand when it decided, and it is the only layer that can say
+ *   *which* of the four gates is shut.
+ */
+data class JournalOpenReason(
+    val entryId: Long,
+    val symbol: String,
+    val reason: String,
+)
 
 /**
  * The only way `:app` reaches the reader's own journal (gap E5).

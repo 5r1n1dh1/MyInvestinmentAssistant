@@ -171,6 +171,13 @@ class JournalViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(isLoading = false, errorReason = unavailable.reason)
                 }
+            } catch (unexpected: Throwable) {
+                // `toEntry` can only throw on an incomplete draft, which the button already rules
+                // out — so anything arriving here is a defect, and a defect that blanks the screen
+                // is worse than one that is shown.
+                _uiState.update {
+                    it.copy(isLoading = false, errorReason = unexpected.message ?: UNEXPECTED_FAILURE)
+                }
             }
         }
     }

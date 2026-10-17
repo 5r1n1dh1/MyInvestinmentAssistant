@@ -428,8 +428,10 @@ private const val SYMBOL_PLACEHOLDER = "RELIANCE"
 
 private const val EMPTY_TITLE = "Nothing to compare yet"
 private const val EMPTY_BODY =
-    "Name two or three companies above. Their figures are already on this device if they have been " +
-        "fetched; nothing is downloaded by asking."
+    "Name two or three companies above. Their figures come from what this device already holds, " +
+        "read exactly as the Fundamentals tab reads them — so a page older than its freshness " +
+        "window is refetched from screener.in when you name that company here, and one that has " +
+        "never been fetched is a column with that reason on it."
 
 private const val SECTOR_UNRESOLVED = "Sector unresolved"
 private const val GENERIC_LIST_NOTE = "generic ratio list"

@@ -152,14 +152,14 @@ class DefaultJournalRepository @Inject constructor(
         val candlesBySymbol = candlesByKey(due.map { "${it.symbol}|${it.timeframe}" }.distinct())
 
         var resolved = 0
-        val reasons = mutableListOf<String>()
+        val open = mutableListOf<JournalOpenReason>()
         for (row in due) {
             val entry = JournalMappers.toEntry(row)
             val candles = candlesBySymbol["${row.symbol}|${row.timeframe}"].orEmpty()
             val hasSettled = row.symbol in settledSymbols
             val reason = JournalResolver.blockingReason(entry, candles, hasSettled, today)
             if (reason != null) {
-                if (reasons.size < MAX_REASONS) reasons += "${entry.symbol}: $reason"
+                open += JournalOpenReason(entryId = entry.id, symbol = entry.symbol, reason = reason)
                 continue
             }
             val done = JournalResolver.resolve(entry, candles, hasSettled, today)
@@ -176,7 +176,7 @@ class DefaultJournalRepository @Inject constructor(
                 resolved = resolved,
                 stillOpen = due.size - resolved,
                 asOf = today,
-                reasons = reasons,
+                openReasons = open,
             ),
             source = JournalRepository.SOURCE,
             fetchedOn = today,
@@ -285,10 +285,5 @@ class DefaultJournalRepository @Inject constructor(
         add("${rows.size} entry(s) written on this device")
         val due = rows.count { it.isDueForReview(today) }
         if (due > 0) add("$due entry(s) are past their review date")
-    }
-
-    private companion object {
-        /** Bounded so twenty open entries cannot produce a 4 KB note. */
-        const val MAX_REASONS = 5
     }
 }

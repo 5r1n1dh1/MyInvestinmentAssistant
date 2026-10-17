@@ -2,7 +2,6 @@ package com.mia.app.domain.journal
 
 import com.mia.app.domain.compliance.AdviceLanguage
 import com.mia.app.domain.compliance.HonestyContract
-import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.MatchScorePolicy
 import java.time.LocalDate
 import java.util.Locale
@@ -80,31 +79,23 @@ object JournalLedger {
     fun open(entries: List<JournalEntry>, today: LocalDate): List<JournalEntry> =
         entries.filter { !it.isResolved && it.reviewDate.isAfter(today) }
 
-    /** Why each due-but-unresolved entry is still open. Keyed by entry id, for the entry card. */
-    fun openReasons(
-        entries: List<JournalEntry>,
-        candlesBySymbol: Map<String, List<Candle>>,
-        settledSymbols: Set<String>,
-        today: LocalDate,
-    ): Map<Long, String> = dueForReview(entries, today).mapNotNull { entry ->
-        val reason = JournalResolver.blockingReason(
-            entry = entry,
-            candles = candlesBySymbol[entry.symbol].orEmpty(),
-            hasSettledOutcome = entry.symbol in settledSymbols,
-            today = today,
-        )
-        reason?.let { entry.id to it }
-    }.toMap()
-
     /**
-     * Whether the observed move is the direction the reader stated.
+     * Why each settled entry agrees with the direction the reader wrote down.
      *
-     * Mechanical and total, with three rules and no judgement in any of them:
-     * * a non-scorable direction agrees with nothing — it is excluded from the denominator by
-     *   [PersonalRecord.unscored] rather than counted as a miss;
+     * Mechanical and total, with no judgement in any of the three rules:
+     * * a non-scorable direction agrees with nothing — and is **excluded from the denominator** by
+     *   [PersonalRecord.unscored] rather than counted as a miss, because an entry with no stated
+     *   direction is not evidence and must not weigh against the reader;
      * * [JournalOutcome.FLAT] agrees with nothing, because a close that did not move is not the
      *   direction that was written down;
      * * anything else is compared to [ExpectationDirection.UP].
+     *
+     * ### Why "why is this entry still open" is **not** here
+     * That question needs the stored bars and the engine's settled-outcome flag, so it is
+     * [JournalResolver.blockingReason]'s to answer and the repository's to gather — answering it a
+     * second time from a different layer would produce a sentence that could disagree with the one
+     * written on the entry's own card, and a disagreement between two sentences about the same entry
+     * is worse than having only one.
      */
     fun agreedWith(entry: JournalEntry): Boolean {
         val direction = entry.expectationDirection

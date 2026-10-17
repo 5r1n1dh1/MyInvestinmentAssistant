@@ -52,24 +52,20 @@ class RealJournalDataSource @Inject constructor(
 
     override suspend fun load(): JournalLoad = translating {
         val today = todayInMarket()
-        // Ordered: resolve first, so the tally counts what this visit could close.
-        runCatching { journalRepository.resolveDue(today) }
+        // Ordered: resolve first, so the tally counts what this visit could close — and so the
+        // "still open" reasons come from the pass that actually held the bars and the settled-outcome
+        // flag, rather than being recomputed here without them.
+        val pass = runCatching { journalRepository.resolveDue(today) }.getOrNull()
 
         val entries = journalRepository.entries(today).orDataFailure()
         JournalLoad(
             entries = entries,
             record = JournalLedger.record(entries, today),
             appHitRate = journalRepository.appTrackRecord(today).orDataFailure().hitRate,
-            openReasons = JournalLedger.openReasons(
-                entries = entries,
-                // Bars are not re-read here: the resolution pass already had them, and an entry
-                // still open after it has run can only be open because of a gate that is not about
-                // data. The reason that pass produced is the accurate one, and re-reading 500 daily
-                // bars per symbol on every screen entry to re-derive it would be waste.
-                candlesBySymbol = emptyMap(),
-                settledSymbols = journalRepository.settledOutcomeSymbols(today).orDataFailure(),
-                today = today,
-            ),
+            openReasons = pass
+                ?.openReasons
+                ?.associate { it.entryId to it.reason }
+                .orEmpty(),
             today = today,
         )
     }
