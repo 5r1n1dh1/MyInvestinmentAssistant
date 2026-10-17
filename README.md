@@ -121,6 +121,16 @@ never produce a candidate on real data** (commit `fedd20f`). Every one of those 
 strictness gate doing its job, and the Patterns tab now reports the per-gate census rather than
 quietly showing an empty list.
 
+**Read that sentence next to the census panel and you will find two numbers that look like a
+contradiction.** They are not, and the distinction is the whole point. "Never produce a candidate"
+counts **matches a scan emits**; the census counts **windows that reached the shape gate and then
+survived every later gate**. Measured, they differ sharply: Descending Triangle and Bull Flag emit
+**no match at all** on a full-series pass, while the census counts **23** and **150** surviving
+windows for them respectively. Both are true — one describes what a reader sees on the chart, the
+other describes where the candidates were lost. A panel that quoted the window counts under the
+label "candidates" would be exactly the mislabelling this app keeps refusing to make, which is why
+the census column is named `survivingWindows` and is never presented as a match count.
+
 Rules, tolerances and failure-mode penalties were extracted from the project's investing textbook
 into **[docs/spec/](docs/spec/)** (`patterns-spec.md`, `scoring-spec.md`, `redflags-spec.md`) — so
 detector logic comes from a source rather than from invention, and ~60 constants the book left as
