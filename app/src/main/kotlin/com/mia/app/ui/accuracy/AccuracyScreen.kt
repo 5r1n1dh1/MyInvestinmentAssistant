@@ -1,6 +1,7 @@
 package com.mia.app.ui.accuracy
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -40,6 +40,9 @@ import com.mia.app.ui.common.SectionHeader
 import com.mia.app.ui.common.formatDate
 import com.mia.app.ui.common.shortLabel
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassBackdrop
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.glassEntrance
 
 /**
  * The Accuracy tab: the app's own track record (plan.md §6.1, decision D6).
@@ -77,6 +80,17 @@ import com.mia.app.ui.theme.MiaSpacing
  *    `InsightProvenance`, and the published fallback is rendered inside a labelled card so a
  *    research figure can never be mistaken for a track record.
  *
+ * ### Glass (planv2 W7)
+ * Three kinds of glass and no more:
+ * ```
+ *  GlassBackdrop   one fixed, blurred background behind the whole screen — the entire blur budget
+ *  GlassCard       the tiles, the two teaching cards and the three tables: a pane and a hairline,
+ *                  and NO blur of their own, because they are `LazyColumn` items
+ * ```
+ * Every panel the Material `Card` used to draw is now a [GlassCard], and each one keeps the
+ * `contentColor` its `CardDefaults.cardColors` call set — a panel's fill changes, the colour of the
+ * type on it does not. [ProvenanceBadge] is deliberately the one `Card` left; see its KDoc for why.
+ *
  * @param viewModel obtained with `hiltViewModel()`. This tab has no route arguments — it reports on
  *   the whole record, which is what plan.md §6.1 asks for.
  */
@@ -87,91 +101,128 @@ fun AccuracyScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LazyColumn(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .testTag(ACCURACY_TAG),
-        contentPadding = PaddingValues(
-            start = MiaSpacing.lg,
-            end = MiaSpacing.lg,
-            top = MiaSpacing.lg,
-            bottom = MiaSpacing.xxl,
-        ),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
     ) {
-        item(key = HEADING_KEY) { Heading(state) }
+        // The one blurred layer for this screen, a **sibling behind** the list rather than a child
+        // of it: a fixed, static gradient, blurred once and then served from a cached layer, so
+        // scrolling a long track record costs nothing. Never the first child of the `Column` —
+        // `fillMaxSize()` there claims the full height and leaves the list nothing to draw in.
+        GlassBackdrop(modifier = Modifier.fillMaxSize())
 
-        if (state.isLoading && state.report.isEmpty) {
-            item(key = LOADING_KEY) { LoadingState() }
-        }
+        // The stagger index for [glassEntrance], one per section as it is emitted. A counter rather
+        // than a hand-written number per item, so a section that is added or removed re-staggers
+        // itself instead of leaving a hole in the sequence. It is a plain local, so it resets on
+        // every recomposition, and `LazyColumn` emits its items top to bottom, so the order it is
+        // read in is the order the reader sees.
+        var entrance = 0
 
-        state.errorReason?.let { reason ->
-            item(key = ERROR_KEY) { ErrorState(reason = reason, onRetry = viewModel::onRetry) }
-        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = MiaSpacing.lg,
+                end = MiaSpacing.lg,
+                top = MiaSpacing.lg,
+                bottom = MiaSpacing.xxl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
+        ) {
+            item(key = HEADING_KEY) { Heading(state, Modifier.glassEntrance(index = entrance++)) }
 
-        if (state.hasNoOutcomes) {
-            item(key = EMPTY_KEY) {
-                EmptyState(title = EMPTY_TITLE, body = EMPTY_BODY)
-            }
-            // The measurement and its explanation are still shown on a fresh install. They are the
-            // engine's own published figures, labelled as such by [ProvenanceBadge], so the tab
-            // never opens empty and never passes research off as the reader's record.
-            state.insight.reach?.let { reach ->
-                item(key = WHY_THE_RATE_KEY) { WhyTheRateSection(reach) }
-            }
-            state.insight.calibration?.let { calibration ->
-                item(key = CALIBRATION_KEY) { CalibrationSection(calibration) }
-            }
-        } else {
-            item(key = COVERAGE_KEY) { CoverageSection(state) }
-            item(key = MEANING_KEY) { WhatAHitMeans() }
-
-            state.insight.reach?.let { reach ->
-                item(key = WHY_THE_RATE_KEY) { WhyTheRateSection(reach) }
-            }
-            state.insight.calibration?.let { calibration ->
-                item(key = CALIBRATION_KEY) { CalibrationSection(calibration) }
+            if (state.isLoading && state.report.isEmpty) {
+                item(key = LOADING_KEY) { LoadingState() }
             }
 
-            // The per-symbol aggregate leads the tables: it is the only per-stock grouping that
-            // clears the 30-sample gate on real data, and it is labelled as cross-pattern so it
-            // cannot be read as "this pattern on this stock", which is the table below it.
-            if (state.report.perSymbol.isNotEmpty()) {
-                item(key = TABLE_SYMBOL_KEY) {
-                    RateTable(
-                        title = TITLE_PER_SYMBOL,
-                        subtitle = TABLE_SYMBOL_SUBTITLE,
-                        rows = state.report.perSymbol,
-                        kind = AccuracyRowKind.SYMBOL,
-                    )
+            state.errorReason?.let { reason ->
+                item(key = ERROR_KEY) { ErrorState(reason = reason, onRetry = viewModel::onRetry) }
+            }
+
+            if (state.hasNoOutcomes) {
+                item(key = EMPTY_KEY) {
+                    EmptyState(title = EMPTY_TITLE, body = EMPTY_BODY)
+                }
+                // The measurement and its explanation are still shown on a fresh install. They are the
+                // engine's own published figures, labelled as such by [ProvenanceBadge], so the tab
+                // never opens empty and never passes research off as the reader's record.
+                state.insight.reach?.let { reach ->
+                    item(key = WHY_THE_RATE_KEY) {
+                        WhyTheRateSection(reach, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+                state.insight.calibration?.let { calibration ->
+                    item(key = CALIBRATION_KEY) {
+                        CalibrationSection(calibration, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+            } else {
+                item(key = COVERAGE_KEY) {
+                    CoverageSection(state, Modifier.glassEntrance(index = entrance++))
+                }
+                item(key = MEANING_KEY) { WhatAHitMeans(Modifier.glassEntrance(index = entrance++)) }
+
+                state.insight.reach?.let { reach ->
+                    item(key = WHY_THE_RATE_KEY) {
+                        WhyTheRateSection(reach, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+                state.insight.calibration?.let { calibration ->
+                    item(key = CALIBRATION_KEY) {
+                        CalibrationSection(calibration, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+
+                // The per-symbol aggregate leads the tables: it is the only per-stock grouping that
+                // clears the 30-sample gate on real data, and it is labelled as cross-pattern so it
+                // cannot be read as "this pattern on this stock", which is the table below it.
+                if (state.report.perSymbol.isNotEmpty()) {
+                    item(key = TABLE_SYMBOL_KEY) {
+                        RateTable(
+                            title = TITLE_PER_SYMBOL,
+                            subtitle = TABLE_SYMBOL_SUBTITLE,
+                            rows = state.report.perSymbol,
+                            kind = AccuracyRowKind.SYMBOL,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+                if (state.report.perSymbolAndPattern.isNotEmpty()) {
+                    item(key = TABLE_STOCK_AND_PATTERN_KEY) {
+                        RateTable(
+                            title = TABLE_STOCK_AND_PATTERN_TITLE,
+                            subtitle = TABLE_STOCK_AND_PATTERN_SUBTITLE,
+                            rows = state.report.perSymbolAndPattern,
+                            kind = AccuracyRowKind.STOCK_AND_PATTERN,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+                if (state.report.perPattern.isNotEmpty()) {
+                    item(key = TABLE_PATTERN_KEY) {
+                        RateTable(
+                            title = TITLE_PER_PATTERN,
+                            subtitle = TABLE_PATTERN_SUBTITLE,
+                            rows = state.report.perPattern,
+                            kind = AccuracyRowKind.PATTERN,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+                if (state.unresolved.isNotEmpty()) {
+                    item(key = UNRESOLVED_KEY) {
+                        UnresolvedSection(state, Modifier.glassEntrance(index = entrance++))
+                    }
                 }
             }
-            if (state.report.perSymbolAndPattern.isNotEmpty()) {
-                item(key = TABLE_STOCK_AND_PATTERN_KEY) {
-                    RateTable(
-                        title = TABLE_STOCK_AND_PATTERN_TITLE,
-                        subtitle = TABLE_STOCK_AND_PATTERN_SUBTITLE,
-                        rows = state.report.perSymbolAndPattern,
-                        kind = AccuracyRowKind.STOCK_AND_PATTERN,
-                    )
-                }
-            }
-            if (state.report.perPattern.isNotEmpty()) {
-                item(key = TABLE_PATTERN_KEY) {
-                    RateTable(
-                        title = TITLE_PER_PATTERN,
-                        subtitle = TABLE_PATTERN_SUBTITLE,
-                        rows = state.report.perPattern,
-                        kind = AccuracyRowKind.PATTERN,
-                    )
-                }
-            }
-            if (state.unresolved.isNotEmpty()) {
-                item(key = UNRESOLVED_KEY) { UnresolvedSection(state) }
+
+            item(key = FOOTER_KEY) {
+                DisclaimerFooter(
+                    text = Disclosure.DATA_SOURCE,
+                    modifier = Modifier.glassEntrance(index = entrance++),
+                )
             }
         }
-
-        item(key = FOOTER_KEY) { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
     }
 }
 
@@ -310,26 +361,18 @@ private fun withheldBannerText(minimumSamples: Int): String =
 /** A label over a count. Four across a 360 dp screen is the limit before the labels truncate. */
 @Composable
 private fun Tile(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
+    GlassCard(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        contentPadding = PaddingValues(MiaSpacing.sm),
+        // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.sm),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(text = label, style = MaterialTheme.typography.labelSmall)
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -393,33 +436,24 @@ private fun WhyTheRateSection(reach: ReachExplanation, modifier: Modifier = Modi
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = SECTION_WHY_THE_RATE, subtitle = WHY_THE_RATE_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-            ) {
-                ProvenanceBadge(text = reach.provenance.label)
-                reach.sentences().forEach { sentence ->
-                    Text(
-                        text = sentence,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            ProvenanceBadge(text = reach.provenance.label)
+            reach.sentences().forEach { sentence ->
                 Text(
-                    text = WHY_THE_RATE_NOT_ADVICE,
+                    text = sentence,
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                text = WHY_THE_RATE_NOT_ADVICE,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -451,57 +485,49 @@ private fun CalibrationSection(calibration: CalibrationReport, modifier: Modifie
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = SECTION_CALIBRATION, subtitle = CALIBRATION_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            // What the `CardDefaults.cardColors(contentColor = onSurface)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                ProvenanceBadge(text = calibration.provenance.label)
+            ProvenanceBadge(text = calibration.provenance.label)
+            Text(
+                text = calibration.sourceNote,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (horizon == null) {
                 Text(
-                    text = calibration.sourceNote,
-                    style = MaterialTheme.typography.labelSmall,
+                    text = CALIBRATION_NO_HORIZON,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (horizon == null) {
+            } else {
+                calibration.rows.forEachIndexed { index, row ->
+                    if (index > 0) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    CalibrationRow(
+                        row = row,
+                        horizonBars = horizon,
+                        otherHorizons = otherHorizons,
+                    )
+                }
+                calibration.withheldReason?.let { reason ->
                     Text(
-                        text = CALIBRATION_NO_HORIZON,
+                        text = reason,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else {
-                    calibration.rows.forEachIndexed { index, row ->
-                        if (index > 0) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        }
-                        CalibrationRow(
-                            row = row,
-                            horizonBars = horizon,
-                            otherHorizons = otherHorizons,
-                        )
-                    }
-                    calibration.withheldReason?.let { reason ->
-                        Text(
-                            text = reason,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    chanceLevelText(calibration, horizon)?.let { control ->
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Text(
-                            text = control,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                }
+                chanceLevelText(calibration, horizon)?.let { control ->
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        text = control,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
         }
@@ -574,6 +600,17 @@ private fun chanceLevelText(calibration: CalibrationReport, horizonBars: Int): S
  * a published research figure from their own record will read one as the other. The wording arrives
  * from the value rather than being chosen here, so a screen cannot drop the label by forgetting to
  * write it.
+ *
+ * ### Why this one stays a Material `Card`
+ * It is the only panel on this screen whose colour is an **accent** rather than a surface, and it
+ * carries that accent in its text: `onTertiaryContainer` on `tertiaryContainer` is a Material
+ * contrast *pair*, and this badge is text, not decoration — a reader has to be able to read it.
+ *
+ * A glass surface drops its tint when glass is off (`GlassSurface` paints the palette's `flatFill`
+ * instead), which would leave the pair's foreground sitting on a surface the pair was never
+ * specified against. The other panels on this tab take `surface`/`surfaceVariant`, and `flatFill` is
+ * exactly that surface, so they can be [GlassCard] without any change to what the reader can read.
+ * This one cannot, so it does not get one: the accent is the point, and the accent is a pairing.
  */
 @Composable
 private fun ProvenanceBadge(text: String, modifier: Modifier = Modifier) {
@@ -611,25 +648,17 @@ private fun RateTable(
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm)) {
         SectionHeader(title = title, subtitle = subtitle)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.md),
+            // What the `CardDefaults.cardColors(contentColor = onSurface)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
-            ) {
-                rows.forEachIndexed { index, hitRate ->
-                    if (index > 0) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
-                    RateRow(hitRate = hitRate, kind = kind)
+            rows.forEachIndexed { index, hitRate ->
+                if (index > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
+                RateRow(hitRate = hitRate, kind = kind)
             }
         }
     }
