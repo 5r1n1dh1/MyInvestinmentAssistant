@@ -55,17 +55,17 @@ class RealJournalDataSource @Inject constructor(
         // Ordered: resolve first, so the tally counts what this visit could close — and so the
         // "still open" reasons come from the pass that actually held the bars and the settled-outcome
         // flag, rather than being recomputed here without them.
-        val pass = runCatching { journalRepository.resolveDue(today) }.getOrNull()
+        val openReasons: Map<Long, String> = runCatching {
+            journalRepository.resolveDue(today).valueOrNull()?.openReasons.orEmpty()
+        }.getOrDefault(emptyMap())
+            .associate { it.entryId to it.reason }
 
         val entries = journalRepository.entries(today).orDataFailure()
         JournalLoad(
             entries = entries,
             record = JournalLedger.record(entries, today),
             appHitRate = journalRepository.appTrackRecord(today).orDataFailure().hitRate,
-            openReasons = pass
-                ?.openReasons
-                ?.associate { it.entryId to it.reason }
-                .orEmpty(),
+            openReasons = openReasons,
             today = today,
         )
     }
