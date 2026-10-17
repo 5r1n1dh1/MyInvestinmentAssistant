@@ -1,5 +1,7 @@
 package com.mia.app.ui.common
 
+import com.mia.app.domain.model.MatchScorePolicy
+
 /**
  * Every piece of UI copy that is **not** regulated copy.
  *
@@ -23,6 +25,7 @@ package com.mia.app.ui.common
  * * Never name a measured move a target. Use `MatchScoreLabels.PROJECTION_LABEL`.
  * * Never describe an indicator in a way that implies a verdict — "RSI 74, above the 70
  *   overbought line", not "overbought, watch for a fall".
+ * * Never order a word beside a number by how good the outcome was unless a measurement says so.
  */
 object UiStrings {
 
@@ -171,4 +174,47 @@ object UiStrings {
         "No pattern scored $renderThreshold or more on this timeframe"
 
     const val NO_RED_FLAGS: String = "No red flags in the data checked"
+
+    // ------------------------------------------------------------- match-score fit bands
+
+    /**
+     * The word beside a match score, shared by every surface that shows one.
+     *
+     * ### Why these words and not a quality scale
+     * The band used to be cut at `MatchScorePolicy.PROJECT_THRESHOLD` and labelled "strong fit".
+     * That threshold was retired because it was **unreachable** — the highest score in 875 settled
+     * walk-forward candidates was 68 — so the top band could never render, and because it ran
+     * *backwards* against outcomes: hit rate fell as the score rose, monotonically across all six
+     * horizons. A word ordered "weak → strong" beside a number that does not order outcomes invites
+     * exactly the reading the measurement refutes.
+     *
+     * So the words describe **fit to the textbook shape** and nothing else, and the cut is a
+     * description rather than a gate. The score decides exactly one thing in this app now — whether
+     * a formation is drawn at all, at [MatchScorePolicy.RENDER_THRESHOLD] — and these bands must
+     * never be read as saying more than that.
+     */
+    fun fitBand(score: Int): String = when {
+        score >= TIGHT_FIT_MIN -> TIGHT_FIT
+        score >= MatchScorePolicy.RENDER_THRESHOLD -> PARTIAL_FIT
+        else -> WEAK_FIT
+    }
+
+    /**
+     * Where the top band starts.
+     *
+     * `60` is not a round number chosen for looks: it is the second bucket of the score
+     * distribution `ScoreDiscriminationMeasurement` recorded over the app's own fixture (670
+     * candidates at 50–59, 205 at 60–69, none above 68). A band cut at 70 would have been a band
+     * with no members, which is how the retired gate stayed invisible for so long.
+     */
+    const val TIGHT_FIT_MIN: Int = 60
+
+    /** The closest fit to the textbook shape the scorer can measure. */
+    const val TIGHT_FIT: String = "closest fit"
+
+    /** Above the render line, but not the closest fit. */
+    const val PARTIAL_FIT: String = "partial fit"
+
+    /** Below the render threshold: geometric fit only, and not drawn. */
+    const val WEAK_FIT: String = "weak fit"
 }

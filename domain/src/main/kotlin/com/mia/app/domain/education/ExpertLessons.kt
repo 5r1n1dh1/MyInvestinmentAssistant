@@ -224,14 +224,16 @@ val EXPERT_MODULES: List<Module> = listOf(
                 title = "Check that a threshold can be crossed at all",
                 body = """
                     A gate that nothing can pass is invisible to every test that checks what
-                    happens behind it. This app had one: PROJECT_THRESHOLD is 70, and the
-                    project-and-alert path — the headline feature, the one that draws a projected
-                    level and fires a notification — requires a score of 70 or more plus regime
-                    alignment.
+                    happens behind it. This app had one. It gated on the match score, at 70, and
+                    the project-and-alert path — the headline feature, the one that draws a
+                    projected level and fires a notification — required a score of 70 or more
+                    plus regime alignment.
 
                     The 875-settled-candidate walk-forward never produced one. The highest score
                     in 875 samples was 68. The path had never executed, and nothing in the
-                    codebase had ever asked whether it could.
+                    codebase had ever asked whether it could. It is now gated on the distance
+                    between the projected level and the last close, and the screen names which
+                    condition withheld a projection.
 
                     This is worth internalising as a habit, because it generalises. For every
                     threshold that gates a user-visible feature, the question is not "is the
@@ -250,9 +252,10 @@ val EXPERT_MODULES: List<Module> = listOf(
                     a property of the definition, and a definition that fires constantly must be
                     reported with its frequency.
                 """.trimIndent(),
-                doesNotEstablish = "It does not establish what the project-and-alert path would do " +
-                    "if it ever ran, or that it should be reachable. It establishes only that on " +
-                    "875 samples no formation reached the score the path requires.",
+                doesNotEstablish = "It does not establish that any pattern is profitable, and it " +
+                    "does not establish what the score-gated path would have done had it ever " +
+                    "run. It establishes only that on 875 samples no formation reached the score " +
+                    "the path required.",
                 relatedFlag = "DEATH_CROSS",
             ),
         ),

@@ -13,7 +13,6 @@ import com.mia.app.data.android.repo.PatternRepository
 import com.mia.app.data.android.repo.PatternScan
 import com.mia.app.data.android.repo.SymbolRepository
 import com.mia.app.data.android.repo.todayInMarket
-import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Timeframe
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -36,10 +35,19 @@ import dagger.assisted.AssistedInject
  *
  * ### The alert is the last step, and it is optional
  * Breakout alerts require a close beyond the measured move's **trigger** level, and only for a
- * match at or above `MatchScorePolicy.PROJECT_THRESHOLD` (plan.md §6.4). A dispatcher that
+ * projection `com.mia.app.domain.pattern.ProjectionGate` admits: a level within the calibrated
+ * distance of the breakout close, a full window of bars, and an aligned regime. A dispatcher that
  * declines — the default no-op, or a user who denied `POST_NOTIFICATIONS` — costs the app
  * nothing but the notification, so the detections, projections and settled outcomes are still
  * stored.
+ *
+ * ### Why the gate used to be a score, and what it cost
+ * This method asked for `score >= MatchScorePolicy.PROJECT_THRESHOLD` (70). Over 875 settled
+ * walk-forward candidates the highest score ever produced was **68**, so `dispatch` returned
+ * `false` on every projection, every symbol, every night, and the app's headline feature had never
+ * executed once. Nothing noticed, because a gate nothing can cross is indistinguishable from a gate
+ * that works. The gate is now `ProjectionGate`, and this method reports which condition stopped it
+ * so "0 alerts" is a stated fact rather than a mystery.
  */
 @HiltWorker
 class PatternScanWorker @AssistedInject constructor(
@@ -165,14 +173,22 @@ class PatternScanWorker @AssistedInject constructor(
     /**
      * Sends one projection's breakout alert, if it is allowed to.
      *
+     * The gate is `PatternProjection.projectionBlocker`, which is `ProjectionGate` itself: the
+     * measured-move level has to sit within the calibrated distance of the breakout close, the
+     * window has to hold a full scan's worth of bars, and the regime has to be aligned. The score
+     * is deliberately **not** consulted here — it gates rendering only, and it gates rendering at a
+     * floor the projection already cleared when it was stored.
+     *
+     * The gate inputs are carried on the projection rather than recomputed, because the candles
+     * this read was built from are gone by now; recomputing them would mean a second indicator
+     * pass per symbol per night and, worse, a second answer to a question that must have one.
+     *
      * @return `true` when a notification was actually posted.
      */
     private suspend fun BreakoutAlertDispatcher.dispatch(projection: PatternProjection): Boolean {
         val trigger = projection.trigger ?: return false
         if (!trigger.fired) return false
-        // Read from the shared policy rather than restated: a projection and an alert both need
-        // `score >= 70`, and the pattern screen must not disagree with the alert about that.
-        if (projection.score < MatchScorePolicy.PROJECT_THRESHOLD) return false
+        if (!projection.mayAlert) return false
 
         val alert = BreakoutAlert(
             symbol = projection.symbol,
@@ -183,6 +199,11 @@ class PatternScanWorker @AssistedInject constructor(
             level = trigger.level,
             condition = trigger.description,
             asOf = projection.detectedOn,
+            // Carried so the dispatcher can re-ask the gate itself rather than trust this method.
+            measuredMove = projection.measuredMove,
+            lastClose = projection.lastClose,
+            barCount = projection.barCount,
+            regimeAligned = projection.regimeAligned,
         )
         return alerts.notifyBreakout(alert)
     }
