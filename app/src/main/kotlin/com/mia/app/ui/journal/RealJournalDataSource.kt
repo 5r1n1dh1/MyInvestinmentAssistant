@@ -57,7 +57,7 @@ class RealJournalDataSource @Inject constructor(
         // flag, rather than being recomputed here without them.
         val openReasons: Map<Long, String> = runCatching {
             journalRepository.resolveDue(today).valueOrNull()?.openReasons.orEmpty()
-        }.getOrDefault(emptyMap())
+        }.getOrElse { emptyList() }
             .associate { it.entryId to it.reason }
 
         val entries = journalRepository.entries(today).orDataFailure()
