@@ -170,6 +170,33 @@ Two corrections the measurement forced:
 - **`Match.score` still reaches 99** in stored matches. It is display-only now, and anti-correlated
   with outcomes — see the calibration dashboard lesson in the education curriculum.
 
+### Fixing the dead gate exposed a second one, pointing the opposite way
+
+The engine gate was only half the bug. PR #9 wired the downstream path, and immediately found two
+call sites — `RealPatternsDataSource.projections` and `RealTechnicalsDataSource.projectionGates` —
+calling `MatchScorePolicy.verdict(score, timeframe, bars, aligned)` **without** the `projectable`
+argument. W1 had made that parameter required-with-a-`false`-default precisely so a caller that
+does not know about the gate cannot open it — so both screens had been **drawing a projected path
+for nothing, at every score, forever**, and compiled cleanly throughout.
+
+So the app had two dead-gate bugs at once, and they failed in **opposite directions**:
+
+| | Symptom | Which screen |
+|---|---|---|
+| alert path read the retired `PROJECT_THRESHOLD` | projected **nothing**, never alerted | Patterns, worker |
+| `verdict()` called without `projectable` | projected **everything**, unearned | Patterns + Technicals |
+
+A suite that passed cleanly through the middle of that change would have caught neither. The
+general lesson is the one this repository keeps arriving at: **the tests that matter assert a
+property, not a shape.** Nothing asserted "a projected level is drawn only when the gate admits
+it", so both directions were free.
+
+Missing gate inputs are now **fail-closed** by construction. `PatternProjection` carries
+`lastClose`, `barCount` and `regimeAligned` with defaults `0.0 / 0 / null`, and
+`ProjectionGate.blocker` answers `INSUFFICIENT_HISTORY` for `barCount = 0` before it inspects
+anything else — so a projection assembled without its inputs cannot project or alert. A missing
+input can only ever close the gate, never open it.
+
 ### Candlestick patterns were structurally excluded from projecting
 
 `resolveDirection` read the measured move, then the newest pivot's kind. Candlestick formations
