@@ -1,5 +1,6 @@
 package com.mia.app.ui.stocklist
 
+import com.mia.app.domain.technical.Breadth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,6 +42,15 @@ data class StockListUiState(
     val coverageNotes: List<String> = emptyList(),
     /** A one-line confirmation of the last add/remove, so a tap is visibly acknowledged. */
     val notice: String? = null,
+
+    /**
+     * Whole-market breadth for the newest stored session, or null when none is stored.
+     *
+     * Null is an ordinary state — a fresh install, or a device whose refresh has never landed —
+     * and the card renders it as *not measured yet*. Zeros here would render as a market that
+     * closed flat everywhere, which is the most misleading thing this card could show.
+     */
+    val breadth: Breadth? = null,
     /** Ticker typed into the inline add field. Held here so the field survives recomposition. */
     val addField: String = "",
     /** `true` while an add/remove is in flight, so the row's button can be disabled. */
@@ -76,6 +86,7 @@ data class StockListUiState(
 @HiltViewModel
 class StockListViewModel @Inject constructor(
     private val dataSource: StockListDataSource,
+    private val marketPulse: MarketPulseDataSource,
     @StockListBackgroundDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -181,6 +192,22 @@ class StockListViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorReason = null) }
             try {
+                // Breadth is read alongside the rows rather than in its own pass, so the card and
+                // the list appear in the same frame — a breadth card that popped in a moment after
+                // the rows would read as a late correction rather than as part of the screen.
+                //
+                // A breadth failure must not fail the list: breadth is context, the rows are the
+                // product. So it is caught separately and left null, which the card already knows
+                // how to render as "not measured yet".
+                val breadth = withContext(backgroundDispatcher) {
+                    try {
+                        marketPulse.breadth()
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (_: MarketPulseUnavailableException) {
+                        null
+                    }
+                }
                 val loaded = withContext(backgroundDispatcher) {
                     StockListLoad(
                         rows = dataSource.tracked(),
@@ -194,6 +221,7 @@ class StockListViewModel @Inject constructor(
                         isLoading = false,
                         errorReason = null,
                         notice = loaded.note,
+                        breadth = breadth,
                     )
                 }
             } catch (cancellation: CancellationException) {

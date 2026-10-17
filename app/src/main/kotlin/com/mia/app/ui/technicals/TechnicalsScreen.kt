@@ -44,6 +44,7 @@ import com.mia.app.domain.technical.BollingerLatest
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.domain.technical.TechnicalPolicy
 import com.mia.app.domain.technical.TrendRegime
+import com.mia.app.domain.technical.riskLine
 import com.mia.app.ui.chart.ChartState
 import com.mia.app.ui.chart.PriceChart
 import com.mia.app.ui.common.AsOfChip
@@ -429,6 +430,30 @@ private fun IndicatorSection(
                 have = bars,
             ),
         )
+
+        ReadingRow(
+            title = UiStrings.MOMENTUM,
+            first = Reading(
+                label = UiStrings.indicatorWithPeriod("MFI", TechnicalPolicy.MFI_PERIOD),
+                value = snapshot.mfiValue?.let { formatFixed(it, 1) },
+                // No overbought/oversold reading, and the note says why rather than leaving the
+                // absence unexplained. See `TechnicalPolicy.MFI_PERIOD`'s KDoc for the measurement
+                // behind refusing to publish a level.
+                note = "RSI weighted by volume — did the volume agree with the move? " +
+                    "No overbought or oversold level is applied, because none is measured here",
+                need = TechnicalPolicy.MFI_PERIOD + 1,
+                have = bars,
+            ),
+            second = Reading(
+                label = emaCrossoverLabel(),
+                value = emaCrossoverNote(snapshot),
+                note = "the faster line above or below the slower one; a state, not an event",
+                need = TechnicalPolicy.EMA_MID + TechnicalPolicy.EMA_FAST,
+                have = bars,
+            ),
+        )
+
+        RiskStopSection(snapshot = snapshot)
 
         ReadingRow(
             title = UiStrings.MOVING_AVERAGES,
@@ -945,8 +970,85 @@ private fun unavailableNote(reading: Reading): String {
     }
 }
 
+/**
+ * The risk line: a 2% stop, in rupees and in ATR units.
+ *
+ * ### Why this earns a card rather than a footnote
+ *
+ * "Use a 2% stop" is the most common piece of risk advice in retail trading and it is close to
+ * meaningless on its own — 2% is roughly three days of noise on a quiet large cap and less than a
+ * session's range on a volatile one. The number that makes it mean something is the ATR beside it,
+ * and the only way to get both in front of a reader is to render them together.
+ *
+ * ### What it does not do
+ *
+ * It does not suggest a stop, recommend a position size, or imply that either is appropriate for
+ * anybody. It converts one percentage into two measurable distances and stops there. The rupee
+ * figure is always reportable; the ATR multiple appears only when ATR is available, because a
+ * ratio against an undefined ATR is precisely the fabricated reading this app does not publish.
+ */
+@Composable
+private fun RiskStopSection(snapshot: IndicatorSnapshot) {
+    val price = snapshot.lastClose
+    val line = if (price != null && price > 0.0) {
+        riskLine(price, RISK_STOP_PERCENT, snapshot.atrValue)
+    } else {
+        null
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+    ) {
+        SectionHeader(title = RISK_LINE_TITLE, subtitle = RISK_LINE_EXPLAINER)
+        ReadingBlock(
+            title = "A $RISK_STOP_PERCENT% stop sits",
+            value = line?.let { "₹" + formatFixed(it.rupees, 2) } ?: NOT_YET,
+            note = price?.let { "from the last close of ₹" + formatFixed(it, 2) }
+                ?: "no stored close yet, so there is nothing to measure a stop from",
+        )
+        ReadingBlock(
+            title = "That is",
+            value = line?.atrMultiple?.let { formatFixed(it, 2) + MULTIPLIES + " ATR" } ?: NOT_YET,
+            note = line?.atr
+                ?.let { "against an average true range of ₹" + formatFixed(it, 2) + " per bar" }
+                ?: "no average true range yet, so the volatility multiple cannot be computed",
+        )
+    }
+}
+
+/**
+ * EMA(20/50) crossover, as a state rather than as an event.
+ *
+ * Labelled "state, not an event" for the same reason `DEATH_CROSS` leads with its date in the
+ * fundamentals screen: `docs/VERIFICATION.md` records that a cross persists across roughly half of
+ * all rolling observations, so presenting it as news would misrepresent a persistent condition as a
+ * fresh signal.
+ */
+private fun emaCrossoverLabel(): String =
+    UiStrings.indicatorWithPeriod("EMA", TechnicalPolicy.EMA_FAST) + " / " +
+        TechnicalPolicy.EMA_MID + " crossover"
+
+private fun emaCrossoverNote(snapshot: IndicatorSnapshot): String {
+    val fast = snapshot.ema20Value
+    val slow = snapshot.ema50Value
+    if (fast == null || slow == null || slow == 0.0) return NOT_YET
+    val gap = (fast - slow) / slow * 100.0
+    val side = if (fast > slow) "above" else "below"
+    return "$side by " + formatFixed(kotlin.math.abs(gap), 2) + "%"
+}
+
 /** Shown wherever a sub-reading is missing but its parent exists. Never a zero. */
 private const val NOT_YET: String = "not yet"
+
+/** The stop percentage the risk line is drawn at. planv2 §W5 specifies 2%. */
+private const val RISK_STOP_PERCENT: Double = 2.0
+
+private const val RISK_LINE_TITLE: String = "Risk line"
+private const val RISK_LINE_EXPLAINER: String =
+    "A percentage stop only means something against the instrument's own volatility. " +
+        "2% on a stock whose average true range is 0.6% is about three days of ordinary movement; " +
+        "the same 2% where the range is 3% sits inside a single session."
 
 /** Multiplier suffix for a volume ratio. `×` reads as "times" without the reader decoding it. */
 private const val MULTIPLIES: String = "×"
