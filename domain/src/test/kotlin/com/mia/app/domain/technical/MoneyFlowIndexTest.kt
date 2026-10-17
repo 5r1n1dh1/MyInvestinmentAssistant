@@ -89,7 +89,10 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `zero volume across every bar yields null rather than 50`() {
-        val series = candles(40, volume = { 0L }) { i -> 100.0 + i }
+        // The trailing lambda was written after a named argument, which Kotlin does not accept — and
+        // it would have bound to `typical` rather than `close` even if it had. Named, so the intent
+        // is the intent.
+        val series = candles(40, volume = { 0L }, close = { i -> 100.0 + i })
         assertNull(MoneyFlowIndex.compute(series).last(), "a stock that did not trade has no MFI")
         assertEquals(100, MoneyFlowIndex.compute(series).count { it == null })
     }
