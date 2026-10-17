@@ -94,9 +94,15 @@ class DefaultMarketBreadthRepository @Inject constructor(
      * Derived from the table rather than assumed to be the previous calendar day: Indian markets
      * close on weekends and for holidays, so "yesterday" is routinely not a trading session and an
      * A/D computed against a non-session would classify every symbol as an advancer.
+     *
+     * Parsed defensively: `date` is a `TEXT` column, and a row that does not parse is dropped
+     * rather than thrown on, so one malformed date degrades the previous session to "none known"
+     * instead of failing the whole card. `MarketBreadth` then reports every symbol as
+     * unclassifiable, which it states — the honest outcome — rather than a wrong A/D.
      */
     private suspend fun priorSession(key: String, latest: LocalDate): LocalDate? =
         candleDao.sessionBefore(key, latest.toString())
+            ?.let { raw -> runCatching { LocalDate.parse(raw) }.getOrNull() }
 
     /**
      * Stored closes per symbol, oldest first, bounded to the window the statistics actually need.
