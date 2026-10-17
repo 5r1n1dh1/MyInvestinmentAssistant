@@ -62,7 +62,11 @@ enum class InsightProvenance(
  * not in the screen. A new row type here would be a second place for that rule to live.
  *
  * @property provenance declared, never defaulted. See [InsightProvenance].
- * @property rows one per [DistanceBucket], cumulative, tightest first.
+ * @property rows one per [DistanceBucket], **cumulative and tightest first** — a level inside 3 %
+ *   is counted in the 1 % and 2 % bands too. Same convention as the published table and as
+ *   `ProjectionCalibration.calibrate`, so the two are read side by side without translation.
+ *   `PublishedInsightTest` pins the nesting, because a disjoint-banded table is the reading that
+ *   makes a 4 % band look better than a 5 % band when nothing of the sort happened.
  * @property horizons the horizons with a measurement. A horizon absent from this list was never
  *   measured and renders as "not measured" — never as `0 %`.
  * @property baseRatesPct chance-level touch rate **at the same level size**, per horizon. Partial by
@@ -314,8 +318,15 @@ object TrackRecordInsight {
         candlesBySymbol: Map<String, List<Candle>>,
     ): CalibrationReport {
         val horizons = settled.map { it.horizonBars }.distinct().sorted()
+        // Cumulative, exactly as the published table and `ProjectionCalibration.calibrate` build
+        // theirs: a level inside 3 % is also counted in the 1 % and 2 % bands. Two reasons, and the
+        // first is the reader's. A reader comparing two bands is comparing two populations, and
+        // disjoint bands invite exactly the false reading that a 4 % band does better than a 5 %
+        // band — when what actually happened is that 252 levels sat in the 4 % band and 165 in the
+        // 5 % one. The second is comparability: one shape for both provenances, so the device's own
+        // table and the published one can be read side by side without translation.
         val rows = DistanceBucket.entries.map { bucket ->
-            val inBucket = settled.filter { DistanceBucket.of(it.distanceFraction) == bucket }
+            val inBucket = settled.filter { candidate -> bucket.contains(candidate.distanceFraction) }
             BucketCalibration(
                 bucket = bucket,
                 label = bucket.label,

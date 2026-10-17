@@ -250,22 +250,23 @@ class PublishedInsightTest {
         )
         assertEquals(InsightProvenance.DEVICE_STORED, table.provenance)
         assertEquals(DistanceBucket.entries.size, table.rows.size)
-        // `DistanceBucket.of` is exclusive — each sample lands in the tightest band that contains
-        // it — so the bands partition the sample and a tighter band can never hold more than a
-        // wider one. There is deliberately no "all levels" band: `BEYOND_12` is the open-ended
-        // remainder, not a superset.
-        assertEquals(
-            simulation.resolved.size,
-            table.rows.sumOf { it.samples },
-            "every settled outcome must land in exactly one distance band",
-        )
+        // Bands are cumulative, as the published table and the screen's copy both say: a level inside
+        // 3 % is counted in the 1 % and 2 % bands too. So they nest, tighter never exceeds wider, and
+        // the 12 % band plus the open-ended remainder is the whole settled sample.
         table.rows.zipWithNext().forEach { (tighter, wider) ->
             assertTrue(
                 tighter.samples <= wider.samples,
                 "${tighter.label} holds ${tighter.samples} samples, more than the wider " +
-                    "${wider.label}'s ${wider.samples}",
+                    "${wider.label}'s ${wider.samples} — the bands are cumulative and must nest",
             )
         }
+        val withinTwelve = assertNotNull(table.row(DistanceBucket.WITHIN_12))
+        val beyond = assertNotNull(table.row(DistanceBucket.BEYOND_12))
+        assertEquals(
+            simulation.resolved.size,
+            withinTwelve.samples + beyond.samples,
+            "every settled outcome is either inside 12 % or beyond it",
+        )
         // The stand-in detector's levels sit 4-5 % from price, so the band the app's own record
         // actually populates is the one inside the gate, and it is reportable.
         val populated = assertNotNull(table.row(DistanceBucket.WITHIN_5))
