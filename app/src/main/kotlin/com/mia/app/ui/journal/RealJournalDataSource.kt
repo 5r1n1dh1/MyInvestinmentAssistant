@@ -20,13 +20,17 @@ import javax.inject.Singleton
 /**
  * [JournalDataSource] over `:android-data`'s `JournalRepository`.
  *
- * ### Why this lives here and not in `ui/di`
- * Every other `Real…DataSource` sits in `ui/di/` because that package owns the adapters. This wave
- * does not own `ui/di/UiDataSourceModule.kt` — another workstream does — and adding a `@Binds` line
- * there would put a merge conflict on the branch for no functional gain. So the adapter sits beside
- * the screen it serves and `JournalDataSourceModule.kt` binds it; a follow-up that owns `ui/di/` can
- * move both files with no change to any caller, because nothing outside this package names the
- * concrete class.
+ * ### Why the adapter lives here but the binding does not
+ * Every other `Real…DataSource` sits in `ui/di/`. This one started beside its screen only because
+ * the journal workstream did not own `ui/di/UiDataSourceModule.kt`, and adding a `@Binds` line
+ * there would have risked a merge conflict for no functional gain — so the binding went to a
+ * feature-local module instead.
+ *
+ * The conflict is over, so the binding now lives in `UiDataSourceModule` again, which is the only
+ * place that can answer "is every data source bound?". The *adapter* stays here: it is private to
+ * this feature, nothing outside this package names the concrete class, and moving it would churn
+ * imports for no gain. Binding and implementation are deliberately no longer co-located — that is the
+ * cost of one shared binding file, and the right trade while parallel agents are in flight.
  *
  * ### What this adapter computes, and what it deliberately does not
  * It runs the resolution pass first, so the tally a reader sees counts outcomes recorded on the

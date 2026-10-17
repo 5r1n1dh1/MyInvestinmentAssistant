@@ -14,8 +14,10 @@ import com.mia.app.data.fundamentals.ScreenerInSource
 import com.mia.app.data.android.repo.AccuracyRepository
 import com.mia.app.data.android.repo.CandleRepository
 import com.mia.app.data.android.repo.DefaultAccuracyRepository
+import com.mia.app.data.android.repo.JournalRepository
 import com.mia.app.data.android.repo.DefaultCandleRepository
 import com.mia.app.data.android.repo.DefaultFundamentalsRepository
+import com.mia.app.data.android.repo.DefaultJournalRepository
 import com.mia.app.data.android.repo.DefaultIndexRepository
 import com.mia.app.data.android.repo.DefaultPatternRepository
 import com.mia.app.data.android.repo.DefaultRedFlagRepository
@@ -187,4 +189,13 @@ abstract class RepositoryModule {
          */
         const val INDEX_HANDSHAKE_BACKOFF_MILLIS: Long = 3_000L
     }
+
+    // Folded in from a feature-local module that existed only while this file's owner was a
+    // parallel workstream. It is here because this file states the invariant that makes it worth
+    // existing: the repositories are :app's entire surface, and a @Binds in an abstract module
+    // makes "is every repository bound?" a compile-time question. A JournalRepository bound
+    // elsewhere would silently opt out of that question.
+    @Binds
+    @Singleton
+    abstract fun bindJournalRepository(impl: DefaultJournalRepository): JournalRepository
 }

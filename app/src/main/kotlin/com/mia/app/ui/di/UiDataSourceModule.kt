@@ -1,6 +1,10 @@
 package com.mia.app.ui.di
 
 import com.mia.app.ui.accuracy.AccuracyDataSource
+import com.mia.app.ui.compare.CompareDataSource
+import com.mia.app.ui.compare.RealCompareDataSource
+import com.mia.app.ui.journal.JournalDataSource
+import com.mia.app.ui.journal.RealJournalDataSource
 import com.mia.app.ui.stocklist.MarketPulseDataSource
 import com.mia.app.ui.detail.StockDetailDataSource
 import com.mia.app.ui.fundamentals.FundamentalsDataSource
@@ -62,6 +66,20 @@ abstract class UiDataSourceModule {
     @Binds
     @Singleton
     abstract fun bindMarketPulseDataSource(impl: RealMarketPulseDataSource): MarketPulseDataSource
+
+    // Folded in from feature-local modules. Those existed only because the journal and
+    // comparison workstreams were running alongside another that owned this file, and neither
+    // wanted to risk a merge conflict in it. The conflict is over, and leaving them split would
+    // contradict this file's own stated reason for existing: a type must be bound exactly once,
+    // so the bindings live in one reviewable place rather than scattered beside their
+    // implementations.
+    @Binds
+    @Singleton
+    abstract fun bindJournalDataSource(impl: RealJournalDataSource): JournalDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCompareDataSource(impl: RealCompareDataSource): CompareDataSource
 
     @Binds
     @Singleton
