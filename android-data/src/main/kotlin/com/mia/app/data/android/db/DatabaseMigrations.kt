@@ -17,9 +17,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * * `outcomes` — the app's published accuracy record (plan.md §6.1, decision D6). Losing it on
  *   an app update would reset every hit-rate table to "not enough tracked cases yet", which is
  *   the one thing plan.md §6.1 says must not happen silently.
+ * * `journal_entry` — what the reader wrote down about a stock before the outcome was known
+ *   (gap E5). Nothing else in the schema can reconstruct it: bars can be refetched and outcomes
+ *   re-derived, but a dated record of a belief exists only because it was written down.
  *
  * `fallbackToDestructiveMigration()` is therefore never called: a missing migration must be a
  * loud failure at development time, not a silent data loss in the field.
+ *
+ * ### The 4 → 5 migration
+ * v5 adds `journal_entry` — what the reader themselves wrote down about a stock before the outcome
+ * was known (gap E5). Purely additive like every version so far: no existing table is touched, so
+ * the upgrade is lossless and a downgrade is still impossible rather than merely inadvisable.
  *
  * ### The 3 → 4 migration
  * v4 adds `index_candles` — the benchmark index series. Purely additive: no existing table is
@@ -158,10 +166,74 @@ object DatabaseMigrations {
     }
 
     /**
+     * 4 → 5.
+     *
+     * Adds `journal_entry` — the reader's own written record (gap E5).
+     *
+     * ### Why this table is the one that must never be dropped
+     * `candles` is expensive to rebuild and `outcomes` is the app's published record, so both are
+     * protected by refusing any destructive fallback. This table is protected for a stronger reason:
+     * **nothing else in this schema can reconstruct it.** The bars can be refetched and the outcomes
+     * re-derived from a scan, but what a person believed about a company on a given date exists only
+     * because they typed it. A schema change that recreated this table would quietly convert the
+     * reader's record into an empty one, which is the single most destructive thing this app could
+     * do — and would do it while appearing to work.
+     *
+     * ### Why the columns are written out rather than derived
+     * The SQL is hand-written and therefore reviewable against `JournalEntryEntity` line by line,
+     * which is the only way a reviewer can confirm that the stored schema and the entity agree on
+     * nullability — and nullability is load-bearing here: the three resolution columns are `NULL`
+     * while an entry is open, and `resolvedAt`/`resolutionOutcome`/`resolutionChangePercent` are
+     * only ever set together.
+     *
+     * `IF NOT EXISTS` for the same reason as 1 → 2 and 3 → 4: Room runs a migration inside a
+     * transaction, and an interrupted one has to be re-runnable rather than unrecoverable.
+     */
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `journal_entry` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `symbol` TEXT NOT NULL,
+                    `timeframe` TEXT NOT NULL,
+                    `thesis` TEXT NOT NULL,
+                    `expectation` TEXT NOT NULL,
+                    `expectationDirection` TEXT NOT NULL,
+                    `falsification` TEXT NOT NULL,
+                    `reviewDate` TEXT NOT NULL,
+                    `createdAt` TEXT NOT NULL,
+                    `resolvedAt` TEXT,
+                    `resolutionOutcome` TEXT,
+                    `resolutionChangePercent` REAL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_journal_entry_symbol` " +
+                    "ON `journal_entry` (`symbol`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_journal_entry_reviewDate` " +
+                    "ON `journal_entry` (`reviewDate`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_journal_entry_createdAt` " +
+                    "ON `journal_entry` (`createdAt`)",
+            )
+        }
+    }
+
+    /**
      * Every migration, in order. `DatabaseModule` passes exactly this list to Room, which is
      * what makes "the migration exists" and "the migration is registered" the same fact.
      */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    val ALL: Array<Migration> = arrayOf(
+        MIGRATION_1_2,
+        MIGRATION_2_3,
+        MIGRATION_3_4,
+        MIGRATION_4_5,
+    )
 
     /**
      * A path from [MiaDatabase.DATABASE_VERSION] back down to [target] does not exist: v3 is a

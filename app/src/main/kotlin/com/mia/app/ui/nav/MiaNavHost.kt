@@ -10,11 +10,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.ui.accuracy.AccuracyScreen
+import com.mia.app.ui.compare.CompareScreen
 import com.mia.app.ui.detail.StockDetailScreen
 import com.mia.app.ui.di.SearchRoute
 import com.mia.app.ui.education.EducationLessonScreen
 import com.mia.app.ui.education.EducationScreen
 import com.mia.app.ui.fundamentals.FundamentalsScreen
+import com.mia.app.ui.journal.JournalScreen
 import com.mia.app.ui.patterns.PatternsScreen
 import com.mia.app.ui.settings.SettingsScreen
 import com.mia.app.ui.stocklist.StockListScreen
@@ -24,7 +26,7 @@ import com.mia.app.ui.technicals.TechnicalsScreen
  * The navigation graph.
  *
  * ### Every route is a real screen
- * All eight destinations in [Screen] are registered with the composable that implements them. There are
+ * All ten destinations in [Screen] are registered with the composable that implements them. There are
  * no placeholders left in this file and no open orchestrator question in it: a route that renders a
  * stand-in is indistinguishable from a route that is simply broken, and plan.md §12 names exactly that
  * as the most dangerous failure in the product.
@@ -46,6 +48,8 @@ import com.mia.app.ui.technicals.TechnicalsScreen
  * | `Screen.Technicals` | [TechnicalsScreen] | ditto. |
  * | `Screen.Patterns` | [PatternsScreen] | the standalone route for plan.md §6.5's full pattern list. |
  * | `Screen.Accuracy` | [AccuracyScreen] | |
+ * | `Screen.Journal` | [JournalScreen] | gap E5. Argument-free: the journal spans every symbol written about, and its one callback opens the Accuracy tab so the app's own record can be read in full beside the reader's. |
+ * | `Screen.Compare` | [CompareScreen] | gap E6. Argument-free: the compared set is re-chosen on the screen. |
  * | `Screen.Settings` | [SettingsScreen] | |
  *
  * `Screen.Fundamentals` and `Screen.Technicals` therefore have two entry points each — their own
@@ -150,7 +154,23 @@ fun MiaNavHost(
         composable(route = Screen.Settings.route) {
             SettingsScreen(
                 onOpenEducation = { navController.navigate(Screen.Education.route) },
+                onOpenJournal = { navController.navigate(Screen.Journal.route) },
+                onOpenCompare = { navController.navigate(Screen.Compare.route) },
             )
+        }
+
+        composable(route = Screen.Journal.route) {
+            // `launchSingleTop` so a reader who backs out of the journal and re-enters it from
+            // Settings does not build a stack of identical destinations behind them.
+            JournalScreen(
+                onOpenAccuracy = {
+                    navController.navigate(Screen.Accuracy.route) { launchSingleTop = true }
+                },
+            )
+        }
+
+        composable(route = Screen.Compare.route) {
+            CompareScreen()
         }
 
         composable(route = Screen.Education.route) {

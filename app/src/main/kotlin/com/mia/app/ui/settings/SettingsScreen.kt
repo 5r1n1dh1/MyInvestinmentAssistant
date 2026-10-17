@@ -90,10 +90,14 @@ import com.mia.app.work.RefreshTask
  * means should not have to scroll past the disclaimer to find out.
  *
  * @param viewModel obtained with `hiltViewModel()`. This route takes no arguments.
+ * @param onOpenJournal opens the thesis journal (gap E5).
+ * @param onOpenCompare opens the peer comparison (gap E6).
  */
 @Composable
 fun SettingsScreen(
     onOpenEducation: () -> Unit = {},
+    onOpenJournal: () -> Unit = {},
+    onOpenCompare: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -149,7 +153,13 @@ fun SettingsScreen(
             }
         }
 
-        item(key = MEANING_KEY) { MeaningSection(onOpenEducation = onOpenEducation) }
+        item(key = MEANING_KEY) {
+            MeaningSection(
+                onOpenEducation = onOpenEducation,
+                onOpenJournal = onOpenJournal,
+                onOpenCompare = onOpenCompare,
+            )
+        }
 
         item(key = COVERAGE_KEY) { CoverageSection(state, viewModel::onRetry) }
 
@@ -198,9 +208,21 @@ fun SettingsScreen(
  * The three statements are the app's own, rendered verbatim and each under its own heading, because
  * they answer three different questions a reader may have about the same screen: what is `72 of
  * 100`, what is the level on my chart, and what is the hit rate under the pattern.
+ *
+ * ### Why the two new surfaces are linked from **here**
+ * The journal (gap E5) and the peer comparison (gap E6) are both things a reader chooses to do
+ * rather than places they arrive at, so they belong next to the definitions of the numbers they
+ * will use — the journal counts against the hit-rate wording, and the comparison lines up the ratio
+ * slots. Putting them behind a toolbar icon nobody looks for, or behind the curriculum, would make
+ * both features reachable in name only.
  */
 @Composable
-private fun MeaningSection(onOpenEducation: () -> Unit, modifier: Modifier = Modifier) {
+private fun MeaningSection(
+    onOpenEducation: () -> Unit,
+    onOpenJournal: () -> Unit,
+    onOpenCompare: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
@@ -216,6 +238,93 @@ private fun MeaningSection(onOpenEducation: () -> Unit, modifier: Modifier = Mod
         // section is where a reader goes to learn the ideas behind those words, so the link
         // belongs with the definitions rather than in a nav drawer.
         EducationEntryCard(onOpen = onOpenEducation)
+
+        // The two surfaces a reader chooses to use rather than a tab they arrive at. Stated with
+        // what they do *not* do, because both are the kind of feature that reads as a verdict
+        // engine: the journal records what a person believed and never grades it, and the
+        // comparison shows figures side by side without ranking, scoring or combining them.
+        JournalEntryCard(onOpen = onOpenJournal)
+        CompareEntryCard(onOpen = onOpenCompare)
+    }
+}
+
+/**
+ * The way into the thesis journal.
+ *
+ * Says the one thing a reader needs before typing anything: the entry has to be written before the
+ * outcome is known, and the falsification condition is mandatory. Announcing that here rather than
+ * after a failed save is the difference between a rule the reader knows and a rule they meet.
+ */
+@Composable
+private fun JournalEntryCard(onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .testTag(JOURNAL_ENTRY_TAG)
+            .semantics {
+                contentDescription = "Thesis journal, write down what you believe before the " +
+                    "outcome is known, open"
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        ) {
+            Text(
+                text = JOURNAL_HEADING,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(text = JOURNAL_SUBTITLE, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * The way into the peer comparison.
+ *
+ * States the sector caveat up front, because it is the fact that decides whether a comparison of two
+ * companies is worth reading at all: a bank has no inventory days and an FMCG company has no
+ * net-interest-margin story, and the screen aligns the rows each of them actually publishes rather
+ * than pairing figures by position.
+ */
+@Composable
+private fun CompareEntryCard(onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .testTag(COMPARE_ENTRY_TAG)
+            .semantics {
+                contentDescription = "Compare stocks, two or three side by side, open"
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        ) {
+            Text(
+                text = COMPARE_HEADING,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(text = COMPARE_SUBTITLE, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -868,6 +977,24 @@ private const val EDUCATION_SUBTITLE =
 
 /** Test tag for the curriculum link, so its presence is assertable rather than assumed. */
 private const val EDUCATION_ENTRY_TAG = "education-entry"
+
+/** Test tags for gap E5 and gap E6 entry points. */
+private const val JOURNAL_ENTRY_TAG = "journal-entry"
+private const val COMPARE_ENTRY_TAG = "compare-entry"
+
+private const val JOURNAL_HEADING = "Thesis journal"
+
+private const val JOURNAL_SUBTITLE =
+    "Write down what you believe about a stock before the outcome is known, then see what the " +
+        "price actually did. Every entry must state the condition that would prove it wrong, and " +
+        "the app records the move without ever saying whether you were right."
+
+private const val COMPARE_HEADING = "Compare stocks"
+
+private const val COMPARE_SUBTITLE =
+    "Two or three companies side by side, with each row lined up by the ratio it actually is, so " +
+        "a bank and an FMCG company are never read against each other on a row neither of them " +
+        "publishes. Nothing on that screen is ranked, scored or combined."
 
 private const val SECTION_COVERAGE = "Data coverage"
 private const val COVERAGE_SUBTITLE =

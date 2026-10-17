@@ -7,6 +7,7 @@ import com.mia.app.data.android.db.CandleDao
 import com.mia.app.data.android.db.DatabaseMigrations
 import com.mia.app.data.android.db.FundamentalsDao
 import com.mia.app.data.android.db.IndexDao
+import com.mia.app.data.android.db.JournalDao
 import com.mia.app.data.android.db.MarketDao
 import com.mia.app.data.android.db.MiaDatabase
 import com.mia.app.data.android.db.PatternDao
@@ -24,10 +25,12 @@ import javax.inject.Singleton
  * Database and worker-factory bindings.
  *
  * ### `fallbackToDestructiveMigration()` is deliberately absent
- * `candles` is write-once history that costs a Yahoo round-trip per symbol to rebuild, and
- * `outcomes` is the app's published accuracy record (plan.md §6.1). Losing either to a missing
- * migration would be worse than failing to open the database, so `DatabaseMigrations.ALL` is
- * passed explicitly and nothing falls back.
+ * `candles` is write-once history that costs a Yahoo round-trip per symbol to rebuild,
+ * `outcomes` is the app's published accuracy record (plan.md §6.1), and `journal_entry` is what
+ * the reader believed before they knew the answer (gap E5) — the one table in this schema that
+ * nothing else can reconstruct. Losing any of them to a missing migration would be worse than
+ * failing to open the database, so `DatabaseMigrations.ALL` is passed explicitly and nothing
+ * falls back.
  *
  * ### On `:app`
  * `:app` must
@@ -78,5 +81,13 @@ object DatabaseModule {
     @Provides
     fun provideIndexDao(database: MiaDatabase): IndexDao = database.indexDao()
 
-
+    /**
+     * The reader's own journal — gap E5.
+     *
+     * Its own provider because it is its own DAO, on the same footing as every other table here: the
+     * binding is one line and "is every DAO provided?" stays a question this file answers by
+     * reading it.
+     */
+    @Provides
+    fun provideJournalDao(database: MiaDatabase): JournalDao = database.journalDao()
 }
