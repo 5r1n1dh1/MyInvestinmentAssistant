@@ -301,40 +301,41 @@ private data class ScoreBand(
 )
 
 /**
- * Bands taken straight from `MatchScorePolicy`'s thresholds, so the word next to the number is
- * always the verdict the pipeline would have applied:
- * `< RENDER_THRESHOLD` suppressed, `< PROJECT_THRESHOLD` render-only, `>= PROJECT_THRESHOLD`
- * projectable.
+ * The colour band beside a score.
+ *
+ * ### Why the cut is not a gate
+ * This used to read `MatchScorePolicy.PROJECT_THRESHOLD` and paint "projectable" a third colour,
+ * which made a **display** band look like a **rule**: a reader could be told their formation was in
+ * a special band and reasonably infer the app had decided something about it. It had decided
+ * nothing — the band was a threshold, the threshold was unreachable, and the score's only remaining
+ * power in this app is deciding whether a formation is drawn at all
+ * ([MatchScorePolicy.RENDER_THRESHOLD]).
+ *
+ * So the bands are keyed on the render threshold plus `UiStrings.TIGHT_FIT_MIN`, described by
+ * `UiStrings.fitBand`, and the colours are decoration rather than a verdict. Nothing here may be
+ * read as a claim about outcomes: hit rate *falls* as the score rises on this app's own fixture,
+ * so a higher band is a closer resemblance to a textbook shape and nothing more.
  */
 @Composable
 private fun scoreBand(score: Int): ScoreBand = when {
-    score >= MatchScorePolicy.PROJECT_THRESHOLD -> ScoreBand(
-        label = BAND_STRONG,
+    score >= UiStrings.TIGHT_FIT_MIN -> ScoreBand(
+        label = UiStrings.fitBand(score),
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         borderColor = MaterialTheme.colorScheme.primary,
     )
 
     score >= MatchScorePolicy.RENDER_THRESHOLD -> ScoreBand(
-        label = BAND_MODERATE,
+        label = UiStrings.fitBand(score),
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         borderColor = MaterialTheme.colorScheme.secondary,
     )
 
     else -> ScoreBand(
-        label = BAND_WEAK,
+        label = UiStrings.fitBand(score),
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         borderColor = MaterialTheme.colorScheme.outlineVariant,
     )
 }
-
-/** Score >= 70. */
-private const val BAND_STRONG = "strong fit"
-
-/** 50..69. */
-private const val BAND_MODERATE = "moderate fit"
-
-/** < 50. */
-private const val BAND_WEAK = "weak fit"

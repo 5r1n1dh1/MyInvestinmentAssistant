@@ -9,6 +9,7 @@ import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Pivot
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.ProjectionGate
 import java.time.LocalDate
 
 /**
@@ -72,6 +73,16 @@ data class PatternScan(
  * Conflating them is how an app ends up labelling a forecast as a price level. The three fields
  * have three types, three labels and three schedules, and this class never converts one into
  * another.
+ *
+ * ### Which of the three may actually be shown
+ * [path] is `null` whenever [projectionBlocker] is not `null`: a directional path is a projection,
+ * and a projection the gate declined is not built in the first place, so nothing downstream can
+ * draw one by forgetting to ask. [measuredMove] and [trigger] are **not** withheld — the level is
+ * a measurement of the chart and the trigger is a condition on a close — but whether a
+ * notification is sent for it is [mayAlert], which asks the same gate.
+ *
+ * The gate's inputs are carried on this type because `PatternScanWorker` has no candles left to
+ * ask, and the rule itself is read from the one object that owns it.
  */
 data class PatternProjection(
     val symbol: String,
@@ -85,6 +96,36 @@ data class PatternProjection(
     val measuredMove: MeasuredMove?,
     val path: ProjectedPath?,
     val trigger: BreakoutTrigger?,
+
+    // ----------------------------------------------------------------- the projection gate
+    //
+    // The gate needs four things `ProjectionGate` cannot recover on its own, and the only place
+    // all four exist is `DefaultPatternRepository.projectionOf`, where the candles still do. They
+    // are **carried** rather than recomputed downstream because by the time a projection reaches
+    // `PatternScanWorker` the bars are gone; a gate re-asked without them would have to guess, and
+    // a guessed gate is how an alert fires for a formation that never earned one.
+    //
+    // Defaults are the fail-closed ones: no bars, no history, no regime. `ProjectionGate.blocker`
+    // answers `INSUFFICIENT_HISTORY` for a `barCount` of 0 before it looks at anything else, so a
+    // projection built without them cannot project or alert. Silence beats a wrong alert.
+
+    /**
+     * The breakout close the level is measured from — the newest stored bar of the series the
+     * detection was made on, exactly as `PatternEngine.run` takes it. `0.0` when no bars are
+     * stored, which the gate reads as "no close to measure from", never as "0 % away".
+     */
+    val lastClose: Double = 0.0,
+
+    /** Bars in the window this detection was scanned on. `0` when none are stored. */
+    val barCount: Int = 0,
+
+    /**
+     * The direction-aware ADX / relative-strength gate, resolved where the bars were.
+     *
+     * `null` means **undecided**, which is not alignment — an unknown regime may render and never
+     * project, exactly as it could not when the gate was the score.
+     */
+    val regimeAligned: Boolean? = null,
 ) {
     /** The level a `Direction.UP` formation projects; `null` when there is no measured move. */
     val projectedLevel: Double? get() = measuredMove?.projectedLevel
@@ -92,13 +133,39 @@ data class PatternProjection(
     val direction: Direction? get() = measuredMove?.direction
 
     /**
-     * Whether a projection and an alert are allowed at all.
+     * The first unmet condition of `com.mia.app.domain.pattern.ProjectionGate`, or `null` when this
+     * projection may be drawn **and** alerted on.
      *
-     * plan.md §6.4: `PROJECT` needs `score >= 70` **and** an aligned regime; anything below
-     * that may render but must not project. `MatchScorePolicy.PROJECT_THRESHOLD` is read rather
-     * than restated so the threshold cannot drift.
+     * The blocker is carried rather than a boolean so a screen can say *why* there is no projected
+     * level — "the level sits 9.4 % from the last close" is an answer and `false` is not. The rule
+     * itself is read from the one object that owns it, so this property cannot drift from the
+     * engine's own decision.
      */
-    val mayAlert: Boolean get() = score >= MatchScorePolicy.PROJECT_THRESHOLD
+    val projectionBlocker: ProjectionGate.Blocker?
+        get() = ProjectionGate.blocker(measuredMove, lastClose, timeframe, barCount, regimeAligned)
+
+    /** Whether a projected level and its directional path may be drawn for this detection. */
+    val mayProject: Boolean get() = projectionBlocker == null
+
+    /**
+     * Whether the app is allowed to raise a breakout alert for this detection.
+     *
+     * The same gate, deliberately: plan.md §6.4 makes projection and alerting one decision, so a
+     * notification is never raised for a level the chart refused to draw.
+     *
+     * The **score is not consulted**, and that is the whole point of W1. `MatchScorePolicy`'s
+     * `PROJECT_THRESHOLD` was unreachable (the highest score in 875 settled candidates was 68) and
+     * ran backwards against outcomes, so it gated nothing; projection is decided by how far the
+     * level sits from the close, which is the quantity a reader would have to be right about.
+     */
+    val mayAlert: Boolean get() = mayProject
+
+    /**
+     * `|projectedLevel − lastClose| / lastClose`, in percent, or `null` when there is no level to
+     * measure. The number a reader needs to judge a `DISTANCE_TOO_FAR` blocker for themselves.
+     */
+    val levelDistancePercent: Double?
+        get() = ProjectionGate.distance(measuredMove, lastClose)?.times(100.0)
 }
 
 /**

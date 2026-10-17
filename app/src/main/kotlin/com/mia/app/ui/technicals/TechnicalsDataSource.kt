@@ -102,9 +102,11 @@ interface TechnicalsDataSource {
     /**
      * The 1–5 bar dashed path for [match] (plan.md §6.6 item 2).
      *
-     * `null` when [match] has no measured move and therefore no direction to project, or when the
-     * match's score is below `MatchScorePolicy.PROJECT_THRESHOLD` — a projection is only ever drawn
-     * for a match the engine would have projected.
+     * `null` when [match] has no measured move and therefore no direction to project, or when
+     * `com.mia.app.domain.pattern.ProjectionGate` declines it — the level sits further from the
+     * breakout close than the measured calibration supports, the window is short of bars, or the
+     * regime is not aligned. A projection is only ever drawn for a match the engine would have
+     * projected.
      */
     suspend fun projectedPath(symbol: String, timeframe: Timeframe, match: Match): ProjectedPath?
 
