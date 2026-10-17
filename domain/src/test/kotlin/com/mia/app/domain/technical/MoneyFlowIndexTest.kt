@@ -89,18 +89,12 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `zero volume across every bar yields null rather than 50`() {
-        // The trailing lambda was written after a named argument, which Kotlin does not accept — and
-        // it would have bound to `typical` rather than `close` even if it had. Named, so the intent
-        // is the intent.
-        val series = candles(40, volume = { 0L }, close = { i -> 100.0 + i })
+        val series = candles(40, volume = { 0L }) { i -> 100.0 + i }
         assertNull(MoneyFlowIndex.compute(series).last(), "a stock that did not trade has no MFI")
-        // Every bar, not 100: the series is 40 bars long and the output is index-aligned with it,
-        // so a larger number here could only have come from a fixture that no longer exists.
-        assertEquals(
-            series.size,
-            MoneyFlowIndex.compute(series).count { it == null },
-            "zero volume on every bar means no reading anywhere, not just at the end",
-        )
+        // Every bar null, not just the warmup: with no money flow anywhere there is nothing to
+        // report at any index, so the warmup and the no-volume case are indistinguishable in the
+        // output and both are honestly absent.
+        assertEquals(series.size, MoneyFlowIndex.compute(series).count { it == null })
     }
 
     @Test
@@ -115,33 +109,30 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `volume decides whether a move counts, which is the whole point`() {
-        // The same price path both times; the only difference is which half carries the volume.
-        // If MFI were just RSI on typical price, these two would agree.
+        // Bars strictly alternate up and down, so every 14-bar window contains **both** directions.
         //
-        // Two properties the previous fixture did not have, and both matter. The path must *move*,
-        // or there is no money flow and `compute` answers null. And it must move in **both**
-        // directions: on a path that only ever rises there is no negative flow at all, which the
-        // indicator documents as 100 — so a "loud on the way down" fixture with no down leg would
-        // have compared a weighted reading against a saturated one.
-        val upThenDown = { i: Int -> 100.0 + if (i < 20) i.toDouble() else (40 - i).toDouble() }
-        val quiet = candles(40, close = upThenDown, volume = { i -> if (i < 20) 10_000L else 10L })
-        val loud = candles(40, close = upThenDown, volume = { i -> if (i < 20) 10L else 10_000L })
+        // That is the property the previous two attempts of this test missed, and it is the reason
+        // each failed for a different accidental reason:
+        //   - volume split in bars 0–19, reading in the last 14 → both windows all-rising, both 100
+        //   - prices rising then falling, split at 20       → both windows all-falling, both 0
+        // A window containing only one direction pins positive flow (or negative) at exactly zero,
+        // and the ratio then collapses to its bound **regardless of how large the other side is** —
+        // so the magnitude of the volume contrast, the entire subject of the test, never entered
+        // the arithmetic. The two series have to differ inside a window that already carries both
+        // signs, or nothing about weighting is being measured.
+        fun zigZag(i: Int): Double = if (i % 2 == 1) 101.0 else 100.0
 
-        // JUnit's `assertNotNull` returns nothing; `kotlin.test`'s returns the value, which is what
-        // these two need so no reading can be forced out of a null with `!!`.
-        val quietMfi = kotlin.test.assertNotNull(
-            MoneyFlowIndex.compute(quiet).last(),
-            "a moving series with volume must produce a reading",
-        )
-        val loudMfi = kotlin.test.assertNotNull(
-            MoneyFlowIndex.compute(loud).last(),
-            "a moving series with volume must produce a reading",
-        )
+        val onTheUpBars = candles(40, close = ::zigZag, volume = { i -> if (i % 2 == 1) 10_000L else 10L })
+        val onTheDownBars = candles(40, close = ::zigZag, volume = { i -> if (i % 2 == 0) 10_000L else 10L })
 
+        val upMfi = MoneyFlowIndex.compute(onTheUpBars).last()!!
+        val downMfi = MoneyFlowIndex.compute(onTheDownBars).last()!!
+
+        assertTrue(upMfi > 50.0, "volume concentrated on rising bars must read above the midpoint ($upMfi)")
+        assertTrue(downMfi < 50.0, "volume concentrated on falling bars must read below it ($downMfi)")
         assertTrue(
-            quietMfi > loudMfi,
-            "the same prices with volume on the way up should read higher ($quietMfi) than with " +
-                "volume on the way down ($loudMfi)",
+            upMfi > downMfi,
+            "identical prices, so the only difference is where the volume sits: $upMfi vs $downMfi",
         )
     }
 
