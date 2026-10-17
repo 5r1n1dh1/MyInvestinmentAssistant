@@ -91,7 +91,10 @@ class MoneyFlowIndexTest {
     fun `zero volume across every bar yields null rather than 50`() {
         val series = candles(40, volume = { 0L }) { i -> 100.0 + i }
         assertNull(MoneyFlowIndex.compute(series).last(), "a stock that did not trade has no MFI")
-        assertEquals(100, MoneyFlowIndex.compute(series).count { it == null })
+        // Every bar null, not just the warmup: with no money flow anywhere there is nothing to
+        // report at any index, so the warmup and the no-volume case are indistinguishable in the
+        // output and both are honestly absent.
+        assertEquals(series.size, MoneyFlowIndex.compute(series).count { it == null })
     }
 
     @Test
@@ -106,18 +109,26 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `volume decides whether a move counts, which is the whole point`() {
-        // Identical price path; the only difference is that the rising half carries all the volume.
-        // If MFI were just RSI on typical price, these two would agree.
-        val quiet = candles(40, volume = { i -> if (i < 20) 10_000L else 10L })
-        val loud = candles(40, volume = { i -> if (i < 20) 10L else 10_000L })
+        // The price path rises then falls, so the final 14-bar window is all *falling* bars in both
+        // series. The only difference is where the volume sits.
+        //
+        // The contrast has to live INSIDE the measured window. An earlier version of this test put
+        // the volume split in the first 20 bars and the reading in the last 14 — so both series had
+        // the same all-rising window, both read 100, and the assertion only failed because two
+        // equal numbers are not greater than each other. A test can fail by accident and still be
+        // measuring nothing.
+        fun prices(i: Int): Double = if (i < 20) 100.0 + i else 120.0 - (i - 20)
 
-        val quietMfi = MoneyFlowIndex.compute(quiet).last()!!
-        val loudMfi = MoneyFlowIndex.compute(loud).last()!!
+        val onTheRise = candles(40, close = ::prices, volume = { i -> if (i < 20) 10_000L else 10L })
+        val onTheFall = candles(40, close = ::prices, volume = { i -> if (i < 20) 10L else 10_000L })
+
+        val riseMfi = MoneyFlowIndex.compute(onTheRise).last()!!
+        val fallMfi = MoneyFlowIndex.compute(onTheFall).last()!!
 
         assertTrue(
-            quietMfi > loudMfi,
-            "the same prices with volume on the way up should read higher ($quietMfi) than with " +
-                "volume on the way down ($loudMfi)",
+            fallMfi < riseMfi,
+            "identical prices, but volume on the way down should read lower ($fallMfi) than " +
+                "volume on the way up ($riseMfi)",
         )
     }
 
