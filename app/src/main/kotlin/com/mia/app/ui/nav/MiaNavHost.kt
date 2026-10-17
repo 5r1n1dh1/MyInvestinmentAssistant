@@ -165,7 +165,14 @@ fun MiaNavHost(
             route = Screen.EducationLesson.route,
             arguments = listOf(navArgument(ARG_LESSON) { type = NavType.StringType }),
         ) { entry ->
-            EducationLessonScreen(lessonId = ScreenArgs.lessonIdOf(entry.arguments))
+            EducationLessonScreen(
+                // `NavBackStackEntry.arguments` is a `Bundle?`, so the one argument this route
+                // carries is read off it directly rather than converting the whole bundle to a map
+                // — which would mean depending on `Bundle.toMap()`, an androidx-core extension
+                // rather than platform API. A null bundle yields a null id, which normalises to the
+                // empty string and renders the lesson screen's "not available" state.
+                lessonId = ScreenArgs.lessonIdOf(entry.arguments?.getString(ARG_LESSON)),
+            )
         }
     }
 }

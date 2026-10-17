@@ -863,8 +863,8 @@ private const val MEANING_SOURCE_HEADING = "Where the data comes from"
 private const val EDUCATION_HEADING = "Education"
 
 private const val EDUCATION_SUBTITLE =
-    "Learn the ideas behind these terms, from the first look at a stock through to how the "
-        + "app measures itself."
+    "Learn the ideas behind these terms, from the first look at a stock through to how the " +
+        "app measures itself."
 
 /** Test tag for the curriculum link, so its presence is assertable rather than assumed. */
 private const val EDUCATION_ENTRY_TAG = "education-entry"
