@@ -12,6 +12,8 @@ import com.mia.app.domain.model.Timeframe
 import com.mia.app.ui.accuracy.AccuracyScreen
 import com.mia.app.ui.detail.StockDetailScreen
 import com.mia.app.ui.di.SearchRoute
+import com.mia.app.ui.education.EducationLessonScreen
+import com.mia.app.ui.education.EducationScreen
 import com.mia.app.ui.fundamentals.FundamentalsScreen
 import com.mia.app.ui.patterns.PatternsScreen
 import com.mia.app.ui.settings.SettingsScreen
@@ -146,7 +148,24 @@ fun MiaNavHost(
         }
 
         composable(route = Screen.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(
+                onOpenEducation = { navController.navigate(Screen.Education.route) },
+            )
+        }
+
+        composable(route = Screen.Education.route) {
+            EducationScreen(
+                onOpenLesson = { id ->
+                    navController.navigate(Screen.EducationLesson.createRoute(id))
+                },
+            )
+        }
+
+        composable(
+            route = Screen.EducationLesson.route,
+            arguments = listOf(navArgument(ARG_LESSON) { type = NavType.StringType }),
+        ) { entry ->
+            EducationLessonScreen(lessonId = ScreenArgs.lessonIdOf(entry.arguments))
         }
     }
 }

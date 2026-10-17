@@ -225,4 +225,13 @@ val BASE_RATE_MODULES: List<Module> = listOf(
             ),
         ),
     ),
-)
+).also { Curriculum.register(it) }
+
+/**
+ * Registers the control-test module.
+ *
+ * Self-registering for the same reason [EXPERT_MODULES] does. This is the module that carries the
+ * repository's central finding — that every conventional signal in it sits on a coin flip — so it
+ * being declared but unreachable would leave the app's own honesty argument as the one thing a
+ * reader cannot find.
+ */

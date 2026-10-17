@@ -35,9 +35,20 @@ private object Expert {
 /**
  * Gap E3 / planv2 §W6: the expert level, as data.
  *
- * Ten modules, 42 lessons. Registration is **not** done here — `Curriculum.register(...)` wires
- * these lists in, so this file stays free of any dependency on the schema object and can be read
- * on its own.
+ * Ten modules, 42 lessons.
+ *
+ * ### Why this file registers itself
+ *
+ * It originally did not, on the stated grounds that it "stays free of any dependency on the schema
+ * object". That reasoning does not hold: the file already declares `Module` and `Lesson`, so it
+ * already depends on the education package — the claim was only ever true of one *symbol* in it.
+ * And the cost of honouring it was that **45 lessons were declared and never registered**, so they
+ * never appeared in `Curriculum.modules` and were invisible to any screen that read the
+ * curriculum. A lesson that no reader can reach is not content.
+ *
+ * So registration now happens here, matching [BeginnerLessons] and [IntermediateLessons]. The
+ * registration contract makes it idempotent — `register` keys on `Module.id` and replaces in
+ * place — so a second registration cannot duplicate or reorder a row.
  */
 val EXPERT_MODULES: List<Module> = listOf(
 
@@ -1848,4 +1859,4 @@ val EXPERT_MODULES: List<Module> = listOf(
             ),
         ),
     ),
-)
+).also { Curriculum.register(it) }

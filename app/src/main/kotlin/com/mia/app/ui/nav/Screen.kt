@@ -14,11 +14,15 @@ const val ARG_SYMBOL: String = "symbol"
  */
 const val ARG_TIMEFRAME: String = "timeframe"
 
+/** Nav argument for a lesson id. See [Screen.EducationLesson]. */
+const val ARG_LESSON: String = "lesson"
+
 // Route constants for the argument-free screens.
 private const val ROUTE_SEARCH = "search"
 private const val ROUTE_STOCK_LIST = "stocklist"
 private const val ROUTE_ACCURACY = "accuracy"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_EDUCATION = "education"
 
 /**
  * The app's route table.
@@ -81,6 +85,23 @@ sealed class Screen(val route: String) {
 
     /** plan.md §1.4 rule 4 — the SEBI disclaimer, verbatim, plus the data sources. */
     data object Settings : Screen(ROUTE_SETTINGS)
+
+    /** gap E1–E7 — the three-level curriculum. The hub lists modules; [Education] opens a lesson. */
+    data object Education : Screen(ROUTE_EDUCATION)
+
+    /**
+     * One lesson, by id.
+     *
+     * A route rather than a detail pane so a lesson is a linkable destination — the curriculum is
+     * the part of this app most worth citing, and a citation needs something to point at.
+     *
+     * The id is namespaced by level and topic (`beginner.jargon.pe`), so it is safe in a route
+     * without escaping; `Curriculum.lesson(id)` resolving to null is handled by the screen, not by
+     * crashing the nav graph.
+     */
+    data object EducationLesson : Screen("educationlesson/{$ARG_LESSON}") {
+        fun createRoute(lessonId: String): String = "educationlesson/$lessonId"
+    }
 }
 
 /** Reads and normalises nav arguments, so no screen has to. */
@@ -104,6 +125,20 @@ object ScreenArgs {
      * so the worst case is showing the other granularity, which the toggle makes obvious and
      * correctable in one tap.
      */
+    /**
+     * Reads a lesson id out of a nav argument map.
+     *
+     * Trimmed but otherwise untouched: lesson ids are dotted lowercase (`beginner.jargon.pe`) and
+     * are compared verbatim against `Curriculum`, which owns the canonical spelling. Normalising
+     * case here would be guessing at a key rather than normalising one.
+     *
+     * Returns an empty string rather than throwing, for the same reason [symbolOf] does: a stale
+     * link renders the "lesson is not available" state instead of taking the app down on the way
+     * in.
+     */
+    fun lessonIdOf(arguments: Map<String, Any?>): String =
+        (arguments[ARG_LESSON] as? String)?.trim().orEmpty()
+
     fun timeframeOf(arguments: Map<String, Any?>): Timeframe {
         val raw = arguments[ARG_TIMEFRAME] as? String ?: return Timeframe.D1
         return Timeframe.fromStorageKey(raw.trim().uppercase()) ?: Timeframe.D1
