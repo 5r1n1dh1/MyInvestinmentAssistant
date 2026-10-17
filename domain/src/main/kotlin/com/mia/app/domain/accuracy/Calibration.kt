@@ -64,9 +64,11 @@ enum class InsightProvenance(
  * @property provenance declared, never defaulted. See [InsightProvenance].
  * @property rows one per [DistanceBucket], **cumulative and tightest first** — a level inside 3 %
  *   is counted in the 1 % and 2 % bands too. Same convention as the published table and as
- *   `ProjectionCalibration.calibrate`, so the two are read side by side without translation.
- *   `PublishedInsightTest` pins the nesting, because a disjoint-banded table is the reading that
- *   makes a 4 % band look better than a 5 % band when nothing of the sort happened.
+ *   `ProjectionCalibration.calibrate`, so the two are read side by side without translation. The
+ *   closed bands therefore nest; `BEYOND_12` is the open-ended remainder, so the last row is the
+ *   complement of `WITHIN_12` rather than a superset of it. `PublishedInsightTest` pins both, because
+ *   a disjoint-banded table is the reading that makes a 4 % band look better than a 5 % band when
+ *   nothing of the sort happened.
  * @property horizons the horizons with a measurement. A horizon absent from this list was never
  *   measured and renders as "not measured" — never as `0 %`.
  * @property baseRatesPct chance-level touch rate **at the same level size**, per horizon. Partial by

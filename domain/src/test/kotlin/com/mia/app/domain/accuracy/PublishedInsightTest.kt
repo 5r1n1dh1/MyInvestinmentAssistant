@@ -251,9 +251,10 @@ class PublishedInsightTest {
         assertEquals(InsightProvenance.DEVICE_STORED, table.provenance)
         assertEquals(DistanceBucket.entries.size, table.rows.size)
         // Bands are cumulative, as the published table and the screen's copy both say: a level inside
-        // 3 % is counted in the 1 % and 2 % bands too. So they nest, tighter never exceeds wider, and
-        // the 12 % band plus the open-ended remainder is the whole settled sample.
-        table.rows.zipWithNext().forEach { (tighter, wider) ->
+        // 3 % is counted in the 1 % and 2 % bands too. So the closed bands nest, tighter never
+        // exceeds wider. `BEYOND_12` is the open-ended remainder rather than a superset, so the last
+        // pair is checked by the identity below instead.
+        table.rows.filter { it.bucket?.maxPercent != null }.zipWithNext().forEach { (tighter, wider) ->
             assertTrue(
                 tighter.samples <= wider.samples,
                 "${tighter.label} holds ${tighter.samples} samples, more than the wider " +
