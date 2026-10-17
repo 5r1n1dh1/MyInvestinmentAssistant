@@ -1,5 +1,6 @@
 package com.mia.app.ui.education
 
+import com.mia.app.domain.compliance.Disclosure
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -131,7 +132,7 @@ fun EducationScreen(
                     ModuleCard(module = module, onOpenLesson = onOpenLesson)
                 }
 
-                item(key = "footer") { DisclaimerFooter() }
+                item(key = "footer") { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
             }
         }
     }

@@ -126,18 +126,22 @@ object ScreenArgs {
      * correctable in one tap.
      */
     /**
-     * Reads a lesson id out of a nav argument map.
+     * Normalises a raw lesson id from a nav argument.
+     *
+     * Takes the raw `String?` rather than an argument map for a concrete reason:
+     * `NavBackStackEntry.arguments` is a `Bundle?`, and converting it to a `Map` means relying on
+     * `Bundle.toMap()` — an androidx-core extension, not platform API. Reading the single argument
+     * this route has is simpler and a smaller dependency surface.
      *
      * Trimmed but otherwise untouched: lesson ids are dotted lowercase (`beginner.jargon.pe`) and
      * are compared verbatim against `Curriculum`, which owns the canonical spelling. Normalising
      * case here would be guessing at a key rather than normalising one.
      *
-     * Returns an empty string rather than throwing, for the same reason [symbolOf] does: a stale
-     * link renders the "lesson is not available" state instead of taking the app down on the way
-     * in.
+     * Returns an empty string rather than throwing, for the same reason [symbolOf] does: a missing
+     * or stale id renders the lesson screen's "not available" state instead of taking the app down
+     * on the way in.
      */
-    fun lessonIdOf(arguments: Map<String, Any?>): String =
-        (arguments[ARG_LESSON] as? String)?.trim().orEmpty()
+    fun lessonIdOf(raw: String?): String = raw?.trim().orEmpty()
 
     fun timeframeOf(arguments: Map<String, Any?>): Timeframe {
         val raw = arguments[ARG_TIMEFRAME] as? String ?: return Timeframe.D1
