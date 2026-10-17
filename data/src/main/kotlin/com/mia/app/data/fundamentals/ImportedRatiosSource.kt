@@ -140,21 +140,20 @@ class ImportedRatiosSource : ManualFundamentalsSource {
         val cells = lines[1].split(',').map { it.trim() }
         val byColumn = header.zip(cells).toMap()
         val errors = mutableListOf<String>()
+        val values = LinkedHashMap<String, Any>()
 
         val symbol = byColumn.required("symbol", errors)
         val asOf = byColumn.date("asOf", errors)
-        val ratios = build {
-            symbol?.let { put("symbol", it.uppercase()) }
-            asOf?.let { put("asOf", it) }
-            for ((column, setter) in NUMERIC_COLUMNS) {
-                val raw = byColumn[column.lowercase()] ?: continue
-                if (raw.isEmpty() || raw in PLACEHOLDERS) continue
-                val value = raw.replace(",", "").toDoubleOrNull()
-                if (value == null) errors += "column '$column' reads \"$raw\", which is not a number"
-                else setter(this, value)
-            }
+        symbol?.let { values["symbol"] = it.uppercase() }
+        asOf?.let { values["asOf"] = it }
+        for ((column, setter) in NUMERIC_COLUMNS) {
+            val raw = byColumn[column.lowercase()] ?: continue
+            if (raw.isEmpty() || raw in PLACEHOLDERS) continue
+            val value = raw.replace(",", "").toDoubleOrNull()
+            if (value == null) errors += "column '$column' reads \"$raw\", which is not a number"
+            else setter(values, value)
         }
-        return finish(symbol, asOf, buildMap { putAll(ratios) }, errors)
+        return finish(symbol, asOf, values, errors)
     }
 
     // ----------------------------------------------------------------------------- JSON
