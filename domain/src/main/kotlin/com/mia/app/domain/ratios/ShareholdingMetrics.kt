@@ -45,14 +45,23 @@ data class ShareholdingPoint(
 data class ShareholdingSeries(
     val holder: String,
     val points: List<ShareholdingPoint> = emptyList(),
-    /** Row labels the card published, so an absent holder can name its neighbours. */
+    /** `true` when the card published **this holder's** row, dated figures or not. */
+    val rowPublished: Boolean = false,
+    /** Every row label the card published, so an absent holder can name its neighbours. */
     val publishedRowLabels: List<String> = emptyList(),
 ) {
     /** No dated observation for this holder. Never a series of zeros — see the class KDoc. */
     val isEmpty: Boolean get() = points.isEmpty()
 
-    /** `true` when the card published this holder's row but no column resolved to a quarter. */
-    val isUndated: Boolean get() = points.isEmpty() && publishedRowLabels.isNotEmpty()
+    /**
+     * `true` when the card published this holder's row but no column resolved to a quarter.
+     *
+     * Carries [rowPublished] explicitly rather than inferring it from [publishedRowLabels] being
+     * non-empty: every holder's series lists the *card's* rows, so inferring would report HDFCBANK's
+     * missing `Promoters` row as "present but undated" — a statement about the bank that is simply
+     * untrue, and one that would send a reader looking for a figure the company does not disclose.
+     */
+    val isUndated: Boolean get() = rowPublished && points.isEmpty()
 
     val latest: ShareholdingPoint? get() = points.lastOrNull()
 
@@ -203,7 +212,7 @@ object ShareholdingMetrics {
     ): ShareholdingSeries {
         val key = labelKeyOf(holder)
         val row = rows.firstOrNull { labelKeyOf(it.label) == key }
-            ?: return ShareholdingSeries(holder, emptyList(), present)
+            ?: return ShareholdingSeries(holder, emptyList(), rowPublished = false, present)
         val points = mutableListOf<ShareholdingPoint>()
         for (index in row.values.indices) {
             val percent = row.values[index] ?: continue
@@ -218,7 +227,12 @@ object ShareholdingMetrics {
                 percent = percent,
             )
         }
-        return ShareholdingSeries(holder, points.sortedBy { it.sortKey }, present)
+        return ShareholdingSeries(
+            holder = holder,
+            points = points.sortedBy { it.sortKey },
+            rowPublished = true,
+            publishedRowLabels = present,
+        )
     }
 
     private fun latest(series: ShareholdingSeries, label: String): Computation<Double> {
@@ -247,20 +261,32 @@ object ShareholdingMetrics {
     }
 
     /**
-     * Why a holder has no figure, with the three causes the fixtures actually produce kept
-     * distinct: no card, no row for this holder, or a row whose headers could not be dated.
+     * Why a holder has no figure.
+     *
+     * Four states, kept distinct because each names a different thing that is absent, and a reader
+     * who is told the wrong one goes looking in the wrong place:
+     *
+     * | state | what is actually missing |
+     * |---|---|
+     * | no card at all | nothing was read |
+     * | no row for this holder | the company does not disclose that category |
+     * | row present, headers undated | the figures exist but cannot be attached to a quarter |
+     * | row present, headers dated, no readable cell | the row published only placeholders |
      */
     private fun absent(series: ShareholdingSeries, label: String): Computation<Double> =
         Computation.missing(
             when {
+                series.publishedRowLabels.isEmpty() ->
+                    "no shareholding-pattern card was read for this symbol, so $label is absent " +
+                        "rather than 0"
                 series.isUndated ->
                     "the shareholding-pattern card publishes a '${series.holder}' row but none of " +
                         "its columns resolved to a quarter, so $label cannot be dated and is absent " +
                         "rather than being attributed to the right-hand column (rows present: " +
                         "${series.rowsPresent})"
-                series.points.isEmpty() && series.publishedRowLabels.isEmpty() ->
-                    "no shareholding-pattern card was read for this symbol, so $label is absent " +
-                        "rather than 0"
+                series.rowPublished ->
+                    "the shareholding-pattern card's '${series.holder}' row publishes no readable " +
+                        "figure, so $label is absent rather than 0"
                 else ->
                     "the shareholding-pattern card publishes no '${series.holder}' row (rows " +
                         "present: ${series.rowsPresent}), so $label is absent rather than 0 — a " +

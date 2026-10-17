@@ -74,7 +74,9 @@ class RatioPriorityTest {
 
     @Test
     fun `the plan 7 2 cards carry the plan's own two metric rows`() {
-        val order = RatioPriority.order(Sector.OTHER)
+        // Over PLAN_ORDER, which is the §7.2 list; the supplementary ownership card is added after
+        // it and is covered by its own test above.
+        val order = RatioPriority.PLAN_ORDER
         assertEquals(listOf(RatioId.INTEREST_COVERAGE), order[2].companions)
         assertEquals(listOf(RatioId.DIVIDEND_PAYOUT), order[11].companions)
         // Every other row is a single number.

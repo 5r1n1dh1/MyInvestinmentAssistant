@@ -115,6 +115,9 @@ class ScreenerShareholdingGoldenTest {
             pattern.promoters.publishedRowLabels.any { it.contains("FII", ignoreCase = true) },
             "the card does publish holder rows: ${pattern.promoters.rowsPresent}",
         )
+        // Not "present but undated": the bank genuinely publishes no Promoters row, and a note that
+        // claimed otherwise would send a reader looking for a category it does not disclose.
+        assertFalse(pattern.promoters.isUndated, "an absent row is not an undated one")
         val note = assertNotNull(ShareholdingMetrics.promoterHolding(pattern).note)
         assertTrue(note.contains("publishes no 'Promoters' row"), note)
         assertTrue(note.contains("absent rather than 0"), note)

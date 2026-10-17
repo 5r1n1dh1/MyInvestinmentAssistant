@@ -102,6 +102,21 @@ private fun quarterLabel(year: Int, quarter: Int): String {
 private val QUARTER_MONTH_ABBREVIATIONS = listOf("Mar", "Jun", "Sep", "Dec")
 
 /**
+ * `"Jun 2026"` for a `year * 4 + quarter` key — the inverse of [QuarterlyPoint.sortKey].
+ *
+ * ### The off-by-one, written down because it is invisible
+ * [QuarterlyPoint.sortKey] is `year * 4 + quarter` with `quarter` in **1..4**, so decoding needs
+ * `((key − 1) mod 4) + 1`, not `key mod 4 + 1`. The wrong formula reports every missing quarter as
+ * the one three months after it — which turns a correct gap report into a false one, and a false
+ * gap report is worse than none: it tells the reader the page is missing a quarter that it publishes.
+ */
+private fun labelOfQuarterKey(key: Long): String {
+    val quarter = ((key - 1L) % 4L).toInt() + 1
+    val year = ((key - quarter) / 4L).toInt()
+    return quarterLabel(year, quarter)
+}
+
+/**
  * One metric's quarterly picture: the latest figure, the two comparisons, and the series to draw.
  *
  * ### Why the two comparisons are separate fields and not one "growth" number
@@ -205,8 +220,24 @@ object QuarterlyResults {
             it.year == latest.year - 1 && it.quarter == latest.quarter
         }
         val notes = mutableListOf<String>()
-        val qoq = growth(latest, previousQuarter, "quarter on quarter", notes)
-        val yoy = growth(latest, sameQuarterPriorYear, "year on year", notes)
+        val qoq = growth(
+            now = latest,
+            before = previousQuarter,
+            label = "quarter on quarter",
+            // The endpoint a quarter-on-quarter comparison needs if it cannot be made.
+            missingEndpoint = latest.previousPeriod,
+            notes = notes,
+        )
+        val yoy = growth(
+            now = latest,
+            before = sameQuarterPriorYear,
+            label = "year on year",
+            // A different endpoint, so the note names a different quarter. Saying "no year on year
+            // comparison: the page publishes no Mar 2026" would send the reader looking for the
+            // wrong quarter when the one wanted is Jun 2025.
+            missingEndpoint = QuarterlyPoint(latest.year - 1, latest.quarter, 0.0).period,
+            notes = notes,
+        )
         gaps(points, metric)?.let { notes += it }
         return QuarterlyComparison(
             metric = metric,
@@ -240,16 +271,17 @@ object QuarterlyResults {
         val present = points.map { it.sortKey }.toSet()
         val missing = (first + 1 until last).filter { it !in present }
         if (missing.isEmpty()) return null
-        return "quarter(s) ${missing.joinToString(", ") { labelOf(it) }} publish no " +
+        return "quarter(s) ${missing.joinToString(", ") { labelOfQuarterKey(it) }} publish no " +
             "${metric.title.lowercase(Locale.ROOT)} figure and are skipped rather than filled in"
     }
 
-    /** `"Jun 2026"` for a `year * 4 + quarter` key. The inverse of [QuarterlyPoint.sortKey]. */
-    private fun labelOf(key: Long): String =
-        QuarterlyPoint((key / 4L).toInt(), (key % 4L).toInt() + 1, 0.0).period
-
     /**
      * `(now ÷ before − 1) × 100`, with the failure written down.
+     *
+     * @param missingEndpoint the quarter label a comparison of this kind needs but the page did not
+     *   publish. Passed in rather than derived from `now` because "the quarter before" and "the same
+     *   quarter last year" are different quarters, and a note that named the wrong one would send
+     *   the reader to look for a figure the page is never going to have.
      *
      * A prior value of exactly zero has no growth rate, and a negative prior value makes the ratio
      * meaningless in the other direction — a bank's quarterly financing profit is negative on most
@@ -260,11 +292,12 @@ object QuarterlyResults {
         now: QuarterlyPoint,
         before: QuarterlyPoint?,
         label: String,
+        missingEndpoint: String,
         notes: MutableList<String>,
     ): Double? {
         if (before == null) {
-            notes += "no $label comparison: the page publishes no ${now.previousPeriod} figure " +
-                "for this line, so ${now.period} cannot be compared with it"
+            notes += "no $label comparison: the page publishes no $missingEndpoint figure for this " +
+                "line, so ${now.period} cannot be compared with it"
             return null
         }
         if (before.value == 0.0) {

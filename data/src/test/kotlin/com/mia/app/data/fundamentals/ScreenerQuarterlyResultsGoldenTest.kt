@@ -177,14 +177,22 @@ class ScreenerQuarterlyResultsGoldenTest {
         assertEquals(2, comparison.series.size)
         val gapNote = comparison.notes.firstOrNull { it.contains("skipped") }
         assertNotNull(gapNote, "the missing quarters must be named: ${comparison.notes}")
+        // Dec 2025 and Mar 2026, named correctly: the decoder for a `year * 4 + quarter` key is
+        // the one thing here that could silently report the wrong quarter.
         assertTrue(gapNote.contains("Dec 2025"), gapNote)
         assertTrue(gapNote.contains("Mar 2026"), gapNote)
-        // And the comparison is refused rather than made against Sep 2025, which is two quarters back.
+        // And the comparison is refused rather than made against Sep 2025, three quarters back.
         assertNull(comparison.previousQuarter)
         assertNull(comparison.quarterOverQuarterPercent)
-        assertTrue(comparison.notes.any { it.contains("no quarter on quarter comparison") })
-        // Year on year is refused on the same rule: there is no Jun 2025 here either.
+        val qoqNote = comparison.notes.first { it.contains("quarter on quarter") }
+        assertTrue(qoqNote.contains("no Mar 2026 figure"), qoqNote)
+        // Year on year is refused on the same rule, and names the *year-ago* quarter, not the
+        // quarter before: sending a reader after Mar 2026 for a year-on-year comparison is a
+        // different wrong answer, not the same one.
         assertNull(comparison.sameQuarterPriorYear)
+        assertNull(comparison.yearOnYearPercent)
+        val yoyNote = comparison.notes.first { it.contains("year on year") }
+        assertTrue(yoyNote.contains("no Jun 2025 figure"), yoyNote)
         assertEquals(0, comparison.comparisonCount)
     }
 
@@ -205,6 +213,26 @@ class ScreenerQuarterlyResultsGoldenTest {
         assertEquals("Mar 2026", comparison.previousQuarter!!.period)
         assertEquals(7.6923, comparison.quarterOverQuarterPercent!!, 1e-3)
         assertTrue(comparison.notes.any { it.contains("Dec 2025") }, "${comparison.notes}")
+    }
+
+    /**
+     * One readable quarter is a value, not a comparison.
+     *
+     * The single most common shape of a partial card on a company with a short trading history, and
+     * the case where a naive `points[size - 2]` would throw or silently compare against itself.
+     */
+    @Test
+    fun `a single quarter is a value and yields no comparison at all`() {
+        val comparison = QuarterlyResults.compare(
+            listOf(com.mia.app.domain.model.QuarterRecord(2026, 2, sales = 140.0)),
+            QuarterlyMetric.SALES,
+        )
+        assertEquals(140.0, comparison.latest!!.value)
+        assertEquals(1, comparison.series.size)
+        assertEquals(0, comparison.comparisonCount)
+        assertEquals(2, comparison.notes.size, "one note per comparison: ${comparison.notes}")
+        assertTrue(comparison.notes.any { it.contains("no Mar 2026 figure") }, "${comparison.notes}")
+        assertTrue(comparison.notes.any { it.contains("no Jun 2025 figure") }, "${comparison.notes}")
     }
 
     /** A prior quarter of exactly zero has no percentage. Reported, not divided. */
