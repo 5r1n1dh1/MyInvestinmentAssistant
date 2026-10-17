@@ -1,5 +1,6 @@
 package com.mia.app.ui.education
 
+import com.mia.app.domain.compliance.Disclosure
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -139,7 +140,7 @@ private fun LessonBody(lesson: Lesson, modifier: Modifier = Modifier) {
             }
         }
 
-        item(key = "footer") { DisclaimerFooter() }
+        item(key = "footer") { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
     }
 }
 
