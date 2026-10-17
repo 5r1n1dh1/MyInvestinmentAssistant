@@ -20,8 +20,12 @@ import com.mia.app.domain.ratios.RatioSlot
 import com.mia.app.domain.ratios.RatioState
 import com.mia.app.domain.ratios.RatioUnit
 import com.mia.app.domain.ratios.RatioAvailability
+import com.mia.app.domain.ratios.QuarterlyComparison
+import com.mia.app.domain.ratios.QuarterlyMetric
+import com.mia.app.domain.ratios.QuarterlyResults
 import com.mia.app.domain.ratios.SectorResolution
 import com.mia.app.domain.ratios.SectorResolver
+import com.mia.app.domain.ratios.ShareholdingMetrics
 import com.mia.app.domain.ratios.Trend
 import com.mia.app.domain.ratios.withFreshness
 import com.mia.app.domain.redflag.RuleSkip
@@ -128,6 +132,14 @@ data class RatioCard(
     val readings: List<RatioReading>,
     /** `true` when §7.3 added or promoted this card for the resolved sector. */
     val isSectorSpecific: Boolean,
+    /**
+     * `true` for the card plan.md does not rank at all.
+     *
+     * Distinct from [isSectorSpecific] because the two are added for opposite reasons — one by the
+     * sector, one *despite* every sector — and a reader who cannot tell them apart cannot tell
+     * whether a card is absent because of their company's sector or because of the app's coverage.
+     */
+    val isSupplementary: Boolean,
     /** The `Trend` for the card when the plan asks for one and one could be computed. */
     val trend: Trend? = null,
     /**
@@ -162,12 +174,44 @@ data class RatioCard(
 }
 
 /**
+ * One quarterly line: the latest figure, its two comparisons, and the series to draw.
+ *
+ * ### Why this is its own card type and not another [RatioCard]
+ * A [RatioCard] is one row of plan.md §7.2's ranked list, with a plan rank and a sector override
+ * behind it. The quarterly card has neither: `QuarterlyMetric` is a column of the `quarters` table,
+ * not a ratio in §7.2's ordering, so putting it in a `RatioSlot` would give it a rank the plan
+ * never assigned. It borrows the same visual treatment — title, rationale, provenance chip — and
+ * keeps its own honesty rules, which are stated on [QuarterlyCardRow].
+ */
+data class QuarterlyCardRow(
+    val metric: QuarterlyMetric,
+    val comparison: QuarterlyComparison,
+    /** Source + as-of, so every figure carries its provenance like every ratio row does. */
+    val source: Source,
+    val asOf: LocalDate?,
+) {
+    val title: String get() = metric.title
+
+    /**
+     * True when the page published no such row at all.
+     *
+     * HDFCBANK publishes no `Operating Profit` row, and this is the state its card renders: the
+     * reason, not a zero and not a substituted neighbouring line.
+     */
+    val isAbsent: Boolean get() = comparison.isEmpty
+
+    /** True when at least one of the two comparisons could be made. */
+    val hasAnyComparison: Boolean get() = comparison.comparisonCount > 0
+}
+
+/**
  * What the Fundamentals tab renders.
  *
  * ### `cards` is already in plan.md's order and must not be re-sorted
  * [RatioPriority.order] composes §7.2's twelve rows with §7.3's five overrides — inserting the
- * sector's own slots, dropping the suppressed ones, applying the promotions — and it is the domain's
- * single authority. The ViewModel maps that list, card for card, and the screen renders it in index
+ * sector's own slots, dropping the suppressed ones, applying the promotions — and then appends the
+ * supplementary ownership card, which the plan does not rank — and it is the domain's single
+ * authority. The ViewModel maps that list, card for card, and the screen renders it in index
  * order. Sorting here would undo §7.3.
  */
 data class FundamentalsUiState(
@@ -177,6 +221,14 @@ data class FundamentalsUiState(
     /** The sector decision and its evidence. Never null after a successful load. */
     val sectorResolution: SectorResolution? = null,
     val cards: List<RatioCard> = emptyList(),
+    /**
+     * The quarterly results, one card per published line, after the ratio list.
+     *
+     * Placed after rather than between the ratio cards because it answers a different question —
+     * *what happened in the last four quarters* rather than *how does this business compare* — and
+     * a reader looking for ROCE should not have to scroll past three sparklines to find it.
+     */
+    val quarterly: List<QuarterlyCardRow> = emptyList(),
     val isLoading: Boolean = true,
     /** The sentence to show in `ErrorState`, or `null`. */
     val errorReason: String? = null,
@@ -235,6 +287,15 @@ data class FundamentalsUiState(
             missingSections.isNotEmpty() ||
             parserNotes.isNotEmpty() ||
             cards.isEmpty()
+
+    /**
+     * True when the quarterly section has something to say, including when all it can say is why.
+     *
+     * plan.md §12: a section that produced nothing must still be reported, because "the app did not
+     * check the quarters" and "the quarters were checked and are unremarkable" look identical from
+     * outside. HDFCBANK's absent operating-profit card is the case that makes this non-obvious.
+     */
+    val needsQuarterlySection: Boolean get() = quarterly.isNotEmpty()
 
     companion object {
         fun initial(symbol: String): FundamentalsUiState = FundamentalsUiState(symbol = symbol)
@@ -357,6 +418,7 @@ class FundamentalsViewModel @Inject constructor(
                 slot = slot,
                 readings = slot.ids.map { id -> reading(sector, ratios, freshness, computed, divergenceList, id) },
                 isSectorSpecific = slot.isSectorSpecific,
+                isSupplementary = slot.isSupplementary,
                 trend = trendFor(slot, computed),
                 trendNote = trendNoteFor(slot, computed),
             )
@@ -367,6 +429,7 @@ class FundamentalsViewModel @Inject constructor(
             sector = sector,
             sectorResolution = page.sectorResolution,
             cards = cards,
+            quarterly = quarterlyRows(page, ratios),
             isLoading = false,
             errorReason = null,
             notFetchedNote = null,
@@ -383,6 +446,30 @@ class FundamentalsViewModel @Inject constructor(
     // ------------------------------------------------------------------- ratio derivation
 
     /**
+     * The quarterly cards, one per published line.
+     *
+     * ### Why this is built from [QuarterlyResults.all] and not assembled here
+     * The QoQ/YoY arithmetic, the gap detection and the "which row is absent" decision all live in
+     * `:domain` where they are unit-tested against synthetic inputs; repeating any of them in a
+     * ViewModel would be a second implementation that could disagree with the first. All this does
+     * is attach provenance, which is a display concern and belongs on this side.
+     *
+     * ### Why an absent line still produces a card
+     * Returning only the metrics that produced a figure would make HDFCBANK's operating-profit
+     * card simply not exist, and a reader comparing five banks would see four cards for one of them
+     * and no explanation. The card carries the reason instead.
+     */
+    private fun quarterlyRows(page: FundamentalsPage, ratios: Ratios): List<QuarterlyCardRow> =
+        QuarterlyResults.all(page.snapshot.quarters).map { comparison ->
+            QuarterlyCardRow(
+                metric = comparison.metric,
+                comparison = comparison,
+                source = ratios.source,
+                asOf = ratios.asOf,
+            )
+        }
+
+    /**
      * The `RatioComputation` results this tab needs, computed once per load.
      *
      * Grouped so a single `Trend` walk over the annual columns happens once rather than once per
@@ -397,11 +484,17 @@ class FundamentalsViewModel @Inject constructor(
         val dividendPayout: Computation<Double>,
         val operatingMarginTrend: Computation<Trend>,
         val grossMarginTrend: Computation<Trend>,
+        val fiiHolding: Computation<Double>,
+        val diiHolding: Computation<Double>,
+        val fiiQuarterlyChange: Computation<Double>,
     )
 
     private fun computeAll(page: FundamentalsPage): Computed {
         val derived = page.snapshot.cashFlowDerived
         val sector = page.sectorResolution.sector
+        // Resolved once here so the three ownership readings cannot disagree about which quarter is
+        // the latest — the failure mode of reading a quarterly card three times independently.
+        val ownership = ShareholdingMetrics.of(page.shareholdingPeriods, page.snapshot.shareholding)
         return Computed(
             debtToEquity = RatioComputation.debtToEquity(derived, sector),
             interestCoverage = RatioComputation.interestCoverage(derived, sector),
@@ -428,6 +521,9 @@ class FundamentalsViewModel @Inject constructor(
                 grossMarginByYear = emptyMap(),
                 years = RatioComputation.TREND_YEARS,
             ),
+            fiiHolding = ShareholdingMetrics.fiiHolding(ownership),
+            diiHolding = ShareholdingMetrics.diiHolding(ownership),
+            fiiQuarterlyChange = ShareholdingMetrics.fiiHoldingQuarterlyChange(ownership),
         )
     }
 
@@ -504,6 +600,13 @@ class FundamentalsViewModel @Inject constructor(
         // it comes from the annual statement rather than from the `top-ratios` card.
         RatioId.OPERATING_MARGIN -> computed.operatingMarginTrend.value?.latest?.value
             ?: ratios.operatingMargin
+        // Read straight off the shareholding card, never from `Ratios`: the merged model has no
+        // column for them, and `RatioMapper` does not write them because nothing downstream of the
+        // cache consumed them until now. See `VerificationSources` for what a reader can check
+        // these against, since the page's own as-of date is the fetch date rather than the quarter.
+        RatioId.FII_HOLDING -> computed.fiiHolding.value
+        RatioId.DII_HOLDING -> computed.diiHolding.value
+        RatioId.FII_TREND -> computed.fiiQuarterlyChange.value
         else -> null
     }
 
@@ -526,6 +629,12 @@ class FundamentalsViewModel @Inject constructor(
         // informative than `ratios.operatingMargin`'s bare number — so it serves for the present and
         // for the miss alike, and a miss is exactly when the reader needs the reason.
         RatioId.OPERATING_MARGIN -> computed.operatingMarginTrend.note
+        // Each ownership note names the quarter that published its figure and, for the change, both
+        // endpoints. That is what makes a percentage-point figure auditable — "down 1.5pp" is a
+        // different statement when the two quarters are six months apart.
+        RatioId.FII_HOLDING -> computed.fiiHolding.note
+        RatioId.DII_HOLDING -> computed.diiHolding.note
+        RatioId.FII_TREND -> computed.fiiQuarterlyChange.note
         else -> null
     }
 

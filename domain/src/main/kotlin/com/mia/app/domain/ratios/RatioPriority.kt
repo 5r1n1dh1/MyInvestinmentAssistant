@@ -200,6 +200,26 @@ enum class RatioId(
     WORKING_CAPITAL_DAYS("Working capital days", RatioUnit.DAYS, 0,
         "plan.md §7.3 FMCG: cash trapped in the channel"),
 
+    // ---- supplementary: the shareholding pattern (W4)
+    //
+    // plan.md §7.2 ranks twelve rows and says nothing about institutional ownership, yet
+    // screener.in's `shareholding` card publishes an `FIIs` and a `DIIs` row for every one of the
+    // five golden fixtures, and the parser has been carrying those rows since before this wave —
+    // unused. They are appended after the plan's list rather than inserted into it, because
+    // inserting them would invent a §7.2 rank the plan does not assign (see
+    // [RatioPriority.SUPPLEMENTARY_ORDER] and [SlotOrigin.SUPPLEMENTARY]).
+    //
+    // They are **not** sector-specific. A bank's FII holding is exactly as meaningful as an
+    // oil company's — in fact more so — and HDFCBANK's fixture publishes both rows while
+    // publishing no `Promoters` row at all, which is the case that made a shared card wrong.
+
+    FII_HOLDING("FII holding", RatioUnit.PERCENT, 0,
+        "Foreign portfolio investors' share of the company, as published each quarter"),
+    DII_HOLDING("DII holding", RatioUnit.PERCENT, 0,
+        "Domestic institutions' share of the company, as published each quarter"),
+    FII_TREND("FII holding change, quarter on quarter", RatioUnit.PERCENTAGE_POINTS, 0,
+        "How much of the company institutions added or gave back in the last published quarter"),
+
     ;
 
     companion object {
@@ -220,13 +240,45 @@ enum class RatioId(
          */
         private val NEVER_SOURCED: Set<RatioId> =
             setOf(CURRENT_RATIO, GROSS_MARGIN, EV_TO_EBITDA)
+
+        /**
+         * The ratios that exist **only** because plan.md §7.3 named them for one sector: 4 banking
+         * + 4 NBFC + 4 IT + 3 pharma + 2 FMCG.
+         *
+         * ### Why this is an explicit list and not `planRank == 0`
+         * It used to be inferred: "no §7.2 rank ⇒ §7.3 added it". The supplementary shareholding
+         * rows [FII_HOLDING], [DII_HOLDING] and [FII_TREND] have no §7.2 rank either — the plan
+         * does not mention them — and inferring would have classed them as sector-specific, which
+         * [RatioPriority.sectorStateFor] answers with [RatioState.NOT_SOURCED]. The card would then
+         * have been permanently empty *and* permanently mislabelled, on a ratio every one of the
+         * five fixtures publishes. Being sector-specific is a statement about the plan, so it is
+         * now written down rather than deduced from a number that two different reasons can zero.
+         */
+        private val SECTOR_SPECIFIC: Set<RatioId> = setOf(
+            // §7.3 banking
+            NET_INTEREST_MARGIN, GNPA_NNPA, CASA_RATIO, PROVISION_COVERAGE_RATIO,
+            // §7.3 NBFC
+            ASSET_QUALITY, STAGE_2_GNPA, COST_OF_FUNDS, LEVERAGE,
+            // §7.3 IT
+            TOTAL_CONTRACT_VALUE, ATTRITION, CONSTANT_CURRENCY_GROWTH, REVENUE_VISIBILITY,
+            // §7.3 pharma
+            RD_TO_SALES, USFDA_COMPLIANCE, PRODUCT_CONCENTRATION,
+            // §7.3 FMCG
+            VOLUME_VS_PRICE_GROWTH, WORKING_CAPITAL_DAYS,
+        )
     }
 
     /** True when the ratio exists only because plan.md §7.3 added it for one sector. */
-    val isSectorSpecific: Boolean get() = planRank == 0 && !isNeverSourced
+    val isSectorSpecific: Boolean get() = this in SECTOR_SPECIFIC
 
     /** True when the ratio is one our single fundamentals source never publishes. */
     val isNeverSourced: Boolean get() = this in NEVER_SOURCED
+
+    /**
+     * True when no plan.md §7.2 rank applies — either because §7.3 added it for a sector, or
+     * because it is one of the [RatioPriority.SUPPLEMENTARY_ORDER] rows the plan never ranked.
+     */
+    val isUnranked: Boolean get() = planRank == 0
 }
 
 /** Unit of a ratio value. Kept in code so a formatter cannot mix percent with ₹ crore. */
@@ -245,15 +297,39 @@ enum class RatioUnit {
 
     /** `412` means 412 days. */
     DAYS,
+
+    /**
+     * `-1.48` means the share moved down by 1.48 **percentage points** — 18.67% to 17.19%.
+     *
+     * Its own unit rather than [PERCENT] because the two answer different questions and the
+     * difference is exactly what a quarterly shareholding change turns on. An FII holding that
+     * falls from 18.67% to 17.19% is down 1.48 points, or down 7.9%; printing either number with a
+     * `%` glyph and calling it the other one is how "the share rose" gets reported for a company
+     * whose share did not.
+     */
+    PERCENTAGE_POINTS,
+
+    /** `15.48` means ₹15.48 per share — EPS, which is a price per share and not a multiple. */
+    RUPEE_PER_SHARE,
 }
 
-/** Where a display slot came from: the §7.2 list, or a §7.3 override. */
+/** Where a display slot came from: the §7.2 list, a §7.3 override, or neither. */
 enum class SlotOrigin {
     /** One of plan.md §7.2's twelve rows. */
     PLAN,
 
     /** Added or promoted for one sector by plan.md §7.3. */
     SECTOR_SPECIFIC,
+
+    /**
+     * Published by our source, read from the page, and ranked by **no** plan.md row.
+     *
+     * Distinct from [SECTOR_SPECIFIC] because the two must not be rendered the same way: a §7.3
+     * slot was added *because* of the sector, while a supplementary slot would be wrong to omit for
+     * every sector. Giving it its own origin is what lets the UI say "Ownership" rather than
+     * claiming a §7.2 rank the plan never assigned — or printing "0".
+     */
+    SUPPLEMENTARY,
 }
 
 /**
@@ -279,6 +355,9 @@ data class RatioSlot(
     val planRank: Int get() = id.planRank
 
     val isSectorSpecific: Boolean get() = origin == SlotOrigin.SECTOR_SPECIFIC
+
+    /** `true` for the rows the plan does not rank — see [SlotOrigin.SUPPLEMENTARY]. */
+    val isSupplementary: Boolean get() = origin == SlotOrigin.SUPPLEMENTARY
 }
 
 /**
@@ -363,6 +442,37 @@ object RatioPriority {
         RatioSlot(RatioId.EV_TO_EBITDA),
         RatioSlot(RatioId.PROMOTER_HOLDING),
         RatioSlot(RatioId.DIVIDEND_YIELD, companions = listOf(RatioId.DIVIDEND_PAYOUT)),
+    )
+
+    /**
+     * Rows the source publishes that plan.md §7.2 does not rank — appended to **every** sector's
+     * list, never inserted into §7.2's.
+     *
+     * ### Why "appended" and not "inserted at rank 11"
+     * §7.2's rank 11 is promoter holding, rationalised as "capital-allocation confidence". FII and
+     * DII holdings are a different question — who owns the register rather than what the owners
+     * do with it — and the plan gives them no rank. Inserting them at 11 would print a number the
+     * plan never assigned, which is the same mistake in a smaller font as promoting a bank's ROE
+     * to rank 1: the display order would claim an authority it does not have.
+     *
+     * ### Why the three live in one card
+     * They are one published table. Splitting them across three cards would repeat the same
+     * as-of chip and the same provenance sentence three times and imply three separate judgments,
+     * when in fact they are three rows read out of one `shareholding` section in one pass.
+     *
+     * ### Why no sector suppresses any of them
+     * Ownership structure is not sector-conditioned: a bank's foreign holding is at least as
+     * meaningful as an oil company's. HDFCBANK's fixture publishes both rows — and, uniquely
+     * among the five, publishes **no** `Promoters` row, which is precisely why this could not have
+     * been folded into the promoter-holding card without leaving a bank with an empty one.
+     */
+    val SUPPLEMENTARY_ORDER: List<RatioSlot> = listOf(
+        RatioSlot(
+            id = RatioId.FII_HOLDING,
+            companions = listOf(RatioId.DII_HOLDING, RatioId.FII_TREND),
+            origin = SlotOrigin.SUPPLEMENTARY,
+            title = "Institutional ownership",
+        ),
     )
 
     /**
@@ -536,7 +646,7 @@ object RatioPriority {
         val survivors = PLAN_ORDER.filterNot { slot ->
             slot.ids.any { it in overrides.suppressed }
         }
-        val result = ArrayList<RatioSlot>(survivors.size + overrides.order.size)
+        val result = ArrayList<RatioSlot>(survivors.size + overrides.order.size + SUPPLEMENTARY_ORDER.size)
         result.addAll(overrides.order)
         result.addAll(survivors)
         // Promotions are applied last so they address absolute positions in the final list.
@@ -544,6 +654,9 @@ object RatioPriority {
             val at = result.indexOfFirst { it.id == id }
             if (at >= 0 && position in 1..result.size) result.add(position - 1, result.removeAt(at))
         }
+        // Appended after the promotions, deliberately: §7.3 positions are absolute within the list
+        // §7.3 composed, and appending first would shift every one of them down by one.
+        result.addAll(SUPPLEMENTARY_ORDER)
         check(result.map { it.id }.distinct().size == result.size) {
             "${sector.name}: §7.3 override produced a duplicate slot"
         }
