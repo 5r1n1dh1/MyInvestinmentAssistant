@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -66,6 +64,9 @@ import com.mia.app.ui.common.formatPercent
 import com.mia.app.ui.common.formatPrice
 import com.mia.app.ui.common.formatVolume
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.GlassScreenBackdrop
+import com.mia.app.ui.theme.glass.glassEntrance
 
 /**
  * The Technicals tab (plan.md P4).
@@ -97,6 +98,19 @@ import com.mia.app.ui.theme.MiaSpacing
  * cell, because `IndicatorSnapshot`'s `null` means *insufficient history* and plan.md §6.4 forbids
  * substituting a number for that.
  *
+ * ### Glass (planv2 W7)
+ * ```
+ *  GlassScreenBackdrop  one blurred background for this screen, unless a frame already drew one
+ *  GlassCard            the sections, the header block and the two geometry panels: a pane and a
+ *                       hairline, and NO blur, because every one of them is a `LazyColumn` item
+ * ```
+ * [GlassScreenBackdrop] rather than a bare [com.mia.app.ui.theme.glass.GlassBackdrop] because this
+ * screen has two entry points: it is a standalone nav destination *and* the Technicals tab inside
+ * [com.mia.app.ui.detail.StockDetailScreen], which draws the frame's own single layer. The same call
+ * is therefore correct in both, and the tab cannot end up with two full-screen blurs on screen at
+ * once. The pinned [RedFlagAccess] banner stays as it is — it is a shared component owned with every
+ * other screen's, not this one.
+ *
  * @param viewModel obtained with `hiltViewModel()`, which resolves the `SavedStateHandle` for this
  *   `NavBackStackEntry` — so `symbol` and `timeframe` come from the route rather than from a
  *   hand-passed argument that could disagree with the back stack.
@@ -113,127 +127,172 @@ fun TechnicalsScreen(
         EvidenceDialog(flag = flag, onDismissRequest = { evidenceFlag = null })
     }
 
-    Column(
+    GlassScreenBackdrop(
         modifier = modifier
             .fillMaxSize()
             .testTag(TECHNICALS_TAG),
     ) {
-        // plan.md §8.3: pinned at the top of the tab, not buried in a section.
-        RedFlagAccess(
-            flags = state.redFlags,
-            skippedRules = state.skippedRules,
-            ruleFailures = state.ruleFailures,
-            onFlagClick = { evidenceFlag = it },
-            modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
-        )
-
-        state.notPublishedNote?.let { note ->
-            Text(
-                text = note,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = MiaSpacing.lg),
+        Column(modifier = Modifier.fillMaxSize()) {
+            // plan.md §8.3: pinned at the top of the tab, not buried in a section.
+            RedFlagAccess(
+                flags = state.redFlags,
+                skippedRules = state.skippedRules,
+                ruleFailures = state.ruleFailures,
+                onFlagClick = { evidenceFlag = it },
+                modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
             )
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = MiaSpacing.lg,
-                end = MiaSpacing.lg,
-                top = MiaSpacing.sm,
-                bottom = MiaSpacing.xxl,
-            ),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
-        ) {
-            item(key = HEADER_KEY) { TechnicalsHeader(state) }
-
-            item(key = TIMEFRAME_KEY) {
-                TimeframeToggle(
-                    selected = state.timeframe,
-                    onSelect = viewModel::onTimeframeSelected,
+            state.notPublishedNote?.let { note ->
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = MiaSpacing.lg),
                 )
             }
 
-            if (state.isLoading && state.barCount == 0) {
-                item(key = LOADING_KEY) { LoadingState() }
-            }
+            // The stagger index for [glassEntrance], one per section as it is emitted. A plain local
+            // counter rather than a number per item, so a section that is added or removed re-staggers
+            // itself. `LazyColumn` emits top to bottom, so it is read in the order the reader sees.
+            var entrance = 0
 
-            state.errorReason?.let { reason ->
-                item(key = ERROR_KEY) {
-                    ErrorState(reason = reason, onRetry = viewModel::onRetry)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = MiaSpacing.lg,
+                    end = MiaSpacing.lg,
+                    top = MiaSpacing.sm,
+                    bottom = MiaSpacing.xxl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
+            ) {
+                item(key = HEADER_KEY) {
+                    TechnicalsHeader(state, Modifier.glassEntrance(index = entrance++))
                 }
-            }
 
-            // An honest absence is **not** an error banner. "Nothing has been downloaded yet" and
-            // "the published files contain no rows for this ticker" both leave the tab empty, but
-            // only the first is fixable by pressing a button — so the button is shown only for that
-            // one, because a button that cannot work teaches the reader to distrust it.
-            state.absenceReason?.let { reason ->
-                item(key = ABSENCE_KEY) {
-                    EmptyState(
-                        title = if (state.absenceOffersFetch) {
-                            UiStrings.NO_DATA_DOWNLOADED
-                        } else {
-                            UiStrings.NO_DATA_FOR_SYMBOL
-                        },
-                        body = reason,
-                        modifier = Modifier,
+                item(key = TIMEFRAME_KEY) {
+                    TimeframeToggle(
+                        selected = state.timeframe,
+                        onSelect = viewModel::onTimeframeSelected,
+                        modifier = Modifier.glassEntrance(index = entrance++),
+                    )
+                }
+
+                if (state.isLoading && state.barCount == 0) {
+                    item(key = LOADING_KEY) { LoadingState() }
+                }
+
+                state.errorReason?.let { reason ->
+                    item(key = ERROR_KEY) {
+                        ErrorState(reason = reason, onRetry = viewModel::onRetry)
+                    }
+                }
+
+                // An honest absence is **not** an error banner. "Nothing has been downloaded yet" and
+                // "the published files contain no rows for this ticker" both leave the tab empty, but
+                // only the first is fixable by pressing a button — so the button is shown only for that
+                // one, because a button that cannot work teaches the reader to distrust it.
+                state.absenceReason?.let { reason ->
+                    item(key = ABSENCE_KEY) {
+                        EmptyState(
+                            title = if (state.absenceOffersFetch) {
+                                UiStrings.NO_DATA_DOWNLOADED
+                            } else {
+                                UiStrings.NO_DATA_FOR_SYMBOL
+                            },
+                            body = reason,
+                            modifier = Modifier,
+                        )
+                    }
+                }
+
+                // The chart is left as it is: `PriceChart` is `ui/chart`'s, it paints its own canvas
+                // and its own surface, and a pane behind it would add nothing a reader can see.
+                item(key = CHART_KEY) { ChartSection(state) }
+
+                // A suspected unadjusted corporate action inside the window. Shown immediately below
+                // the chart because its effect *is* the chart: a 1:2 split makes an unbroken price
+                // look broken, and a reader who is not told will read the cliff as a market event.
+                state.seriesNotes.takeIf { it.isNotEmpty() }?.let { notes ->
+                    item(key = SERIES_NOTES_KEY) {
+                        SeriesNotesSection(
+                            notes = notes,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                state.snapshot?.let { snapshot ->
+                    item(key = INDICATORS_KEY) {
+                        IndicatorSection(
+                            state = state,
+                            snapshot = snapshot,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                    item(key = TREND_KEY) {
+                        TrendSection(
+                            state = state,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                item(key = MATCHES_KEY) {
+                    MatchSection(state, Modifier.glassEntrance(index = entrance++))
+                }
+
+                state.primaryMatch?.measuredMove?.let { move ->
+                    item(key = MEASURED_MOVE_KEY) {
+                        MeasuredMovePanel(
+                            move = move,
+                            path = state.projectedPath,
+                            modifier = Modifier
+                                .padding(top = MiaSpacing.lg)
+                                .glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                state.projectedPath?.takeIf { state.primaryMatch?.measuredMove == null }?.let { path ->
+                    item(key = PROJECTION_ONLY_KEY) {
+                        MeasuredMovePanel(
+                            move = null,
+                            path = path,
+                            modifier = Modifier
+                                .padding(top = MiaSpacing.lg)
+                                .glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                state.breakoutTrigger?.let { trigger ->
+                    item(key = TRIGGER_KEY) {
+                        BreakoutPanel(
+                            trigger = trigger,
+                            timeframe = state.timeframe,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                item(key = TRACK_RECORD_KEY) {
+                    TrackRecordSection(state, Modifier.glassEntrance(index = entrance++))
+                }
+
+                if (state.flagCoverageIncomplete) {
+                    item(key = FLAG_COVERAGE_KEY) {
+                        RedFlagCoverageSection(state.skippedRules, state.ruleFailures)
+                    }
+                }
+
+                item(key = FOOTER_KEY) {
+                    DisclaimerFooter(
+                        text = Disclosure.DATA_SOURCE,
+                        modifier = Modifier.glassEntrance(index = entrance++),
                     )
                 }
             }
-
-            item(key = CHART_KEY) { ChartSection(state) }
-
-            // A suspected unadjusted corporate action inside the window. Shown immediately below the
-            // chart because its effect *is* the chart: a 1:2 split makes an unbroken price look
-            // broken, and a reader who is not told will read the cliff as a market event.
-            state.seriesNotes.takeIf { it.isNotEmpty() }?.let { notes ->
-                item(key = SERIES_NOTES_KEY) { SeriesNotesSection(notes) }
-            }
-
-            state.snapshot?.let { snapshot ->
-                item(key = INDICATORS_KEY) { IndicatorSection(state = state, snapshot = snapshot) }
-                item(key = TREND_KEY) { TrendSection(state = state) }
-            }
-
-            item(key = MATCHES_KEY) { MatchSection(state) }
-
-            state.primaryMatch?.measuredMove?.let { move ->
-                item(key = MEASURED_MOVE_KEY) {
-                    MeasuredMovePanel(
-                        move = move,
-                        path = state.projectedPath,
-                        modifier = Modifier.padding(top = MiaSpacing.lg),
-                    )
-                }
-            }
-
-            state.projectedPath?.takeIf { state.primaryMatch?.measuredMove == null }?.let { path ->
-                item(key = PROJECTION_ONLY_KEY) {
-                    MeasuredMovePanel(
-                        move = null,
-                        path = path,
-                        modifier = Modifier.padding(top = MiaSpacing.lg),
-                    )
-                }
-            }
-
-            state.breakoutTrigger?.let { trigger ->
-                item(key = TRIGGER_KEY) {
-                    BreakoutPanel(trigger = trigger, timeframe = state.timeframe)
-                }
-            }
-
-            item(key = TRACK_RECORD_KEY) { TrackRecordSection(state) }
-
-            if (state.flagCoverageIncomplete) {
-                item(key = FLAG_COVERAGE_KEY) {
-                    RedFlagCoverageSection(state.skippedRules, state.ruleFailures)
-                }
-            }
-
-            item(key = FOOTER_KEY) { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
         }
     }
 }
@@ -245,10 +304,17 @@ fun TechnicalsScreen(
  *
  * The change is [ChangePercentText], so it carries a ▲/▼ glyph as well as a colour. The marker is
  * [AsOfChip], because plan.md §10 makes staleness visible and §1.4 rule 3 makes the date mandatory.
+ *
+ * A [GlassCard] and nothing more: the identity block is the one pane on this tab that a reader looks
+ * for before anything else, and `Arrangement.Top` keeps the block's own spacing exactly as it was
+ * rather than letting the card's default gap slide the lines apart.
  */
 @Composable
 private fun TechnicalsHeader(state: TechnicalsUiState, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        arrangement = Arrangement.Top,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -355,6 +421,10 @@ private data class Reading(
  * needs N bars, M stored", never as `0`. A 200-day average that has not warmed up is not zero, and
  * printing `0` beside a price of 1,200 is exactly the failure `IndicatorSnapshot`'s nullability
  * exists to prevent.
+ *
+ * One pane for the whole family rather than one per reading: the readings are a single table with
+ * two columns, and a card per cell would break the alignment that makes it readable — and would put
+ * fourteen panes on a tab that already has five sections.
  */
 @Composable
 private fun IndicatorSection(
@@ -365,9 +435,9 @@ private fun IndicatorSection(
     val bars = state.barCount
     val bollinger: BollingerLatest? = snapshot.bollinger.latest()
 
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
+        arrangement = Arrangement.spacedBy(MiaSpacing.md),
     ) {
         SectionHeader(
             title = UiStrings.INDICATORS,
@@ -571,9 +641,9 @@ private fun RsiState(snapshot: IndicatorSnapshot, bars: Int, modifier: Modifier 
 private fun TrendSection(state: TechnicalsUiState, modifier: Modifier = Modifier) {
     val snapshot = state.snapshot ?: return
     val regime = state.trendRegime
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(title = UiStrings.TREND_REGIME)
         ReadingBlock(
@@ -622,9 +692,9 @@ private fun TrendRegime.label(): String = when (this) {
  */
 @Composable
 private fun MatchSection(state: TechnicalsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
+        arrangement = Arrangement.spacedBy(MiaSpacing.md),
     ) {
         SectionHeader(
             title = UiStrings.PATTERN_MATCHES,
@@ -673,62 +743,54 @@ private fun MeasuredMovePanel(
     path: ProjectedPath?,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
-            Text(
-                text = UiStrings.PROJECTION,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+        Text(
+            text = UiStrings.PROJECTION,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = MatchScoreLabels.PROJECTION_LABEL,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        if (move != null) {
+            LabelledNumber("Formation height", formatPrice(move.height))
+            LabelledNumber("Trigger level", formatPrice(move.triggerLevel))
+            LabelledNumber("Derived level", formatPrice(move.projectedLevel))
+            LabelledNumber(
+                "Direction",
+                if (move.isUpward) "Upward from the trigger" else "Downward from the trigger",
             )
             Text(
-                text = MatchScoreLabels.PROJECTION_LABEL,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                text = MatchScoreLabels.NOT_A_TARGET_WARNING,
+                style = MaterialTheme.typography.bodySmall,
             )
+        }
 
-            if (move != null) {
-                LabelledNumber("Formation height", formatPrice(move.height))
-                LabelledNumber("Trigger level", formatPrice(move.triggerLevel))
-                LabelledNumber("Derived level", formatPrice(move.projectedLevel))
-                LabelledNumber(
-                    "Direction",
-                    if (move.isUpward) "Upward from the trigger" else "Downward from the trigger",
-                )
-                Text(
-                    text = MatchScoreLabels.NOT_A_TARGET_WARNING,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+        if (path != null) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // `ProjectedPath.label` is already "Projected path (directional, not a forecast of
+            // price)"; rendering it verbatim keeps the wording welded to the type that carries it.
+            Text(text = path.label, style = MaterialTheme.typography.labelLarge)
+            LabelledNumber("Bars projected", path.horizonBars.toString())
+            path.points.forEach { point ->
+                LabelledNumber(label = formatDate(point.first), value = formatPrice(point.second))
             }
+        }
 
-            if (path != null) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                // `ProjectedPath.label` is already "Projected path (directional, not a forecast of
-                // price)"; rendering it verbatim keeps the wording welded to the type that carries it.
-                Text(text = path.label, style = MaterialTheme.typography.labelLarge)
-                LabelledNumber("Bars projected", path.horizonBars.toString())
-                path.points.forEach { point ->
-                    LabelledNumber(label = formatDate(point.first), value = formatPrice(point.second))
-                }
-            }
-
-            if (move != null || path != null) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(
-                    text = Disclosure.PROJECTION_FOOTER,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+        if (move != null || path != null) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                text = Disclosure.PROJECTION_FOOTER,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -746,35 +808,27 @@ private fun BreakoutPanel(
     timeframe: Timeframe,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
-            Text(
-                text = UiStrings.BREAKOUT_TRIGGER,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(text = trigger.description, style = MaterialTheme.typography.bodyMedium)
-            LabelledNumber("Level", formatPrice(trigger.level))
-            LabelledNumber(
-                "State on stored ${timeframe.name} bars",
-                if (trigger.fired) {
-                    "This condition has been met."
-                } else {
-                    "This condition has not been met."
-                },
-            )
-        }
+        Text(
+            text = UiStrings.BREAKOUT_TRIGGER,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(text = trigger.description, style = MaterialTheme.typography.bodyMedium)
+        LabelledNumber("Level", formatPrice(trigger.level))
+        LabelledNumber(
+            "State on stored ${timeframe.name} bars",
+            if (trigger.fired) {
+                "This condition has been met."
+            } else {
+                "This condition has not been met."
+            },
+        )
     }
 }
 
@@ -789,9 +843,9 @@ private fun BreakoutPanel(
  */
 @Composable
 private fun TrackRecordSection(state: TechnicalsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(
             title = UiStrings.TRACK_RECORD,
@@ -825,12 +879,15 @@ private fun TrackRecordSection(state: TechnicalsUiState, modifier: Modifier = Mo
  *
  * Rendered in the tertiary container rather than the error container: nothing has failed, and a
  * red card would imply the app is broken rather than that the source is unadjusted.
+ *
+ * The pane keeps the neutral glass fill while the *type* stays on the tertiary pair, because here
+ * the colour is saying "this is a caveat, not a fault" and it is the type that has to be legible.
  */
 @Composable
 private fun SeriesNotesSection(notes: List<String>, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         Text(
             text = SERIES_NOTES_TITLE,
