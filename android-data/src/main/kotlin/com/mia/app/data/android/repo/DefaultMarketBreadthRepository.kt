@@ -6,7 +6,7 @@ import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.technical.Breadth
 import com.mia.app.domain.technical.InstrumentClose
 import com.mia.app.domain.technical.MarketBreadth
-import com.mia.app.work.IoDispatcher
+import com.mia.app.data.android.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
