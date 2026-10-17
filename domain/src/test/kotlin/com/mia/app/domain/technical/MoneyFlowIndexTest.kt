@@ -89,7 +89,7 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `zero volume across every bar yields null rather than 50`() {
-        val series = candles(40) { i -> 100.0 + i } volume = { 0L }
+        val series = candles(40, volume = { 0L }) { i -> 100.0 + i }
         assertNull(MoneyFlowIndex.compute(series).last(), "a stock that did not trade has no MFI")
         assertEquals(100, MoneyFlowIndex.compute(series).count { it == null })
     }
