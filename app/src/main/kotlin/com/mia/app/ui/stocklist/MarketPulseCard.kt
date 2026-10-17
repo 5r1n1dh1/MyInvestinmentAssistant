@@ -61,55 +61,54 @@ fun MarketPulseCard(breadth: Breadth?, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            return@GlassCard
-        }
-
-        Text(
-            text = breadth.summary(),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
-            PulseTile(
-                label = "Advance / decline",
-                value = breadth.advanceDeclineRatio.render(),
-                modifier = Modifier.weight(1f),
-            )
-            PulseTile(
-                label = "Above its ${MarketBreadth.SMA_PERIOD}-day average",
-                value = breadth.percentAboveSma50.render(count = breadth.aboveSma50.valueOrNull()),
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
-            PulseTile(
-                label = "New 52-week highs",
-                value = breadth.newHighs.render(),
-                modifier = Modifier.weight(1f),
-            )
-            PulseTile(
-                label = "New 52-week lows",
-                value = breadth.newLows.render(),
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        populationNote(breadth)
-
-        if (breadth.unclassified > 0) {
+        } else {
             Text(
-                text = "${breadth.unclassified} symbol(s) carried no previous close, so they count " +
-                    "as neither advancing nor declining.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = breadth.summary(),
+                style = MaterialTheme.typography.bodyMedium,
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                PulseTile(
+                    label = "Advance / decline",
+                    value = breadth.advanceDeclineRatio.render(),
+                    modifier = Modifier.weight(1f),
+                )
+                PulseTile(
+                    label = "Above its ${MarketBreadth.SMA_PERIOD}-day average",
+                    value = breadth.percentAboveSma50.render(count = breadth.aboveSma50.valueOrNull()),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                PulseTile(
+                    label = "New 52-week highs",
+                    value = breadth.newHighs.render(),
+                    modifier = Modifier.weight(1f),
+                )
+                PulseTile(
+                    label = "New 52-week lows",
+                    value = breadth.newLows.render(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            populationNote(breadth)
+
+            if (breadth.unclassified > 0) {
+                Text(
+                    text = "${breadth.unclassified} symbol(s) carried no previous close, so they " +
+                        "count as neither advancing nor declining.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
