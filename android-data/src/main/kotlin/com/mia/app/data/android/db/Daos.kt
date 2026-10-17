@@ -31,6 +31,16 @@ import androidx.room.Query
 abstract class CandleDao {
 
     /**
+     * One close, for [closesBetween].
+     *
+     * A projection rather than `CandleEntity` on purpose: breadth needs the close and the ordering
+     * key, and mapping 260 sessions × the whole market into full entities would allocate an open,
+     * high, low, volume and source for every row to read one `Double`. The date is carried because
+     * it is the ordering key, not decoration — see [closesBetween].
+     */
+    data class CloseRow(val symbol: String, val date: String, val close: Double)
+
+    /**
      * `INSERT OR IGNORE`. Returns one id per input row, or `-1` for a row that already existed,
      * which is how the EOD worker counts "written" against "already known".
      */
@@ -54,6 +64,38 @@ abstract class CandleDao {
     /** Every bar of one session across all symbols — the whole market for that date. */
     @Query("SELECT * FROM candles WHERE date = :date ORDER BY symbol ASC")
     abstract suspend fun forDate(date: String): List<CandleEntity>
+
+    /**
+     * The newest session strictly before [date], or `null` when [date] is the earliest stored.
+     *
+     * Breadth needs each symbol's previous close, and `candles` has no `prevClose` column — it is
+     * derived from the prior session. Derived from the table rather than from the previous calendar
+     * day on purpose: Indian markets close at weekends and for holidays, so "yesterday" is routinely
+     * not a trading session, and an A/D computed against a non-session would classify every symbol
+     * as an advancer.
+     */
+    @Query("SELECT MAX(date) FROM candles WHERE timeframe = :timeframe AND date < :date")
+    abstract suspend fun sessionBefore(timeframe: String, date: String): String?
+
+    /**
+     * Closes for a whole date range across all symbols, **oldest first per symbol**.
+     *
+     * `GROUP BY` rather than a plain range scan because `MarketBreadth` needs one series per symbol
+     * and a flat list would have to be grouped in memory anyway — doing it in SQLite moves the
+     * grouping off the device's heap and keeps the row order that makes each series chronological.
+     * Ordered by `date ASC` within the group, which is what the contract requires: breadth compares
+     * a close against its own 50-day average and its own 52-week extreme, so a reversed series would
+     * silently produce plausible, wrong numbers.
+     */
+    @Query(
+        "SELECT symbol, date, close FROM candles WHERE timeframe = :timeframe " +
+            "AND date >= :from AND date <= :to ORDER BY symbol ASC, date ASC",
+    )
+    abstract suspend fun closesBetween(
+        timeframe: String,
+        from: String,
+        to: String,
+    ): List<CloseRow>
 
     @Query("SELECT MAX(date) FROM candles WHERE timeframe = :timeframe")
     abstract suspend fun latestDate(timeframe: String): String?

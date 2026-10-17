@@ -55,6 +55,15 @@ data class IndicatorSnapshot(
     val deliveryAveragePercent: List<Double?>,
     val deliveryCollapsing: Boolean,
 
+    /**
+     * Money Flow Index — RSI computed on typical price × volume.
+     *
+     * Lives in the volume block rather than with the oscillators because that is what it measures.
+     * `null` entries mean either the warmup is unfinished or the window carried no money flow at
+     * all; `MoneyFlowIndex` documents why those are deliberately not the same number.
+     */
+    val mfi: List<Double?>,
+
     // Trend.
     val adx: TechnicalAdx,
 
@@ -87,6 +96,16 @@ data class IndicatorSnapshot(
     val deliveryAverage: Double? get() = deliveryAveragePercent.lastOrNull()
     val obvValue: Double get() = obv.lastOrNull() ?: 0.0
     val latestVolumeRatio: Double? get() = volumeRatio.lastOrNull()
+
+    /**
+     * The newest MFI, or `null` when the warmup is unfinished **or** the window carried no money
+     * flow.
+     *
+     * Nullable rather than defaulted, unlike [obvValue]. OBV's zero is meaningful — no net signed
+     * volume — while an absent MFI means we have nothing to say, and rendering 0 or 50 for it would
+     * put a fabricated reading on the chart.
+     */
+    val mfiValue: Double? get() = mfi.lastOrNull()
 
     /** plan.md §6.4 gate input: the ADX regime at the latest bar. */
     val trendRegime: TrendRegime get() = adx.latestRegime
@@ -283,6 +302,7 @@ data class IndicatorSnapshot(
                     TechnicalPolicy.DELIVERY_SMA_PERIOD,
                 ),
                 deliveryCollapsing = isDeliveryCollapsing(candles),
+                mfi = MoneyFlowIndex.compute(candles, TechnicalPolicy.MFI_PERIOD),
                 adx = adxFromRaw(ranges, TechnicalPolicy.ADX_PERIOD),
                 relativeStrength = benchmarkCandles?.let { relativeStrength(candles, it) },
                 fiftyTwoWeekHigh = if (highIdx >= 0) closes[highIdx] else null,
