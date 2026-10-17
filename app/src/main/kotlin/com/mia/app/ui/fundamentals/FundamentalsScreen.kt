@@ -39,9 +39,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mia.app.domain.compliance.Disclosure
 import com.mia.app.domain.model.Confidence
 import com.mia.app.domain.model.RedFlag
+import com.mia.app.domain.ratios.QuarterlyPoint
 import com.mia.app.domain.ratios.RatioState
 import com.mia.app.domain.ratios.RatioUnit
 import com.mia.app.domain.ratios.Trend
+import com.mia.app.domain.ratios.VerificationSource
+import com.mia.app.domain.ratios.VerificationSources
 import com.mia.app.domain.ratios.YearValue
 import com.mia.app.ui.common.AsOfChip
 import com.mia.app.ui.common.DisclaimerFooter
@@ -172,6 +175,13 @@ fun FundamentalsScreen(
 
             state.cards.forEach { card ->
                 item(key = cardKey(card)) { RatioCardView(card = card, state = state) }
+            }
+
+            if (state.needsQuarterlySection) {
+                item(key = QUARTERLY_KEY) { QuarterlySection(rows = state.quarterly, state = state) }
+                state.quarterly.forEach { row ->
+                    item(key = quarterlyKey(row)) { QuarterlyCard(row = row, state = state) }
+                }
             }
 
             if (state.needsCoverageSection) {
@@ -372,7 +382,11 @@ private fun CardHeader(card: RatioCard, modifier: Modifier = Modifier) {
                     .weight(1f)
                     .semantics { heading() },
             )
-            RankBadge(rank = card.planRank, isSectorSpecific = card.isSectorSpecific)
+            RankBadge(
+                rank = card.planRank,
+                isSectorSpecific = card.isSectorSpecific,
+                isSupplementary = card.isSupplementary,
+            )
         }
         Text(
             text = card.slot.id.rationale,
@@ -381,11 +395,26 @@ private fun CardHeader(card: RatioCard, modifier: Modifier = Modifier) {
     }
 }
 
-/** `1` … `12` for a §7.2 row, `Sector` for a §7.3-only one. Bordered, so colour is not the encoding. */
+/**
+ * `1` … `12` for a §7.2 row, `Sector` for a §7.3-only one, `Ownership` for the unranked card.
+ *
+ * The third label exists because printing "0" beside an FII holding would claim §7.2 ranked it
+ * somewhere — including *after* everything, which is a claim too. Bordered, so colour is never the
+ * encoding.
+ */
 @Composable
-private fun RankBadge(rank: Int, isSectorSpecific: Boolean, modifier: Modifier = Modifier) {
+private fun RankBadge(
+    rank: Int,
+    isSectorSpecific: Boolean,
+    isSupplementary: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     Text(
-        text = if (isSectorSpecific) SECTOR_BADGE_LABEL else rank.toString(),
+        text = when {
+            isSupplementary -> OWNERSHIP_BADGE_LABEL
+            isSectorSpecific -> SECTOR_BADGE_LABEL
+            else -> rank.toString()
+        },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
@@ -397,10 +426,11 @@ private fun RankBadge(rank: Int, isSectorSpecific: Boolean, modifier: Modifier =
             )
             .padding(horizontal = MiaSpacing.sm, vertical = 2.dp)
             .semantics {
-                contentDescription = if (isSectorSpecific) {
-                    "added for this sector by plan.md section 7.3"
-                } else {
-                    "priority $rank of 12 in plan.md section 7.2"
+                contentDescription = when {
+                    isSupplementary ->
+                        "published by our source but not ranked by plan.md section 7.2"
+                    isSectorSpecific -> "added for this sector by plan.md section 7.3"
+                    else -> "priority $rank of 12 in plan.md section 7.2"
                 }
             },
     )
@@ -448,6 +478,11 @@ private fun ReadingRow(
                 sentence = NOT_SOURCED_SENTENCE,
                 note = reading.availability.note,
                 emphasised = false,
+                verifyWith = VerificationSources.forRatio(
+                    reading.id,
+                    reading.availability.state,
+                    state.sector,
+                ).orEmpty(),
             )
 
             RatioState.MISSING -> AbsentRow(
@@ -455,6 +490,11 @@ private fun ReadingRow(
                 sentence = MISSING_SENTENCE,
                 note = reading.availability.note,
                 emphasised = false,
+                verifyWith = VerificationSources.forRatio(
+                    reading.id,
+                    reading.availability.state,
+                    state.sector,
+                ).orEmpty(),
             )
         }
     }
@@ -579,6 +619,7 @@ private fun AbsentRow(
     sentence: String,
     note: String?,
     emphasised: Boolean,
+    verifyWith: List<VerificationSource> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val accent: Color = if (emphasised) {
@@ -597,22 +638,50 @@ private fun AbsentRow(
                 .border(width = 1.dp, color = accent, shape = RoundedCornerShape(8.dp))
                 .padding(MiaSpacing.sm),
         ) {
-            AbsentRowContent(tag = tag, sentence = sentence, note = note, emphasised = true)
+            AbsentRowContent(
+                tag = tag,
+                sentence = sentence,
+                note = note,
+                emphasised = true,
+                verifyWith = verifyWith,
+            )
         }
     } else {
         Box(modifier = rowModifier) {
-            AbsentRowContent(tag = tag, sentence = sentence, note = note, emphasised = false)
+            AbsentRowContent(
+                tag = tag,
+                sentence = sentence,
+                note = note,
+                emphasised = false,
+                verifyWith = verifyWith,
+            )
         }
     }
 }
 
-/** The tag, the sentence and the reason — identical in both containers, so emphasis is decoration. */
+/**
+ * The tag, the sentence, the reason — and, for a data gap, **where the figure actually is**.
+ *
+ * ### Why this is the deliverable that replaced the rejected bank-ratio work
+ * docs/LIVE-PROBE.md §3 fetched HDFCBANK's page and found the bank-ratio *labels* present with
+ * their **values** behind a login paywall: 60 `highlight-cell` elements rendering nothing. The
+ * promotion was rejected because recording a figure the app cannot see is fabrication. That left
+ * "we cannot show you this" with no second half — and the honest second half is *"we cannot show
+ * you this, and it is published here"*. A blank the reader cannot act on is the failure mode
+ * plan.md §13 lists as "misleading blank ratios → user distrusts app".
+ *
+ * ### Why the sources are named but not linked
+ * The NSE corporate-announcement and shareholding-pattern endpoints **404 from this network**
+ * (LIVE-PROBE §4), so an in-app "open this" button would be a promise the build cannot keep. These
+ * are places a person goes, and they are printed as places a person goes.
+ */
 @Composable
 private fun AbsentRowContent(
     tag: String,
     sentence: String,
     note: String?,
     emphasised: Boolean,
+    verifyWith: List<VerificationSource> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -657,6 +726,22 @@ private fun AbsentRowContent(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (verifyWith.isNotEmpty()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                text = WHERE_TO_VERIFY_LABEL,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            verifyWith.forEach { source ->
+                Text(
+                    text = "· " + source.asSentence(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(VERIFY_WITH_TAG),
+                )
+            }
         }
     }
 }
@@ -774,6 +859,301 @@ private fun Sparkline(
     }
 }
 
+// ------------------------------------------------------------------------ quarterly results
+
+/**
+ * The header for the published `quarters` card.
+ *
+ * ### Why it says what it covers before showing anything
+ * The next three cards are Sales, Operating profit and EPS. A reader who does not know that will
+ * read three numbers and assume they are the whole quarter; the subtitle names the table and the
+ * fact that it is thirteen quarters deep, which is the difference between "this app picked three
+ * things" and "this is what the source publishes".
+ */
+@Composable
+private fun QuarterlySection(
+    rows: List<QuarterlyCardRow>,
+    state: FundamentalsUiState,
+    modifier: Modifier = Modifier,
+) {
+    val readable = rows.count { !it.isAbsent }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+    ) {
+        SectionHeader(title = QUARTERLY_TITLE, subtitle = QUARTERLY_SUBTITLE)
+        Text(
+            text = QUARTERLY_COUNTS(
+                readable = readable,
+                total = rows.size,
+                quarters = rows.firstOrNull()?.comparison?.series?.size ?: 0,
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag(QUARTERLY_OVERVIEW_TAG),
+        )
+        if (readable < rows.size) {
+            // Absent lines are named here rather than left as an unexplained gap in the sequence.
+            Text(
+                text = QUARTERLY_ABSENT_PREFIX +
+                    rows.filter { it.isAbsent }.joinToString(", ") { it.title },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(QUARTERLY_ABSENT_TAG),
+            )
+        }
+    }
+}
+
+/**
+ * One quarterly line: the latest figure, both comparisons, and a sparkline of the series.
+ *
+ * ### Why the two comparisons are separate rows and not one "growth" figure
+ * An Indian festival quarter is routinely 25–30% above the one before it and flat year on year.
+ * Printing whichever is larger would make a seasonal business look like it is accelerating every
+ * quarter, and printing an average of the two would be a number the source never published. Both
+ * are shown, each against the quarter it is actually compared with, and each carries its endpoints.
+ *
+ * ### Why an absent line renders a sentence
+ * HDFCBANK publishes no `Operating Profit` row. The card says which row it looked for and which row
+ * the page prints instead, because "Financing Profit" under a heading called "Operating profit"
+ * would be a confident wrong number on the one sector plan.md §7.3 exists to protect.
+ */
+@Composable
+private fun QuarterlyCard(
+    row: QuarterlyCardRow,
+    state: FundamentalsUiState,
+    modifier: Modifier = Modifier,
+) {
+    val comparison = row.comparison
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(QUARTERLY_CARD_TAG_PREFIX + row.metric.name),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        ) {
+            Text(
+                text = row.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = row.metric.rationale,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            if (row.isAbsent) {
+                Text(
+                    text = comparison.notes.joinToString(SEPARATOR),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(QUARTERLY_ABSENT_NOTE_TAG),
+                )
+                return@Column
+            }
+
+            val latest = comparison.latest
+            if (latest != null) {
+                Text(
+                    text = formatReading(latest.value, row.metric.unit),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics {
+                        contentDescription = "${row.title} ${formatReading(latest.value, row.metric.unit)}" +
+                            " in ${latest.period}, ${unitLabel(row.metric.unit)}"
+                    },
+                )
+                Text(
+                    text = LATEST_PERIOD_PREFIX + latest.period,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            ComparisonRow(
+                label = QUARTERLY_ON_QUARTER_LABEL,
+                change = comparison.quarterOverQuarterPercent,
+                now = comparison.latest,
+                before = comparison.previousQuarter,
+            )
+            ComparisonRow(
+                label = QUARTERLY_YEAR_ON_YEAR_LABEL,
+                change = comparison.yearOnYearPercent,
+                now = comparison.latest,
+                before = comparison.sameQuarterPriorYear,
+            )
+            if (!row.hasAnyComparison) {
+                Text(
+                    text = NO_COMPARISON_PREFIX + comparison.notes.joinToString(SEPARATOR),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(QUARTERLY_NO_COMPARISON_TAG),
+                )
+            } else if (comparison.notes.isNotEmpty()) {
+                comparison.notes.forEach { note ->
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            QuarterlySparkline(
+                series = comparison.series,
+                unit = row.metric.unit,
+                modifier = Modifier.testTag(QUARTERLY_SPARKLINE_TAG_PREFIX + row.metric.name),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                state.freshness?.let { freshness ->
+                    AsOfChip(source = row.source, asOf = row.asOf, freshness = freshness)
+                }
+                Text(
+                    text = unitLabel(row.metric.unit),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One comparison, or the reason it could not be made.
+ *
+ * A `null` change is rendered as a sentence rather than an empty cell, and the sentence names the
+ * quarter that was wanted — the same rule the quarterly domain notes follow, because an absent
+ * comparison and a comparison of zero must never look alike.
+ */
+@Composable
+private fun ComparisonRow(
+    label: String,
+    change: Double?,
+    now: QuarterlyPoint?,
+    before: QuarterlyPoint?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (change == null) {
+            Text(
+                text = NOT_COMPARABLE,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+        val rendered = formatPercent(change, 1)
+        Text(
+            text = rendered,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            // Up/down is never signalled by colour alone (plan.md §1.4): the glyph and the sentence
+            // both carry it.
+            modifier = Modifier.semantics {
+                contentDescription = "$label ${if (change >= 0) "up" else "down"} " +
+                    "${formatFixed(kotlin.math.abs(change), 1)} percent"
+            },
+        )
+        if (now != null && before != null) {
+            Text(
+                text = "$label ${COMPARED_AGAINST} ${before.period}" +
+                    if (now.period != before.period) " · ${now.period}" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * One bar per published quarter, oldest at the left.
+ *
+ * ### Why the labels are quarter abbreviations rather than the full period
+ * Thirteen full `"Sep 2023"` labels do not fit a 360 dp phone at `labelSmall`, and truncating them
+ * to a year would lose the only part that distinguishes the columns. `S3`/`D3`/`J4`/`J6` keeps all
+ * three parts and still reads, which is why the axis is quarterly rather than annual.
+ *
+ * ### Why it is not coloured by sign
+ * Same reason as the ratio sparkline: a quarterly operating-profit series is a series, not a price,
+ * and colouring it green/red would attach a market meaning to a number that has none.
+ */
+@Composable
+private fun QuarterlySparkline(
+    series: List<QuarterlyPoint>,
+    unit: RatioUnit,
+    modifier: Modifier = Modifier,
+) {
+    if (series.isEmpty()) return
+    val peak = series.maxOfOrNull { kotlin.math.abs(it.value) } ?: 1.0
+    val scale = if (peak > 0.0) peak else 1.0
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = quarterlySparklineSpoken(series, unit) },
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        series.forEach { point ->
+            val fraction = (kotlin.math.abs(point.value) / scale).toFloat().coerceIn(MIN_BAR_FRACTION, 1f)
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height((SPARKLINE_BAR_MAX * fraction).dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)),
+                )
+                Text(
+                    text = shortPeriod(point.period),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+/** `"Sep 2023"` → `"S3"`: the month, its first letter, and the year's last digit. */
+private fun shortPeriod(period: String): String {
+    val parts = period.trim().split(' ', ' ')
+    val month = parts.getOrNull(0) ?: return period
+    val year = parts.getOrNull(1) ?: return period
+    val letter = month.firstOrNull()?.uppercase() ?: return period
+    return "$letter${year.takeLast(2)}"
+}
+
+/** Spoken form: the values, because a bar's height is not an announced quantity. */
+private fun quarterlySparklineSpoken(series: List<QuarterlyPoint>, unit: RatioUnit): String =
+    series.joinToString(", ") { "${it.period}: ${formatFixed(it.value, 1)} ${unitLabel(unit)}" }
+
 // ------------------------------------------------------------------------ coverage section
 
 /**
@@ -813,6 +1193,17 @@ private fun CoverageSection(state: FundamentalsUiState, modifier: Modifier = Mod
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Every abstaining check names where its inputs are published. Without this the panel
+            // would say only "not evaluated", which reads as "we looked and found nothing" — the one
+            // reading plan.md §12 forbids.
+            VerificationSources.forRule(skip.ruleId).orEmpty().forEach { source ->
+                Text(
+                    text = VERIFY_RULE_PREFIX + source.asSentence(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(VERIFY_RULE_TAG),
+                )
+            }
         }
         state.ruleFailures.forEach { (ruleId, message) ->
             Text(
@@ -840,6 +1231,13 @@ private fun formatReading(value: Double?, unit: RatioUnit): String = when (unit)
     RatioUnit.MULTIPLE -> value?.let { formatFixed(it, 2) + TIMES } ?: NOT_AVAILABLE
     RatioUnit.CRORE -> value?.let { RUPEE + formatFixed(it, 2) + CRORE_SUFFIX } ?: NOT_AVAILABLE
     RatioUnit.DAYS -> value?.let { formatFixed(it, 0) + DAYS_SUFFIX } ?: NOT_AVAILABLE
+    // `pp`, never `%`: an FII share that falls 18.67 → 17.19 moved 1.48 *points*. Rendering that
+    // as "-1.48%" describes a 7.9% relative fall under the wrong label, which is precisely the
+    // substitution a percentage-point unit exists to prevent.
+    RatioUnit.PERCENTAGE_POINTS -> value?.let {
+        (if (it >= 0) "+" else "") + formatFixed(it, 2) + POINTS_SUFFIX
+    } ?: NOT_AVAILABLE
+    RatioUnit.RUPEE_PER_SHARE -> value?.let { RUPEE + formatFixed(it, 2) } ?: NOT_AVAILABLE
 }
 
 /** The unit named in words, beside the figure. Never inferred from the number's shape. */
@@ -849,6 +1247,8 @@ private fun unitLabel(unit: RatioUnit): String = when (unit) {
     RatioUnit.MULTIPLE -> UNIT_MULTIPLE
     RatioUnit.CRORE -> UNIT_CRORE
     RatioUnit.DAYS -> UNIT_DAYS
+    RatioUnit.PERCENTAGE_POINTS -> UNIT_POINTS
+    RatioUnit.RUPEE_PER_SHARE -> UNIT_RUPEE_PER_SHARE
 }
 
 /** The spoken form of a figure, so TalkBack never reads a bare glyph. */
@@ -913,6 +1313,16 @@ private const val OVERVIEW_TAG: String = "mia_fundamentals_overview"
 private const val NOT_FETCHED_TAG: String = "mia_fundamentals_not_fetched"
 private const val CARD_TAG_PREFIX: String = "mia_fundamentals_card_"
 private const val ABSENT_ROW_TAG: String = "mia_fundamentals_absent"
+private const val VERIFY_WITH_TAG: String = "mia_fundamentals_verify_with"
+private const val VERIFY_RULE_TAG: String = "mia_fundamentals_verify_rule"
+private const val QUARTERLY_OVERVIEW_TAG: String = "mia_fundamentals_quarterly_overview"
+private const val QUARTERLY_ABSENT_TAG: String = "mia_fundamentals_quarterly_absent"
+private const val QUARTERLY_CARD_TAG_PREFIX: String = "mia_fundamentals_quarterly_card_"
+private const val QUARTERLY_ABSENT_NOTE_TAG: String = "mia_fundamentals_quarterly_absent_note"
+private const val QUARTERLY_NO_COMPARISON_TAG: String = "mia_fundamentals_quarterly_no_comparison"
+private const val QUARTERLY_SPARKLINE_TAG_PREFIX: String = "mia_fundamentals_quarterly_spark_"
+private const val QUARTERLY_KEY: String = "fundamentals.quarterly"
+private const val OWNERSHIP_BADGE_LABEL: String = "Ownership"
 private const val TREND_TAG: String = "mia_fundamentals_trend"
 private const val TREND_ABSENT_TAG: String = "mia_fundamentals_trend_absent"
 private const val DIVERGENCE_EXPLANATION_TAG: String = "mia_fundamentals_divergence"
@@ -926,6 +1336,37 @@ private const val FOOTER_KEY: String = "fundamentals.footer"
 
 /** Stable per card: `RatioPriority.compose` asserts slot ids are unique within a sector's list. */
 private fun cardKey(card: RatioCard): String = "fundamentals.card." + card.slot.id.name
+
+private fun quarterlyKey(row: QuarterlyCardRow): String = "fundamentals.quarterly." + row.metric.name
+
+private const val QUARTERLY_TITLE: String = "Quarterly results"
+private const val QUARTERLY_SUBTITLE: String =
+    "What the source publishes for the last thirteen quarters, and how the latest one compares " +
+        "with the quarter before and with the same quarter a year earlier."
+
+private const val LATEST_PERIOD_PREFIX: String = "Latest published quarter: "
+private const val QUARTERLY_ON_QUARTER_LABEL: String = "Quarter on quarter"
+private const val QUARTERLY_YEAR_ON_YEAR_LABEL: String = "Year on year"
+private const val NOT_COMPARABLE: String =
+    "Not comparable — the reason is printed below with the other notes."
+private const val NO_COMPARISON_PREFIX: String = "Neither comparison could be made: "
+private const val COMPARED_AGAINST: String = "compared with"
+
+/** `QUARTERLY_COUNTS` built as a function so the numbers are formatted in one place. */
+private fun QUARTERLY_COUNTS(readable: Int, total: Int, quarters: Int): String = buildString {
+    append("$readable of $total published lines")
+    if (readable < total) append(SEPARATOR).append(total - readable).append(" not published by this page")
+    append(SEPARATOR).append(quarters).append(" quarters of history")
+}
+
+private const val QUARTERLY_ABSENT_PREFIX: String =
+    "Not published on this page, so not shown: "
+
+/** Prefix for a source line attached to a ratio row. */
+private const val WHERE_TO_VERIFY_LABEL: String = "Where to verify this yourself"
+
+/** Prefix for a source line attached to an abstaining red-flag check. */
+private const val VERIFY_RULE_PREFIX: String = "Where to verify this check: "
 
 private const val LOADING_LABEL: String = "Reading the cached fundamentals page"
 
@@ -974,6 +1415,11 @@ private const val UNIT_RATIO: String = "ratio, shown as a multiple"
 private const val UNIT_MULTIPLE: String = "multiple"
 private const val UNIT_CRORE: String = "₹ crore"
 private const val UNIT_DAYS: String = "days"
+private const val UNIT_POINTS: String = "percentage points"
+private const val UNIT_RUPEE_PER_SHARE: String = "₹ per share"
+
+/** Suffix for a change between two percentages. Never `%`. */
+private const val POINTS_SUFFIX: String = " pp"
 
 private const val TIMES: String = "×"
 private const val ARROW: String = " → "
