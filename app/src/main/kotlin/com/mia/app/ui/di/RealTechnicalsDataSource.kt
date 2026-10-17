@@ -12,13 +12,13 @@ import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.FlagTab
 import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.Match
-import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.MeasuredMove
 import com.mia.app.domain.model.ProjectedPath
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.BreakoutEvaluator
 import com.mia.app.domain.pattern.PatternEngine
 import com.mia.app.domain.pattern.ProjectionBuilder
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.ui.technicals.TechnicalsDataSource
 import com.mia.app.ui.technicals.TechnicalsRedFlags
@@ -35,7 +35,7 @@ import javax.inject.Singleton
  * | [candles] | `CandleRepository.storedSeries` |
  * | [matches] | `PatternRepository.scan` — which runs `PatternEngine` **and persists** the detections |
  * | [redFlags] | `RedFlagRepository.technicalFlags` |
- * | [projectedPath] | `ProjectionBuilder.directionalPath`, behind `MatchScorePolicy`'s `PROJECT` gate |
+ * | [projectedPath] | `ProjectionBuilder.directionalPath`, behind `ProjectionGate` |
  * | [breakoutTrigger] | `BreakoutEvaluator.trigger` |
  * | [trackRecord] | `AccuracyRepository.trackRecord` / `.report` |
  *
@@ -142,11 +142,11 @@ class RealTechnicalsDataSource @Inject constructor(
         timeframe: Timeframe,
         match: Match,
     ): BreakoutTrigger? {
-        // A trigger is an *event*, not a forecast, so it is deliberately **not** gated by the regime
-        // or the score. `PatternScanWorker` reads the trigger for any stored detection and applies
-        // `MatchScorePolicy.PROJECT_THRESHOLD` itself before raising an alert; gating it here would
-        // hide a condition the engine is willing to describe and would make the tab and the
-        // notification disagree about the same formation.
+        // A trigger is an *event*, not a forecast, so it is deliberately **not** gated by the
+        // projection gate. `PatternScanWorker` reads the trigger for any stored detection and
+        // applies `com.mia.app.domain.pattern.ProjectionGate` itself before raising an alert; gating
+        // it here would hide a condition the engine is willing to describe and would make the tab
+        // and the notification disagree about the same formation.
         val move = match.measuredMove ?: return null
         val bars = candleRepository.storedSeries(symbol, timeframe).barsOrEmpty()
         if (bars.isEmpty()) return null
@@ -167,12 +167,19 @@ class RealTechnicalsDataSource @Inject constructor(
     /**
      * The bars plus the verdict that decides whether a projection may be drawn at all.
      *
-     * plan.md §6.4 makes `PROJECT` a hard condition: `score >= 70` **and** an aligned regime. Both
-     * halves are read from the shared policy rather than restated, so this tab, the patterns screen
+     * plan.md §6.4 makes `PROJECT` a hard condition, and since W1 that condition is
+     * `com.mia.app.domain.pattern.ProjectionGate`: a measured-move level within the calibrated
+     * distance of the breakout close, a full window of bars, and an aligned regime. All three are
+     * read from the one object that owns them rather than restated, so this tab, the patterns screen
      * and the alert dispatcher cannot disagree about which match may project.
      *
+     * It was previously `MatchScorePolicy.verdict(score, …, aligned)` with the score doing the work,
+     * and W1 changed `verdict()` so that a caller which does not pass `projectable` can only ever get
+     * `RENDER` — this method therefore returned `null` for every match, and the Technicals tab drew
+     * a projected path for nothing at all. Same bug as the alert path's, one layer out.
+     *
      * `null` means "nothing to draw": no measured move (a candlestick has no height to project,
-     * spec DD-1), no stored bars, or a verdict below `PROJECT`.
+     * spec DD-1), no stored bars, or a gate condition unmet.
      */
     private suspend fun projectionGates(
         symbol: String,
@@ -183,9 +190,19 @@ class RealTechnicalsDataSource @Inject constructor(
         val bars = candleRepository.storedSeries(symbol, timeframe).barsOrEmpty()
         if (bars.isEmpty()) return null
         val regime = IndicatorSnapshot.of(bars).trendRegime
-        val aligned = PatternEngine.regimeAligned(regime, move.direction, match.category)
-        val verdict = MatchScorePolicy.verdict(match.score, timeframe, bars.size, aligned)
-        if (verdict != MatchScorePolicy.Verdict.PROJECT) return null
+        val aligned = PatternEngine.regimeAligned(
+            regime = regime,
+            direction = PatternEngine.resolveDirection(match),
+            category = match.category,
+        )
+        val projectable = ProjectionGate.admits(
+            match = match,
+            lastClose = bars.last().close,
+            timeframe = timeframe,
+            barCount = bars.size,
+            regimeAligned = aligned,
+        )
+        if (!projectable) return null
         return ProjectionGates(bars = bars, move = move)
     }
 

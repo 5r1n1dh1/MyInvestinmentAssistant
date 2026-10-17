@@ -175,8 +175,13 @@ data class PatternsUiState(
     /** The threshold below which a match is suppressed, for the same reason. */
     val suppressThreshold: Int get() = MatchScorePolicy.SUPPRESS_THRESHOLD
 
-    /** The threshold a match must clear to be projected at all. */
-    val projectThreshold: Int get() = MatchScorePolicy.PROJECT_THRESHOLD
+    // There is deliberately no `projectThreshold` here any more. It used to expose
+    // `MatchScorePolicy.PROJECT_THRESHOLD` as "the threshold a match must clear to be projected at
+    // all"; nothing read it, and nothing could clear it — 875 settled candidates produced a maximum
+    // score of 68. A dead number on the state object invites the next reader to use it. What
+    // replaced it is `com.mia.app.domain.pattern.ProjectionGate`, carried per match on
+    // `PatternsProjection.blocker`, because "which condition said no" is a fact about one
+    // formation and not a property of the tab.
 
     /**
      * The detector-strictness census: which patterns produce a candidate on real data, and where the

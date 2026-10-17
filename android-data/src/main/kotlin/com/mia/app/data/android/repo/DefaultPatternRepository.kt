@@ -7,13 +7,15 @@ import com.mia.app.data.android.db.SymbolDao
 import com.mia.app.data.android.di.IoDispatcher
 import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.Match
-import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Source
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.BreakoutEvaluator
 import com.mia.app.domain.pattern.PatternEngine
 import com.mia.app.domain.pattern.PatternScanOptions
 import com.mia.app.domain.pattern.ProjectionBuilder
+import com.mia.app.domain.pattern.ProjectionGate
+import com.mia.app.domain.technical.IndicatorSnapshot
+import com.mia.app.domain.technical.TrendRegime
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -130,6 +132,16 @@ class DefaultPatternRepository @Inject constructor(
             ?.valueOrNull()
             ?.asBenchmarkCandles()
 
+        // The indicator snapshot is built **here** and handed to the engine through its injection
+        // seam, rather than being built twice. Two reasons, and the second is the one that matters:
+        // the snapshot carries `trendRegime`, which is half of the projection gate, and a stored
+        // row's `verdict` column has to be written from the same regime the engine judged on — not
+        // from a `null` that could only ever have produced `RENDER`.
+        //
+        // Built with the same benchmark the engine would have used, so handing it over changes
+        // nothing about the scan and only saves the second fused pass.
+        val snapshot = IndicatorSnapshot.of(candles, benchmark)
+
         val result = PatternEngine.run(
             candles = candles,
             timeframe = timeframe,
@@ -138,10 +150,19 @@ class DefaultPatternRepository @Inject constructor(
                 symbol = symbol,
                 benchmarkCandles = benchmark,
                 collectDiagnostics = false,
+                snapshotFactory = { _, _ -> snapshot },
             ),
         )
 
-        val persisted = persist(symbol, timeframe, result.matches, result.barCount, result.notes)
+        val persisted = persist(
+            symbol = symbol,
+            timeframe = timeframe,
+            matches = result.matches,
+            barCount = result.barCount,
+            engineNotes = result.notes,
+            lastClose = candles.last().close,
+            regime = snapshot.trendRegime,
+        )
 
         DataResult.ok(
             value = PatternScan(
@@ -181,11 +202,17 @@ class DefaultPatternRepository @Inject constructor(
             )
         }
         val candles = candlesOrEmpty(symbol, timeframe)
+        // One indicator pass for the whole symbol, not one per stored detection: the regime gate
+        // asks the same question of the same series for every row, and twelve stored rows would
+        // otherwise mean twelve identical passes over 500 bars. It is the same snapshot the engine
+        // builds for the scan, at the same cost as the scan's own.
+        val regime = candles.takeIf { it.isNotEmpty() }?.let { IndicatorSnapshot.of(it).trendRegime }
+        val lastClose = candles.lastOrNull()?.close ?: 0.0
         DataResult.ok(
             value = rows.flatMap { row ->
                 val match = Mappers.toMatch(row, patternDao.pivots(row.id))
                 buildList {
-                    add(projectionOf(symbol, match, candles, timeframe))
+                    add(projectionOf(symbol, match, candles, timeframe, lastClose, regime))
                     // A re-run can legitimately produce several rows for one day — the star and
                     // flag families emit both directions — so every stored row is projected.
                 }
@@ -219,6 +246,14 @@ class DefaultPatternRepository @Inject constructor(
      * A missing identity row is a note, not an error: `patterns.symbol` carries a real foreign key
      * (plan.md §5.2's "FK(symbol)"), and failing a user-visible scan because a ticker is not in
      * the bundled master would be worse than showing the detection without storing it.
+     *
+     * ### Why the gate inputs are passed in
+     * The `verdict` column used to be written with `regimeAligned = null`, which could only ever
+     * produce `RENDER` — the stored row therefore recorded, permanently, that no detection was
+     * ever projectable, whatever the geometry said. It is the same class of bug as the retired
+     * `PROJECT_THRESHOLD`, one layer down and invisible because nothing reads the column. The
+     * verdict is now the one `PatternEngine.verdictFor` would give, with the breakout close and the
+     * regime the scan itself used.
      */
     private suspend fun persist(
         symbol: String,
@@ -226,6 +261,8 @@ class DefaultPatternRepository @Inject constructor(
         matches: List<Match>,
         barCount: Int,
         engineNotes: List<String>,
+        lastClose: Double,
+        regime: TrendRegime,
     ): PersistOutcome {
         val identity = symbolDao.bySymbol(symbol)
         if (identity == null) {
@@ -244,11 +281,12 @@ class DefaultPatternRepository @Inject constructor(
             val entity = Mappers.toPattern(
                 symbol = symbol,
                 match = match,
-                verdict = MatchScorePolicy.verdict(
-                    score = match.score,
+                verdict = PatternEngine.verdictFor(
+                    match = match,
                     timeframe = timeframe,
                     barCount = barCount,
-                    regimeAligned = null,
+                    lastClose = lastClose,
+                    regime = regime,
                 ),
                 barCount = barCount,
                 notes = engineNotes.joinToString("\n"),
@@ -276,16 +314,54 @@ class DefaultPatternRepository @Inject constructor(
      *
      * A candlestick formation has none of them (spec DD-1): no height to project and no boundary
      * to break, so all three are null and the UI renders the pattern alone.
+     *
+     * ### Why the gate inputs are captured here and not downstream
+     * This is the **only** place the four things `ProjectionGate` needs still exist: [candles] is
+     * in hand, so the breakout close and the bar count are free, and the regime is one indicator
+     * pass over the same bars. Everything past this function — `PatternScanWorker`, the alert
+     * dispatcher, the accuracy pass — sees a `PatternProjection` and never the series again.
+     *
+     * The regime passed in is the one the **newest stored bars** produce, which for the nightly
+     * scan is the same bar the detection was made on (`scan` and `projections` read the same
+     * series in the same run). For a row read back later it is the current regime rather than the
+     * one at detection, which is the reading a reader would use to judge the gate anyway.
+     *
+     * `regimeAligned` is resolved through `PatternEngine`'s own direction resolution, so a stored
+     * row and a freshly detected one cannot disagree about what direction the formation runs in.
+     * It is not invented: with no bars stored there is no regime, `null` is passed, and the gate
+     * declines to project.
      */
     private fun projectionOf(
         symbol: String,
         match: Match,
         candles: List<Candle>,
         timeframe: Timeframe,
+        lastClose: Double,
+        regime: TrendRegime?,
     ): PatternProjection {
         val move = match.measuredMove
         val direction = move?.direction
-        val path = if (move == null || candles.isEmpty()) {
+        val regimeAligned = regime?.let { resolved ->
+            PatternEngine.regimeAligned(
+                regime = resolved,
+                direction = PatternEngine.resolveDirection(match),
+                category = match.category,
+            )
+        }
+        val blocker = ProjectionGate.blocker(
+            match = match,
+            lastClose = lastClose,
+            // The projection's own timeframe, not the caller's: the gate below and the one
+            // `PatternProjection` re-asks downstream must be the same question.
+            timeframe = match.timeframe,
+            barCount = candles.size,
+            regimeAligned = regimeAligned,
+        )
+        // The path is withheld with everything else the gate withholds, so nothing downstream can
+        // draw a projection the app decided against. The **trigger** is not: it is an event, not a
+        // forecast, and the nightly worker asks the gate itself before it raises a notification —
+        // hiding the condition here would make the tab and the alert disagree about one formation.
+        val path = if (move == null || candles.isEmpty() || blocker != null) {
             null
         } else {
             ProjectionBuilder.directionalPath(
@@ -316,6 +392,9 @@ class DefaultPatternRepository @Inject constructor(
             measuredMove = move,
             path = path,
             trigger = trigger,
+            lastClose = lastClose,
+            barCount = candles.size,
+            regimeAligned = regimeAligned,
         )
     }
 

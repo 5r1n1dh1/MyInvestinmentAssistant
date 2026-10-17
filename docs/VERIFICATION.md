@@ -298,8 +298,33 @@ real, because the code had been written against stable APIs on purpose.
 #### CI is now the build gate for the whole repo
 
 `build.yml` is three jobs: `changes` (diff detection, plain `git`, no third-party action) → `jvm`
-(the engine suites, always) → `android` (SDK install + compile + APK, **skipped when a PR touches
-only `:domain`/`:data`/docs**). An engine-only change verifies in ~3 minutes.
+(the engine suites, always) → `android` (SDK install + `:android-data` tests + compile + APK,
+**skipped when a PR touches only `:domain`/`:data`/docs**). An engine-only change verifies in
+~3 minutes.
+
+#### And `:android-data`'s tests were never being run at all
+
+Found while fixing the job structure: the `jvm` job passes `-PskipAndroid`, which **excludes**
+`:android-data` entirely, and `assembleDebug` compiles the module without executing a single test
+in it. So all eight test files under `android-data/src/test` had never been run — including
+`DefaultIndexRepositoryTest`, which pins the honest "no index stored, so the benchmark is `null`"
+fallback that W3 depends on. **A test nobody runs is a comment.**
+
+Adding `:android-data:testDebugUnitTest` to the `android` job immediately failed to compile —
+the first honest signal those files had ever received. The cause was a helper typed to the fake
+rather than the interface:
+
+```kotlin
+private fun TestScope.repository(dao: FakeIndexDao, source: FakeIndexSource)   // too narrow
+```
+
+Two tests deliberately pass an anonymous `IndexSource` that throws, to assert the repository
+converts a failing source into a typed `DataFailure` rather than letting an exception escape — and
+the helper silently refused them. The production constructor takes `IndexSource`; the helper now
+matches it. **The test was right and the helper was wrong**, and it had been "passing" in the only
+sense a test nobody runs can pass.
+
+All three jobs now green, including `:android-data:testDebugUnitTest`.
 
 #### The original gap, for the record
 

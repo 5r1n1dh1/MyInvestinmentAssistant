@@ -10,6 +10,7 @@ import com.mia.app.domain.model.RedFlag
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.PatternEvaluation
 import com.mia.app.domain.pattern.PatternScanResult
+import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.redflag.RuleSkip
 
 /**
@@ -91,9 +92,10 @@ interface PatternsDataSource {
      * Each is independently `null`:
      * * [PatternsProjection.measuredMove] — `null` for a candlestick formation, which has no height
      *   to project (spec DD-1).
-     * * [PatternsProjection.path] — `null` when the score is below
-     *   `MatchScorePolicy.PROJECT_THRESHOLD` or the regime gate was unmet, because a projection is
-     *   only ever drawn for a match the engine would have projected.
+     * * [PatternsProjection.path] — `null` when `com.mia.app.domain.pattern.ProjectionGate`
+     *   declines the match: the level sits further from the breakout close than the measured
+     *   calibration supports, the window is short of bars, or the regime is not aligned. A
+     *   projection is only ever drawn for a match the engine would have projected.
      * * [PatternsProjection.trigger] — `null` when there is no condition to describe.
      */
     suspend fun projections(symbol: String, timeframe: Timeframe, match: Match): PatternsProjection
@@ -193,9 +195,35 @@ data class PatternsProjection(
     val measuredMove: MeasuredMove? = null,
     val path: ProjectedPath? = null,
     val trigger: BreakoutTrigger? = null,
+    /**
+     * The condition that stopped this match from projecting, or `null` when it may.
+     *
+     * ### Why the blocker and not just a missing [path]
+     * "There is no projected path" and "there is no projected path *because the level sits 9.4 %
+     * from the last close*" are different facts, and only one of them is useful to a reader. plan.md
+     * §1.4 makes explaining a withheld signal a product requirement, so the condition travels out
+     * of `:android-data` with the projection and the screen names it — the app's own gate, quoted
+     * honestly, instead of a silent omission that reads as a bug.
+     */
+    val blocker: ProjectionGate.Blocker? = null,
+
+    /**
+     * `|projectedLevel − lastClose| / lastClose`, in percent, or `null` when there is no level to
+     * measure.
+     *
+     * Carried so the `DISTANCE_TOO_FAR` sentence can name the number the reader could check
+     * against the chart, rather than saying "too far" and leaving them to guess by how much.
+     */
+    val levelDistancePercent: Double? = null,
 ) {
     /** True when there is nothing at all to draw for this match. */
     val isEmpty: Boolean get() = measuredMove == null && path == null && trigger == null
+
+    /**
+     * Whether a projected level may be drawn. `true` only when [blocker] is `null` **and** a path
+     * came back, so this can never report a projection the screen has nothing to draw for.
+     */
+    val mayProject: Boolean get() = blocker == null && path != null
 
     companion object {
         /** No outputs at all — e.g. a candlestick formation with no alert condition. */
