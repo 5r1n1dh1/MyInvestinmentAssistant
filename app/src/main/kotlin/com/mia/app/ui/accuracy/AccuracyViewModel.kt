@@ -2,7 +2,11 @@ package com.mia.app.ui.accuracy
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mia.app.domain.accuracy.PublishedInsight
+import com.mia.app.domain.accuracy.TrackRecordInsight
+import com.mia.app.domain.accuracy.TrackRecordInsightReport
 import com.mia.app.domain.model.AccuracyReport
+import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.PatternOutcome
 import com.mia.app.domain.model.Timeframe
@@ -26,6 +30,11 @@ import javax.inject.Inject
  * One immutable value on a [StateFlow]. Every field is a measurement or an explicit absence: there
  * is no "null means zero" anywhere, because a 0 % hit rate for a record that has never been built
  * is a fabricated measurement of the app's own competence.
+ *
+ * @property insight the distance-bucket calibration table and the measured reason the rate is what
+ *   it is. It carries its own
+ *   [com.mia.app.domain.accuracy.InsightProvenance], so the screen cannot render a published
+ *   research figure as this device's record: the label travels inside the value.
  */
 data class AccuracyUiState(
     val isLoading: Boolean = false,
@@ -41,6 +50,14 @@ data class AccuracyUiState(
     val trackedTimeframes: List<Timeframe> = emptyList(),
     /** Most recent settled verdict, or `null` when none has ever settled. */
     val lastSettledOn: LocalDate? = null,
+    /**
+     * The calibration table and the "why the rate is what it is" explanation.
+     *
+     * Defaults to the published measurement rather than to nothing: a fresh install has no outcomes
+     * at all, and the honest thing to show it is the engine's own published measurement, clearly
+     * labelled — not an empty panel on the one tab that exists to publish a record.
+     */
+    val insight: TrackRecordInsightReport = PublishedInsight.REPORT,
 ) {
     /** The bar below which every rate is withheld. Read from the policy so it cannot drift. */
     val minimumSamples: Int get() = MatchScorePolicy.MIN_HIT_RATE_SAMPLES
@@ -64,6 +81,20 @@ data class AccuracyUiState(
         get() = report.perSymbolAndPattern.any { it.isReportable } ||
             report.perPattern.any { it.isReportable } ||
             report.perSymbol.any { it.isReportable }
+
+    /**
+     * The cell nearest to becoming reportable, or `null` when every cell already clears the gate.
+     *
+     * plan.md §6.1's gate is a floor on evidence, so how far away that floor is is part of the
+     * measurement. A table that is empty *because of a threshold* has to name the threshold and say
+     * how close it is — otherwise the emptiness reads as a broken app rather than as a small sample,
+     * which is the entire point of withholding below the gate in the first place.
+     */
+    val nearestReportable: HitRate? get() = TrackRecordInsight.nearestToReportable(report)
+
+    /** Settled outcomes still needed before the first rate on this screen may be quoted at all. */
+    val samplesUntilNextReportable: Int?
+        get() = nearestReportable?.let { TrackRecordInsight.samplesUntilReportable(it) }
 
     companion object {
         /** The state before the first load completes. */
@@ -141,6 +172,13 @@ class AccuracyViewModel @Inject constructor(
         val symbols = dataSource.trackedSymbols()
         val timeframes = dataSource.trackedTimeframes()
         val settledOn = dataSource.lastSettledOn()
+        // The calibration table is the one read that may legitimately be unavailable, because it
+        // depends on the stored bars as well as the stored outcomes. A failure falls back to the
+        // published measurement, which is labelled as published — so the worst case is a reader
+        // seeing research figures clearly marked as research, never seeing an empty panel and never
+        // seeing them labelled as their own.
+        val insight = runCatching { dataSource.trackRecordInsight() }
+            .getOrDefault(PublishedInsight.REPORT)
         return AccuracyUiState(
             isLoading = false,
             errorReason = null,
@@ -149,6 +187,7 @@ class AccuracyViewModel @Inject constructor(
             trackedSymbols = symbols,
             trackedTimeframes = timeframes,
             lastSettledOn = settledOn,
+            insight = insight,
         )
     }
 

@@ -22,10 +22,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mia.app.domain.accuracy.CalibrationReport
+import com.mia.app.domain.accuracy.ReachExplanation
+import com.mia.app.domain.accuracy.TrackRecordInsight
 import com.mia.app.domain.compliance.Disclosure
 import com.mia.app.domain.model.HitRate
 import com.mia.app.domain.model.PatternOutcome
 import com.mia.app.domain.model.Timeframe
+import com.mia.app.domain.pattern.BucketCalibration
 import com.mia.app.ui.common.DisclaimerFooter
 import com.mia.app.ui.common.EmptyState
 import com.mia.app.ui.common.ErrorState
@@ -43,25 +47,35 @@ import com.mia.app.ui.theme.MiaSpacing
  * ### Section order, and why
  * ```
  *  heading + what a hit is     the definition, before any number, so no figure is read unexplained
- *  coverage                    how many outcomes, symbols, timeframes, and when one last settled
+ *  coverage                    how many outcomes, symbols, timeframes, when one last settled,
+ *                               and how many more are needed before any rate is reportable
  *  what a hit means            "the level was reached", restated beside the tables
- *  per stock and pattern       D6's strict grouping — the one that answers the reader's question
+ *  why the rate is what it is  the measured mechanism, not a bare percentage (gap A6)
+ *  calibration by distance     the hit rate against the chance of a level that size being
+ *                               touched anyway — with the provenance of the data stated
+ *  per symbol                  HEADLINE: the aggregate that clears the gate, labelled as
+ *                               cross-pattern rather than per-pattern
+ *  per stock and pattern       D6's strict grouping — withheld below the gate, with the
+ *                               number of outcomes still needed to un-withhold it (gap A4)
  *  per pattern                 how a formation behaves across every tracked stock
- *  per symbol                  how one stock behaves across every formation tracked on it
  *  still unresolved            SEPARATE, and never averaged in
  *  data-source footer          plan.md §3
  * ```
  *
- * ### The four things this screen must never do
- * 1. **Show a rate without `n`.** Every figure goes through [HitRateText], which delegates to
- *    `HitRate.label()` and asserts the sample size is present.
+ * ### The five things this screen must never do
+ * 1. **Show a rate without `n`.** Every figure goes through [HitRateText] or
+ *    `BucketCalibration.labelAt`, both of which delegate to a rule that always carries the sample
+ *    size.
  * 2. **Show a rate below 30 samples.** `HitRate.isReportable` withholds it and the label shows the
- *    count instead. Not greyed out — withheld.
+ *    count instead. Not greyed out — withheld. The gate is never lowered to fill a table.
  * 3. **Mix unresolved outcomes into a rate.** They get their own section, with the number of bars
  *    elapsed, because a projection whose window is open is neither a hit nor a miss.
  * 4. **Turn a hit into a profit.** The explanation says a hit is the measured-move level being
  *    *reached*, and that no price was bought or sold, because plan.md §1.4 rule 1 forbids the
  *    alternative and the arithmetic would not support it anyway.
+ * 5. **Present a published measurement as the reader's own record.** Every figure here carries its
+ *    `InsightProvenance`, and the published fallback is rendered inside a labelled card so a
+ *    research figure can never be mistaken for a track record.
  *
  * @param viewModel obtained with `hiltViewModel()`. This tab has no route arguments — it reports on
  *   the whole record, which is what plan.md §6.1 asks for.
@@ -99,10 +113,39 @@ fun AccuracyScreen(
             item(key = EMPTY_KEY) {
                 EmptyState(title = EMPTY_TITLE, body = EMPTY_BODY)
             }
+            // The measurement and its explanation are still shown on a fresh install. They are the
+            // engine's own published figures, labelled as such by [ProvenanceBadge], so the tab
+            // never opens empty and never passes research off as the reader's record.
+            state.insight.reach?.let { reach ->
+                item(key = WHY_THE_RATE_KEY) { WhyTheRateSection(reach) }
+            }
+            state.insight.calibration?.let { calibration ->
+                item(key = CALIBRATION_KEY) { CalibrationSection(calibration) }
+            }
         } else {
             item(key = COVERAGE_KEY) { CoverageSection(state) }
             item(key = MEANING_KEY) { WhatAHitMeans() }
 
+            state.insight.reach?.let { reach ->
+                item(key = WHY_THE_RATE_KEY) { WhyTheRateSection(reach) }
+            }
+            state.insight.calibration?.let { calibration ->
+                item(key = CALIBRATION_KEY) { CalibrationSection(calibration) }
+            }
+
+            // The per-symbol aggregate leads the tables: it is the only per-stock grouping that
+            // clears the 30-sample gate on real data, and it is labelled as cross-pattern so it
+            // cannot be read as "this pattern on this stock", which is the table below it.
+            if (state.report.perSymbol.isNotEmpty()) {
+                item(key = TABLE_SYMBOL_KEY) {
+                    RateTable(
+                        title = TITLE_PER_SYMBOL,
+                        subtitle = TABLE_SYMBOL_SUBTITLE,
+                        rows = state.report.perSymbol,
+                        kind = AccuracyRowKind.SYMBOL,
+                    )
+                }
+            }
             if (state.report.perSymbolAndPattern.isNotEmpty()) {
                 item(key = TABLE_STOCK_AND_PATTERN_KEY) {
                     RateTable(
@@ -120,16 +163,6 @@ fun AccuracyScreen(
                         subtitle = TABLE_PATTERN_SUBTITLE,
                         rows = state.report.perPattern,
                         kind = AccuracyRowKind.PATTERN,
-                    )
-                }
-            }
-            if (state.report.perSymbol.isNotEmpty()) {
-                item(key = TABLE_SYMBOL_KEY) {
-                    RateTable(
-                        title = TITLE_PER_SYMBOL,
-                        subtitle = TABLE_SYMBOL_SUBTITLE,
-                        rows = state.report.perSymbol,
-                        kind = AccuracyRowKind.SYMBOL,
                     )
                 }
             }
@@ -224,7 +257,38 @@ private fun CoverageSection(state: AccuracyUiState, modifier: Modifier = Modifie
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // How far away the gate is, in the units the gate is counted in. Without it, an all-withheld
+        // screen is indistinguishable from a broken one — the whole point of withholding below 30
+        // samples is that the number is too small to mean anything, and that is a fact about the
+        // sample rather than about the app.
+        state.nearestReportable?.let { nearest ->
+            Text(
+                text = samplesUntilReportableText(state, nearest),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+/**
+ * The nearest-cell sentence: "N more settled outcomes and X becomes reportable".
+ *
+ * Names the cell it is talking about, because "6 more outcomes" without a scope is not actionable.
+ * Rendered only when a cell is actually below the gate — when every cell clears it, there is nothing
+ * left to wait for and the sentence would be noise.
+ */
+private fun samplesUntilReportableText(state: AccuracyUiState, nearest: HitRate): String {
+    val remaining = TrackRecordInsight.samplesUntilReportable(nearest)
+    val scope = when {
+        nearest.symbol != null && nearest.patternName != null ->
+            "${nearest.patternName} on ${nearest.symbol}"
+        nearest.patternName != null -> nearest.patternName
+        nearest.symbol != null -> nearest.symbol
+        else -> NOT_AVAILABLE
+    }
+    return "$remaining more settled ${if (remaining == 1) "outcome" else "outcomes"} and $scope " +
+        "becomes reportable — it holds ${nearest.samples} of ${state.minimumSamples} now."
 }
 
 /** `Last settled verdict: 02 Oct 2026`, or an honest "never" when there is none. */
@@ -300,6 +364,234 @@ private fun WhatAHitMeans(modifier: Modifier = Modifier) {
     }
 }
 
+// ------------------------------------------------------------------- why the rate
+
+/**
+ * "Why the rate is what it is" — the teaching card (gap A6).
+ *
+ * ### The failure this fixes
+ * The app publishes a low unfiltered hit rate and, before this card, published no explanation. A
+ * number without its mechanism reads as "the app is bad at its job". The mechanism is neither secret
+ * nor flattering: a measured-move level sits several percent of price away, and the median
+ * five-session move in the projected direction is a small fraction of that — so a level can be
+ * textbook-correct and still never be reached inside the window.
+ *
+ * ### Where the numbers come from
+ * [ReachExplanation.sentences] carries them with their `n`, together with the chance-level control
+ * they have to be read against. When this device has settled outcomes with stored bars they are the
+ * device's own medians; otherwise they are the published fixture measurement, and [ProvenanceBadge]
+ * says so directly above the text. There is no third path, and no path that renders a median it did
+ * not measure.
+ *
+ * ### What this card must never do
+ * Turn the explanation into a conclusion about the reader. It names a mechanism and stops there.
+ */
+@Composable
+private fun WhyTheRateSection(reach: ReachExplanation, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        SectionHeader(title = SECTION_WHY_THE_RATE, subtitle = WHY_THE_RATE_SUBTITLE)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(MiaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            ) {
+                ProvenanceBadge(text = reach.provenance.label)
+                reach.sentences().forEach { sentence ->
+                    Text(
+                        text = sentence,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = WHY_THE_RATE_NOT_ADVICE,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------- calibration
+
+/**
+ * The distance-bucket calibration table (W2's headline item).
+ *
+ * ### Why a hit rate needs its distance and its control
+ * "How often a pattern's level was reached" is not a measurement until the reader knows how far the
+ * level sat. Measured on the committed fixture: within 3 % of the close, 82 % (n=121); beyond 12 %,
+ * 31 % (n=344); and with no pattern involved at all a level 5 % away is reached 10 % of the time
+ * inside five sessions. So the table shows the rate per distance band **and** the chance-level rate
+ * for a level of that size — quoting one without the other is how this kind of number gets misused.
+ *
+ * ### The rows cannot print a percentage without their denominator
+ * Every rate comes from `BucketCalibration.labelAt`, which builds the rate, the horizon and the `n`
+ * in one string; a band below [MatchScorePolicy.MIN_HIT_RATE_SAMPLES] prints its count and stops.
+ * The gate is never lowered to make the table look fuller.
+ */
+@Composable
+private fun CalibrationSection(calibration: CalibrationReport, modifier: Modifier = Modifier) {
+    val horizon = calibration.horizons.firstOrNull { it == TrackRecordInsight.HORIZON_BARS }
+        ?: calibration.horizons.firstOrNull()
+    val otherHorizons = calibration.horizons.filterNot { it == horizon }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+    ) {
+        SectionHeader(title = SECTION_CALIBRATION, subtitle = CALIBRATION_SUBTITLE)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(MiaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            ) {
+                ProvenanceBadge(text = calibration.provenance.label)
+                Text(
+                    text = calibration.sourceNote,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (horizon == null) {
+                    Text(
+                        text = CALIBRATION_NO_HORIZON,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    calibration.rows.forEachIndexed { index, row ->
+                        if (index > 0) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                        CalibrationRow(
+                            row = row,
+                            horizonBars = horizon,
+                            otherHorizons = otherHorizons,
+                        )
+                    }
+                    calibration.withheldReason?.let { reason ->
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    chanceLevelText(calibration, horizon)?.let { control ->
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(
+                            text = control,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One distance band: the rate at the app's own horizon, then the other horizons that were measured.
+ *
+ * [BucketCalibration.labelAt] is the only path to a percentage here, so the `n` cannot be dropped.
+ */
+@Composable
+private fun CalibrationRow(
+    row: BucketCalibration,
+    horizonBars: Int,
+    otherHorizons: List<Int>,
+    modifier: Modifier = Modifier,
+) {
+    val otherCells = if (row.isReportable) {
+        otherHorizons.mapNotNull { h ->
+            row.hitRatePct(h)?.let { rate -> "h$h ${"%.0f".format(rate)}%" }
+        }
+    } else {
+        emptyList()
+    }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+    ) {
+        Text(
+            text = if (row.isReportable) {
+                row.labelAt(horizonBars)
+            } else {
+                "${row.label}: withheld — ${row.samples}/$REPORTING_THRESHOLD samples"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (row.isReportable) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        if (otherCells.isNotEmpty()) {
+            Text(
+                text = "$ALSO_LABEL ${otherCells.joinToString(" · ")} · same candidates, same bands",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * The chance-level control, or `null` when it was not measured at this horizon.
+ *
+ * Stated with the level size it belongs to, because a base rate without a stated distance is a claim
+ * about no particular level at all — the figure changes completely with it.
+ */
+private fun chanceLevelText(calibration: CalibrationReport, horizonBars: Int): String? {
+    val rate = calibration.baseRatePct(horizonBars) ?: return null
+    return "Chance level: a level ${"%.1f".format(calibration.baseRateDistancePercent)}% from the " +
+        "close is reached ${"%.0f".format(rate)}% of the time inside $horizonBars sessions with no " +
+        "pattern involved at all. Every rate above is read against a control of this kind."
+}
+
+/**
+ * Where a figure came from.
+ *
+ * Rendered above every measurement on this screen, in its own card, because a reader who cannot tell
+ * a published research figure from their own record will read one as the other. The wording arrives
+ * from the value rather than being chosen here, so a screen cannot drop the label by forgetting to
+ * write it.
+ */
+@Composable
+private fun ProvenanceBadge(text: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = MiaSpacing.sm, vertical = MiaSpacing.xs),
+        )
+    }
+}
+
 // ------------------------------------------------------------------------------- tables
 
 /**
@@ -363,6 +655,17 @@ private fun RateRow(hitRate: HitRate, kind: AccuracyRowKind, modifier: Modifier 
             color = MaterialTheme.colorScheme.onSurface,
         )
         HitRateText(hitRate = hitRate, showDisclosure = false)
+        // On a withheld row, how far it is from the gate. The withholding is the rule and it stays,
+        // but a cell that is silent about *why* it is empty is indistinguishable from a bug — and
+        // this is the whole answer to gap A4: the table is empty because 18 months of one stock's
+        // history yields 20 or 21 cases per cell, not because nothing was tracked.
+        if (!hitRate.isReportable) {
+            Text(
+                text = TrackRecordInsight.samplesUntilReportableText(hitRate),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -451,12 +754,33 @@ private const val HIT_NO_PREDICTION =
 private const val TITLE_PER_PATTERN = "By pattern"
 private const val TABLE_PATTERN_SUBTITLE =
     "How often each formation's level was reached, across every stock this device has tracked."
-private const val TITLE_PER_SYMBOL = "By symbol"
+private const val TITLE_PER_SYMBOL = "By stock — every tracked pattern combined"
 private const val TABLE_SYMBOL_SUBTITLE =
-    "How often any formation's level was reached on each stock, across every tracked pattern."
+    "The headline per-stock figure, and the one that clears the reporting gate: every formation " +
+        "tracked on that stock, counted together. It is not a per-pattern number — one formation on " +
+        "one stock is the table below."
 private const val TABLE_STOCK_AND_PATTERN_TITLE = "Per stock and pattern"
 private const val TABLE_STOCK_AND_PATTERN_SUBTITLE =
-    "The strictest grouping, and the one next to a detected pattern: one formation on one stock."
+    "The strictest grouping, and the one next to a detected pattern: one formation on one stock. " +
+        "Eighteen months of one stock's history yields 20 or 21 settled cases here, which is below " +
+        "the reporting gate, so these cells show their count instead of a percentage. The gate is " +
+        "not lowered to fill the table."
+
+private const val SECTION_WHY_THE_RATE = "Why the rate is what it is"
+private const val WHY_THE_RATE_SUBTITLE =
+    "The measured mechanism, not a bare percentage: how far a projected level sat from price, " +
+        "against how far the market actually travelled in the same window."
+private const val WHY_THE_RATE_NOT_ADVICE =
+    "This describes chart geometry on past bars. It is not a forecast, not a profit, and not a " +
+        "recommendation."
+
+private const val SECTION_CALIBRATION = "Calibration: how far the level sat"
+private const val CALIBRATION_SUBTITLE =
+    "The same measurement split by distance from the close, each cell with its sample size. Bands " +
+        "are cumulative: a level within 3% is also counted in the 1% and 2% bands."
+private const val CALIBRATION_NO_HORIZON =
+    "No horizon has been measured for this table, so no cell of it can be quoted."
+private const val ALSO_LABEL = "Also:"
 
 private const val SECTION_UNRESOLVED = "Still unresolved"
 private const val UNRESOLVED_SUBTITLE =
@@ -485,6 +809,8 @@ private const val ERROR_KEY = "accuracy.error"
 private const val EMPTY_KEY = "accuracy.empty"
 private const val COVERAGE_KEY = "accuracy.coverage"
 private const val MEANING_KEY = "accuracy.meaning"
+private const val WHY_THE_RATE_KEY = "accuracy.why_the_rate"
+private const val CALIBRATION_KEY = "accuracy.calibration"
 private const val TABLE_STOCK_AND_PATTERN_KEY = "accuracy.table.stock_and_pattern"
 private const val TABLE_PATTERN_KEY = "accuracy.table.pattern"
 private const val TABLE_SYMBOL_KEY = "accuracy.table.symbol"
