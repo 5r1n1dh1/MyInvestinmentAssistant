@@ -72,17 +72,40 @@ class RatioPriorityTest {
         assertTrue(RatioPriority.order(Sector.BANKING).any { it.id == RatioId.FII_HOLDING })
     }
 
+    /**
+     * plan.md §7.2's own two-metric rows, asserted over `PLAN_ORDER` and not over the composed
+     * list.
+     *
+     * ### The decision this test encodes, made deliberately
+     * The ownership card (`FII_HOLDING` + `DII_HOLDING` + `FII_TREND`) was **not** folded into
+     * §7.2's rank-11 card next to promoter holding, even though both come from the same
+     * `shareholding` section. Two reasons, and the second is the one that decided it:
+     *
+     * 1. §7.2 row 11 is "promoter holding", rationalised as *"capital-allocation confidence"*.
+     *    FII/DII holding asks who owns the register, not what the owners do with it, so folding
+     *    them in would print §7.2's own rank and rationale next to a ratio the plan never mentions.
+     * 2. **HDFCBANK publishes FIIs and DIIs and no Promoters row at all** — verified on the
+     *    fixture. A shared card would then show two figures and one unexplained blank, and the
+     *    blank would read as "this bank has no promoter equity", which is not a thing.
+     *
+     * So §7.2's twelve rows keep exactly the composition plan.md gives them, and the ownership
+     * figures are a separate, unranked card appended after them for every sector.
+     */
     @Test
-    fun `the plan 7 2 cards carry the plan's own two metric rows`() {
-        // Over PLAN_ORDER, which is the §7.2 list; the supplementary ownership card is added after
-        // it and is covered by its own test above.
+    fun `the plan 7 2 cards carry the plan's own two metric rows and nothing else`() {
         val order = RatioPriority.PLAN_ORDER
+        assertEquals(12, order.size, "§7.2 has twelve rows and W4 added none to it")
         assertEquals(listOf(RatioId.INTEREST_COVERAGE), order[2].companions)
         assertEquals(listOf(RatioId.DIVIDEND_PAYOUT), order[11].companions)
         // Every other row is a single number.
         for (i in order.indices.filter { it != 2 && it != 11 }) {
             assertEquals(emptyList(), order[i].companions, "slot ${order[i].id}")
         }
+        // And no §7.2 row now carries an ownership ratio, which is the decision itself.
+        assertTrue(
+            order.none { slot -> slot.ids.any { it in OWNERSHIP_RATIOS } },
+            "the ownership card must stay separate from §7.2's twelve",
+        )
     }
 
     @Test
@@ -402,5 +425,10 @@ class RatioPriorityTest {
                 }
             }
         }
+    }
+
+    private companion object {
+        /** The W4 ownership rows. A §7.2 slot must never carry one — see the card-composition test. */
+        val OWNERSHIP_RATIOS = setOf(RatioId.FII_HOLDING, RatioId.DII_HOLDING, RatioId.FII_TREND)
     }
 }
