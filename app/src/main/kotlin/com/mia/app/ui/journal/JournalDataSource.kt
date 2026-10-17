@@ -69,7 +69,7 @@ class JournalUnavailableException(
  *   coverage line, and so an entry that can never close says which gate is shut instead of silently
  *   staying open.
  */
-internal data class JournalLoad(
+data class JournalLoad(
     val entries: List<JournalEntry> = emptyList(),
     val record: PersonalRecord = PersonalRecord.EMPTY,
     val appHitRate: HitRate = HitRate(symbol = null, patternName = null, hits = 0, samples = 0),

@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -354,11 +355,14 @@ private fun DraftFields(
                 .testTag(DRAFT_FALSIFICATION_TAG),
         )
 
+        // Held in a local because `JournalDraft` is declared in `:domain`: a property of another
+        // module cannot be smart-cast, and re-reading it would ask for the nullable twice.
+        val review = draft.reviewDate
         Text(
-            text = if (draft.reviewDate == null) {
+            text = if (review == null) {
                 LABEL_REVIEW_DATE
             } else {
-                "$LABEL_REVIEW_DATE — ${formatDate(draft.reviewDate)}"
+                "$LABEL_REVIEW_DATE — ${formatDate(review)}"
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
