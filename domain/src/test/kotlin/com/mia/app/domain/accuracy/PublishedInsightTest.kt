@@ -254,7 +254,7 @@ class PublishedInsightTest {
         val widest = assertNotNull(table.row(DistanceBucket.BEYOND_12))
         assertEquals(simulation.resolved.size, widest.samples)
         table.rows.forEach { row ->
-            val narrow = table.row(requireNotNull(row.bucket)).samples
+            val narrow = assertNotNull(table.row(requireNotNull(row.bucket))).samples
             assertTrue(
                 narrow <= widest.samples,
                 "${row.label} holds $narrow samples, more than the open-ended band's ${widest.samples}",
@@ -284,7 +284,11 @@ class PublishedInsightTest {
         assertEquals(1, TrackRecordInsight.samplesUntilReportable(gate - 1))
         assertEquals(0, TrackRecordInsight.samplesUntilReportable(gate))
         assertEquals(0, TrackRecordInsight.samplesUntilReportable(62))
-        assertEquals(0, TrackRecordInsight.samplesUntilReportable(-5), "a negative sample count is not a case")
+        assertEquals(
+            0,
+            TrackRecordInsight.samplesUntilReportable(gate + 100),
+            "a cell well past the gate is not waiting for anything",
+        )
 
         val report = HitRateCalculator.report(RealHistorySimulation.run().outcomes)
         val nearest = assertNotNull(

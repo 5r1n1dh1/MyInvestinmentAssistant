@@ -1173,7 +1173,7 @@ private fun DetectorCensusSection(state: PatternsUiState, modifier: Modifier = M
                 Text(
                     text = census.provenance.label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = census.headline(),
