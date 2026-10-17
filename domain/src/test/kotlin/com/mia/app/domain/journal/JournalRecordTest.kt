@@ -6,6 +6,7 @@ import com.mia.app.domain.model.Candle
 import com.mia.app.domain.model.MatchScorePolicy
 import com.mia.app.domain.model.Timeframe
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
