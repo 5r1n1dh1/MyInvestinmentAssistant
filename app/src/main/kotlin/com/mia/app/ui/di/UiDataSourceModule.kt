@@ -1,6 +1,7 @@
 package com.mia.app.ui.di
 
 import com.mia.app.ui.accuracy.AccuracyDataSource
+import com.mia.app.ui.stocklist.MarketPulseDataSource
 import com.mia.app.ui.detail.StockDetailDataSource
 import com.mia.app.ui.fundamentals.FundamentalsDataSource
 import com.mia.app.ui.patterns.PatternsDataSource
@@ -57,6 +58,10 @@ abstract class UiDataSourceModule {
     @Binds
     @Singleton
     abstract fun bindStockListDataSource(impl: RealStockListDataSource): StockListDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindMarketPulseDataSource(impl: RealMarketPulseDataSource): MarketPulseDataSource
 
     @Binds
     @Singleton

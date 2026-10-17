@@ -185,6 +185,13 @@ fun StockListScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
                 ) {
+                    // First item, so breadth frames the rows rather than sitting above them, and so
+                    // it scrolls with the list instead of pinning a second full-screen element. It
+                    // renders only alongside rows: breadth with no watchlist to frame it answers a
+                    // question the reader has not asked yet, and the empty state has its own say.
+                    item(key = MARKET_PULSE_KEY) {
+                        MarketPulseCard(breadth = state.breadth)
+                    }
                     itemsIndexed(
                         items = state.rows,
                         key = { _, row -> row.symbol },
@@ -513,3 +520,6 @@ private const val EMPTY_SEARCH_LABEL: String = "Search for a stock"
 private const val UNEXPECTED_ERROR: String = "the tracked list could not be read"
 
 private const val FOOTER_KEY: String = "stocklist.footer"
+
+/** Lazy-list key for the market-pulse card. Stable so a rotation does not rebuild the row. */
+private const val MARKET_PULSE_KEY: String = "stocklist.marketPulse"
