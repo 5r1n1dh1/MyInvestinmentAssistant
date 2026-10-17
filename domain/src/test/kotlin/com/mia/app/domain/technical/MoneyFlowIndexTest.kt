@@ -94,7 +94,13 @@ class MoneyFlowIndexTest {
         // is the intent.
         val series = candles(40, volume = { 0L }, close = { i -> 100.0 + i })
         assertNull(MoneyFlowIndex.compute(series).last(), "a stock that did not trade has no MFI")
-        assertEquals(100, MoneyFlowIndex.compute(series).count { it == null })
+        // Every bar, not 100: the series is 40 bars long and the output is index-aligned with it,
+        // so a larger number here could only have come from a fixture that no longer exists.
+        assertEquals(
+            series.size,
+            MoneyFlowIndex.compute(series).count { it == null },
+            "zero volume on every bar means no reading anywhere, not just at the end",
+        )
     }
 
     @Test
@@ -109,13 +115,28 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `volume decides whether a move counts, which is the whole point`() {
-        // Identical price path; the only difference is that the rising half carries all the volume.
+        // The same price path both times; the only difference is which half carries the volume.
         // If MFI were just RSI on typical price, these two would agree.
-        val quiet = candles(40, volume = { i -> if (i < 20) 10_000L else 10L })
-        val loud = candles(40, volume = { i -> if (i < 20) 10L else 10_000L })
+        //
+        // Two properties the previous fixture did not have, and both matter. The path must *move*,
+        // or there is no money flow and `compute` answers null. And it must move in **both**
+        // directions: on a path that only ever rises there is no negative flow at all, which the
+        // indicator documents as 100 — so a "loud on the way down" fixture with no down leg would
+        // have compared a weighted reading against a saturated one.
+        val upThenDown = { i: Int -> 100.0 + if (i < 20) i.toDouble() else (40 - i).toDouble() }
+        val quiet = candles(40, close = upThenDown, volume = { i -> if (i < 20) 10_000L else 10L })
+        val loud = candles(40, close = upThenDown, volume = { i -> if (i < 20) 10L else 10_000L })
 
-        val quietMfi = MoneyFlowIndex.compute(quiet).last()!!
-        val loudMfi = MoneyFlowIndex.compute(loud).last()!!
+        // JUnit's `assertNotNull` returns nothing; `kotlin.test`'s returns the value, which is what
+        // these two need so no reading can be forced out of a null with `!!`.
+        val quietMfi = kotlin.test.assertNotNull(
+            MoneyFlowIndex.compute(quiet).last(),
+            "a moving series with volume must produce a reading",
+        )
+        val loudMfi = kotlin.test.assertNotNull(
+            MoneyFlowIndex.compute(loud).last(),
+            "a moving series with volume must produce a reading",
+        )
 
         assertTrue(
             quietMfi > loudMfi,
