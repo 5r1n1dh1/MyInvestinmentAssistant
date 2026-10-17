@@ -1,6 +1,7 @@
 package com.mia.app.ui.education
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,29 +52,33 @@ fun EducationLessonScreen(
     // while the corpus lookup re-runs.
     val lesson = remember(lessonId) { Curriculum.lesson(lessonId) }
 
-    Column(modifier = modifier.fillMaxSize().testTag(EDUCATION_LESSON_TAG)) {
+    Box(modifier = modifier.fillMaxSize().testTag(EDUCATION_LESSON_TAG)) {
+        // Sibling behind the content, never the first child of the column — `fillMaxSize()` inside a
+        // `Column` claims the full height and leaves the bar and the body nothing. Compiles cleanly,
+        // renders an empty screen.
         GlassBackdrop(modifier = Modifier.fillMaxSize())
 
-        GlassTopBar(backdrop = {}) {
-            Text(
-                text = lesson?.title ?: "Lesson",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
-        }
+        Column(modifier = Modifier.fillMaxSize()) {
+            GlassTopBar(backdrop = {}) {
+                Text(
+                    text = lesson?.title ?: "Lesson",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+            }
 
-        if (lesson == null) {
-            EmptyState(
-                title = "That lesson is not available",
-                body = "The curriculum may have changed since this link was made. Open Education " +
-                    "to see the current modules.",
-                modifier = Modifier.padding(MiaSpacing.lg),
-            )
-            return@Column
+            if (lesson == null) {
+                EmptyState(
+                    title = "That lesson is not available",
+                    body = "The curriculum may have changed since this link was made. Open Education " +
+                        "to see the current modules.",
+                    modifier = Modifier.padding(MiaSpacing.lg),
+                )
+            } else {
+                LessonBody(lesson = lesson)
+            }
         }
-
-        LessonBody(lesson = lesson)
     }
 }
 

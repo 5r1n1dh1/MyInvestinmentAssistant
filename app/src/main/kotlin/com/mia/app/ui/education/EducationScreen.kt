@@ -2,6 +2,7 @@ package com.mia.app.ui.education
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -84,12 +85,16 @@ fun EducationScreen(
     var level by rememberSaveable { mutableStateOf(Level.BEGINNER) }
     val visible = remember(modules, level) { modules.filter { it.level == level } }
 
-    Column(modifier = modifier.fillMaxSize().testTag(EDUCATION_TAG)) {
+    Box(modifier = modifier.fillMaxSize().testTag(EDUCATION_TAG)) {
         // The screen's one blurred layer: fixed, static, blurred once. See `Glass.kt`'s performance
         // rules before adding a second one — never inside the LazyColumn below.
+        //
+        // A **sibling behind everything**, not the first child of the content column. `fillMaxSize()`
+        // inside a `Column` claims the full height and leaves the top bar and the list nothing,
+        // which compiles cleanly and renders an empty screen.
         GlassBackdrop(modifier = Modifier.fillMaxSize())
 
-        Column {
+        Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(backdrop = {}) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -111,23 +116,23 @@ fun EducationScreen(
                 counts = Level.entries.associateWith { l -> modules.count { it.level == l } },
                 onSelect = { level = it },
             )
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = MiaSpacing.lg,
-                end = MiaSpacing.lg,
-                top = MiaSpacing.sm,
-                bottom = MiaSpacing.xl,
-            ),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
-        ) {
-            items(visible, key = { it.id }) { module ->
-                ModuleCard(module = module, onOpenLesson = onOpenLesson)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = MiaSpacing.lg,
+                    end = MiaSpacing.lg,
+                    top = MiaSpacing.sm,
+                    bottom = MiaSpacing.xl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
+            ) {
+                items(visible, key = { it.id }) { module ->
+                    ModuleCard(module = module, onOpenLesson = onOpenLesson)
+                }
+
+                item(key = "footer") { DisclaimerFooter() }
             }
-
-            item(key = "footer") { DisclaimerFooter() }
         }
     }
 }
