@@ -48,6 +48,27 @@ object TechnicalPolicy {
     const val RSI_OVERBOUGHT: Double = 70.0
     const val RSI_OVERSOLD: Double = 30.0
 
+    // ------------------------------------------------------------------- MFI
+
+    /**
+     * Money Flow Index period. Wilder's own default, and the same 14 RSI uses, so the two
+     * indicators can be read side by side without a smoothing-convention difference doing the
+     * explaining.
+     */
+    const val MFI_PERIOD: Int = 14
+
+    /**
+     * There are deliberately **no** `MFI_OVERBOUGHT` / `MFI_OVERSOLD` constants, and the absence is
+     * the decision.
+     *
+     * RSI has them ([RSI_OVERBOUGHT], [RSI_OVERSOLD]) and this repository has already paid for
+     * what that buys: the RSI oversold flag fires on 3.34% of rolling observations
+     * (`docs/VERIFICATION.md`), which is a number consistent with the flag being nearly noise.
+     * MFI's 80/20 convention is borrowed from the same literature as Wilder's 70/30, with no
+     * measurement behind it in this codebase — so publishing one would put a threshold on a chart
+     * that no test here can defend. The number and its warmup state are published; the level is not.
+     */
+
     // ----------------------------------------------------------------------- MACD
 
     const val MACD_FAST: Int = 12
