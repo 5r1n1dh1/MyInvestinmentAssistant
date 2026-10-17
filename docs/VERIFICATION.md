@@ -381,6 +381,33 @@ Substitutes applied:
   argument-name mismatches there, nothing deeper.
   **Outcome: none of them did.** All five compiled clean on run 38132317377.
 
+### Three features had been merged and were reachable by nobody
+
+A recurring failure mode in this repository, worth naming because it has now happened three times
+and each time the tests were green:
+
+| What | Why nothing caught it |
+|---|---|
+| The projection gate (W1) | A gate nothing can cross is indistinguishable from a gate that works. |
+| The expert curriculum + base rates (W6) | `ExpertComplianceTest` walked `EXPERT_MODULES` **directly**, so it passed while 45 lessons never entered `Curriculum.modules`. |
+| Market breadth (W3) | `MarketBreadth` was computed and tested in `:domain`; no screen, no repository, no DAO query referenced it. |
+
+The common thread: **content or capability that is *declared* is not capability that is *reachable***,
+and the two are only distinguishable by asking about both. Every test in all three cases asserted a
+property of the piece itself — the gate's arithmetic, the lessons' compliance, the breadth's
+arithmetic — and none asserted that anything asked for it.
+
+Two guards now exist and are worth naming as a pattern:
+
+- `CurriculumReachabilityTest` asserts registry equality in **both** directions, and names the four
+  declared content lists explicitly rather than discovering them reflectively — so a fifth file that
+  forgets to register fails, and a stale fixture module left behind by a test also fails.
+- `ProjectionGateSatisfiabilityTest` asserts candidates cross the gate *through the real engine
+  path*, which is the only assertion that would have caught A1.
+
+The general rule this repository keeps re-learning: **test that the thing is reachable, not only that
+it is correct.**
+
 ### Known capability gaps, deliberately surfaced rather than faked
 
 | Gap | Behaviour |
