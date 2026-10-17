@@ -197,8 +197,11 @@ data class PersonalRecord(
             "Your recorded expectations and the observed moves agreed in $agreed of $settled " +
                 "resolved entries ($pct%, n=$settled)."
         } else {
-            "No rate yet — $settled of $minimumSamples settled entries, " +
-                "${samplesUntilReportable} more needed."
+            // "samples", not "entries": `HonestyContract.requireHitRateSampleSize` below checks for
+            // that word, and the word it checks for is the right one — this is a count of settled
+            // observations, the same quantity the app's own rate is gated on.
+            "No rate yet — $settled of $minimumSamples samples settled. " +
+                "${samplesUntilReportable} more before any percentage is printed."
         }
         HonestyContract.requireHitRateSampleSize(text)
         HonestyContract.requireNotProbabilityClaim(text)

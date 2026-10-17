@@ -186,9 +186,19 @@ class JournalRecordTest {
 
     @Test
     fun `the flat band is a named constant and the label says so`() {
+        // Inclusive at both ends, asserted from both sides: `outcomeOf` and `isFlat` must agree on
+        // the boundary, or a -0.5% move would be labelled "fell" by one and "unchanged" by the other.
         assertEquals(JournalOutcome.FLAT, JournalResolver.outcomeOf(JournalResolver.FLAT_BAND_PERCENT))
-        assertEquals(JournalOutcome.ROSE, JournalResolver.outcomeOf(JournalResolver.FLAT_BAND_PERCENT + 0.01))
-        assertEquals(JournalOutcome.FELL, JournalResolver.outcomeOf(-JournalResolver.FLAT_BAND_PERCENT))
+        assertEquals(JournalOutcome.FLAT, JournalResolver.outcomeOf(-JournalResolver.FLAT_BAND_PERCENT))
+        assertTrue(JournalResolver.isFlat(JournalResolver.FLAT_BAND_PERCENT))
+        assertEquals(
+            JournalOutcome.ROSE,
+            JournalResolver.outcomeOf(JournalResolver.FLAT_BAND_PERCENT + 0.01),
+        )
+        assertEquals(
+            JournalOutcome.FELL,
+            JournalResolver.outcomeOf(-JournalResolver.FLAT_BAND_PERCENT - 0.01),
+        )
         val entry = resolved(direction = ExpectationDirection.UP, outcome = JournalOutcome.FLAT, change = 0.2)
         assertTrue(JournalResolver.resolutionNote(entry).contains("${JournalResolver.FLAT_BAND_PERCENT}%"))
         AdviceLanguage.requireClean(entry.resolutionText() ?: "")

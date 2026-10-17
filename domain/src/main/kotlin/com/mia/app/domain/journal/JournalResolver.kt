@@ -162,11 +162,19 @@ object JournalResolver {
         return null
     }
 
-    /** The three factual labels, from one measured percentage. */
+    /**
+     * The three factual labels, from one measured percentage.
+     *
+     * Written in terms of [isFlat] rather than as two separate comparisons, because the band has to
+     * be **inclusive at both ends** and two hand-written inequalities are how a resolver ends up
+     * labelling a −0.5 % move "fell" while `isFlat` calls the same number unchanged — two
+     * functions, one threshold, one answer. `JournalRecordTest` asserts the boundary from both
+     * sides so the two cannot drift apart again.
+     */
     fun outcomeOf(changePercent: Double): JournalOutcome = when {
-        changePercent > FLAT_BAND_PERCENT -> JournalOutcome.ROSE
-        changePercent < -FLAT_BAND_PERCENT -> JournalOutcome.FELL
-        else -> JournalOutcome.FLAT
+        isFlat(changePercent) -> JournalOutcome.FLAT
+        changePercent > 0.0 -> JournalOutcome.ROSE
+        else -> JournalOutcome.FELL
     }
 
     /** `(to − from) / from × 100`, or `null` when the baseline close is unusable. */
