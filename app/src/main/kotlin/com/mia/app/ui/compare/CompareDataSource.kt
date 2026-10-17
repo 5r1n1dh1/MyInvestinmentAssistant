@@ -136,8 +136,15 @@ data class CompareValue(
     val unit: RatioUnit,
     val availability: RatioAvailability<Double>,
 ) {
-    /** True when there is a figure to print, fresh or stale. */
-    val isRenderable: Boolean get() = availability.isRenderable
+    /**
+     * True when there is a figure to print.
+     *
+     * `availability.isRenderable && value != null` rather than `isRenderable` alone, because
+     * `RatioAvailability` accepts a `STALE` state carrying no value — the staleness rules in the
+     * schema allow it — and a screen that formats a null there would crash on a ratio row. A cell
+     * in that state renders its reason instead, which is the correct output anyway.
+     */
+    val isRenderable: Boolean get() = availability.isRenderable && availability.value != null
 
     /** The sentence a cell shows when there is no figure. Never blank, never a bare dash. */
     fun absenceText(): String {
