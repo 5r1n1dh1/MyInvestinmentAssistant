@@ -138,6 +138,10 @@ class ImportedRatiosSource : ManualFundamentalsSource {
         }
         val header = splitTopLevel(lines.first()).map { it.trim().trim('"').lowercase() }
         val cells = splitTopLevel(lines[1]).map { it.trim().trim('"') }
+        // A ragged row is zipped to the shorter side rather than rejected: the missing cells simply
+        // are not present, so their fields stay absent. The `required`/`date` lookups below report
+        // a missing symbol or date, which is the error a ragged row actually causes.
+        val byColumn = header.zip(cells).toMap()
         val errors = mutableListOf<String>()
         val values = LinkedHashMap<String, Any>()
 
