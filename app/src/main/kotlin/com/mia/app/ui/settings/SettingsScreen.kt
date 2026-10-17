@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,12 +38,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mia.app.domain.compliance.Disclosure
+import com.mia.app.domain.education.Curriculum
 import com.mia.app.ui.common.DisclaimerFooter
 import com.mia.app.ui.common.SectionHeader
 import com.mia.app.ui.common.formatDate
@@ -89,6 +93,7 @@ import com.mia.app.work.RefreshTask
  */
 @Composable
 fun SettingsScreen(
+    onOpenEducation: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -144,7 +149,7 @@ fun SettingsScreen(
             }
         }
 
-        item(key = MEANING_KEY) { MeaningSection() }
+        item(key = MEANING_KEY) { MeaningSection(onOpenEducation = onOpenEducation) }
 
         item(key = COVERAGE_KEY) { CoverageSection(state, viewModel::onRetry) }
 
@@ -195,7 +200,7 @@ fun SettingsScreen(
  * 100`, what is the level on my chart, and what is the hit rate under the pattern.
  */
 @Composable
-private fun MeaningSection(modifier: Modifier = Modifier) {
+private fun MeaningSection(onOpenEducation: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
@@ -205,6 +210,54 @@ private fun MeaningSection(modifier: Modifier = Modifier) {
         MeaningCard(heading = MEANING_GEOMETRY_HEADING, body = Disclosure.MEASURED_MOVE)
         MeaningCard(heading = MEANING_HIT_RATE_HEADING, body = Disclosure.HIT_RATE)
         MeaningCard(heading = MEANING_SOURCE_HEADING, body = Disclosure.DATA_SOURCE)
+
+        // The route into the curriculum, and the reason it lives here rather than behind a
+        // toolbar icon nobody looks for. The four cards above define the app's vocabulary; this
+        // section is where a reader goes to learn the ideas behind those words, so the link
+        // belongs with the definitions rather than in a nav drawer.
+        EducationEntryCard(onOpen = onOpenEducation)
+    }
+}
+
+/**
+ * The way into the three-level curriculum.
+ *
+ * States its size rather than just its name. A reader deciding whether this is worth opening cannot
+ * tell "Education" from a glossary of six terms, and "19 modules · 108 lessons" is the difference
+ * between a link they click and a link they skip.
+ */
+@Composable
+private fun EducationEntryCard(onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .testTag(EDUCATION_ENTRY_TAG)
+            .semantics {
+                contentDescription = "Education, ${Curriculum.modules.size} modules, open the curriculum"
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        ) {
+            Text(
+                text = EDUCATION_HEADING,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = EDUCATION_SUBTITLE,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
@@ -805,6 +858,16 @@ private const val MEANING_SCORE_HEADING = "Match score (0–100)"
 private const val MEANING_GEOMETRY_HEADING = "A level drawn on the chart"
 private const val MEANING_HIT_RATE_HEADING = "Hit rate"
 private const val MEANING_SOURCE_HEADING = "Where the data comes from"
+
+/** Heading and subtitle for the link into the curriculum. See [EducationEntryCard]. */
+private const val EDUCATION_HEADING = "Education"
+
+private const val EDUCATION_SUBTITLE =
+    "Learn the ideas behind these terms, from the first look at a stock through to how the "
+        + "app measures itself."
+
+/** Test tag for the curriculum link, so its presence is assertable rather than assumed. */
+private const val EDUCATION_ENTRY_TAG = "education-entry"
 
 private const val SECTION_COVERAGE = "Data coverage"
 private const val COVERAGE_SUBTITLE =
