@@ -78,8 +78,13 @@ object MoneyFlowIndex {
         out[period] = ratio(positive, negative)
 
         for (i in (period + 1) until size) {
-            positive -= moneyFlow[i - period] * sign(typical[i - period] - typical[i - period - 1])
-            negative -= moneyFlow[i - period] * sign(typical[i - period - 1] - typical[i - period])
+            // Evict the bar leaving the window. `up` and `down` are independent 0/1 indicators, not
+            // a sign and its negation: negating the direction test and subtracting that would
+            // *add* the bar's flow to the other accumulator, and a monotone series would then carry
+            // a negative negative-flow into the ratio.
+            val leaving = i - period
+            positive -= moneyFlow[leaving] * up(typical, leaving)
+            negative -= moneyFlow[leaving] * down(typical, leaving)
             when {
                 typical[i] > typical[i - 1] -> positive += moneyFlow[i]
                 typical[i] < typical[i - 1] -> negative += moneyFlow[i]
@@ -106,11 +111,19 @@ object MoneyFlowIndex {
         }
     }
 
-    private fun sign(value: Double): Double = when {
-        value > 0 -> 1.0
-        value < 0 -> -1.0
-        else -> 0.0
-    }
+    /** 1.0 when bar [index] rose on typical price against its predecessor, else 0.0. */
+    private fun up(typical: DoubleArray, index: Int): Double =
+        if (index < 1 || typical[index] > typical[index - 1]) 1.0 else 0.0
+
+    /**
+     * 1.0 when bar [index] fell on typical price against its predecessor, else 0.0.
+     *
+     * Deliberately its own function rather than `1 - up(...)`: on an unchanged bar that expression
+     * would return 1 and charge the bar's flow to the negative side, which is not what "the price
+     * did not move" means.
+     */
+    private fun down(typical: DoubleArray, index: Int): Double =
+        if (index < 1 || typical[index] < typical[index - 1]) 1.0 else 0.0
 }
 
 /** MFI over candles. See [MoneyFlowIndex] for the maths and the degenerate cases. */
