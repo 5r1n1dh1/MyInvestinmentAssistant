@@ -237,6 +237,22 @@ class DefaultJournalRepository @Inject constructor(
 
     // --------------------------------------------------------------------------- internals
 
+    override suspend fun settledOutcomeSymbols(today: LocalDate): DataResult<Set<String>> =
+        withContext(dispatcher) {
+            val symbols = patternDao.allOutcomes()
+                .asSequence()
+                .filter { it.resolved && it.hit != null }
+                .map { it.symbol }
+                .toSet()
+            DataResult.ok(
+                value = symbols,
+                source = Source.DERIVED,
+                fetchedOn = today,
+                asOf = today,
+                notes = listOf("${symbols.size} symbol(s) have at least one settled outcome"),
+            )
+        }
+
     /**
      * Symbols with at least one **settled** outcome — the engine's own `resolved = 1` flag, read
      * rather than recomputed, so this gate can never disagree with the Accuracy tab about whether a

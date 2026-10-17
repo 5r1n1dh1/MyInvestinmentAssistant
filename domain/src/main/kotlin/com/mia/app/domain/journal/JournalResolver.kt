@@ -113,7 +113,9 @@ object JournalResolver {
         if (blockingReason(entry, candles, hasSettledOutcome, today) != null) return entry
         val from = baseline(entry, candles) ?: return entry
         val to = resolutionBar(entry, candles, today) ?: return entry
-        val move = changePercent(from.close, to.close)
+        // A baseline close of zero or less is a bar this app would never have stored, and dividing by
+        // it would produce a number that looks like a move. Unresolvable beats fabricated.
+        val move = changePercent(from.close, to.close) ?: return entry
         return entry.copy(
             resolvedAt = to.date,
             resolutionOutcome = outcomeOf(move),
@@ -151,6 +153,11 @@ object JournalResolver {
             return "No ${entry.symbol} ${entry.timeframe.name} bar is stored between ${entry.createdAt} " +
                 "and ${entry.reviewDate} yet, so the window this entry asked about has not been " +
                 "observed."
+        }
+        val baselineClose = baseline(entry, candles)?.close ?: 0.0
+        if (baselineClose <= 0.0) {
+            return "The stored ${entry.symbol} close on or before ${entry.createdAt} is not a " +
+                "usable price, so no move can be measured from it."
         }
         return null
     }

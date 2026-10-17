@@ -37,8 +37,14 @@ import java.util.Locale
  */
 object JournalLedger {
 
-    /** The one gate, read from the app's own policy so the two can never diverge. */
-    val MINIMUM_SAMPLES: Int = MatchScorePolicy.MIN_HIT_RATE_SAMPLES
+    /**
+     * The one gate, read from the app's own policy so the two can never diverge.
+     *
+     * `const` rather than a computed `val`, which is what lets the copy below name the number inside
+     * a `const val` — so the threshold a reader is *told* cannot drift from the threshold the gate
+     * *enforces*.
+     */
+    const val MINIMUM_SAMPLES: Int = MatchScorePolicy.MIN_HIT_RATE_SAMPLES
 
     /**
      * Shown under a withheld tally.

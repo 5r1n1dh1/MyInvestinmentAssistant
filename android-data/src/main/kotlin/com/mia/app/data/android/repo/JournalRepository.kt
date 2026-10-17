@@ -108,6 +108,22 @@ interface JournalRepository {
      */
     suspend fun appTrackRecord(today: LocalDate = todayInMarket()): DataResult<AppTrackRecord>
 
+    /**
+     * Symbols with at least one **settled** engine outcome.
+     *
+     * ### Why this is on the interface
+     * `JournalResolver` refuses to close an entry until the engine has settled an outcome for the
+     * same symbol, so something has to answer that question for the UI's own "why is this still
+     * open" sentences. Exposing it here — rather than having the adapter infer it from
+     * [appTrackRecord], which carries no symbols — is what keeps that sentence true: it is derived
+     * from the engine's own `resolved` flag, so it can never claim a symbol is settled when the
+     * Accuracy tab would show it as open.
+     *
+     * An empty set is a real answer, not a failure: it is the state of a device that has tracked no
+     * patterns, and every open entry's reason then says exactly that.
+     */
+    suspend fun settledOutcomeSymbols(today: LocalDate = todayInMarket()): DataResult<Set<String>>
+
     /** Provenance for every journal read: the reader's own words, typed on this device. */
     companion object {
         /** Where a journal entry came from. Never a market source — a person wrote it. */

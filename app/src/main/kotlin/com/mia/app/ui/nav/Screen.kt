@@ -23,6 +23,8 @@ private const val ROUTE_STOCK_LIST = "stocklist"
 private const val ROUTE_ACCURACY = "accuracy"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_EDUCATION = "education"
+private const val ROUTE_JOURNAL = "journal"
+private const val ROUTE_COMPARE = "compare"
 
 /**
  * The app's route table.
@@ -88,6 +90,27 @@ sealed class Screen(val route: String) {
 
     /** gap E1–E7 — the three-level curriculum. The hub lists modules; [Education] opens a lesson. */
     data object Education : Screen(ROUTE_EDUCATION)
+
+    /**
+     * gap E5 — the thesis journal: what the reader believed about a stock, written before the
+     * outcome was known.
+     *
+     * Argument-free, like [Accuracy]. The journal reports on every symbol the reader has written
+     * about, and filtering it by one symbol would hide the coverage line that makes the personal
+     * tally honest about how few entries it rests on. The symbol is therefore typed into the entry
+     * itself rather than passed by the route — the same shape `SettingsScreen` uses for the symbol
+     * its share card builds.
+     */
+    data object Journal : Screen(ROUTE_JOURNAL)
+
+    /**
+     * gap E6 — 2–3 symbols side by side, aligned by `RatioSlot` identity.
+     *
+     * Argument-free for the same reason as [Journal]: the compared set is chosen on the screen, and
+     * a route argument would freeze the choice at the moment of navigation — which is exactly the
+     * wrong behaviour for a comparison whose whole purpose is being re-chosen while reading it.
+     */
+    data object Compare : Screen(ROUTE_COMPARE)
 
     /**
      * One lesson, by id.
