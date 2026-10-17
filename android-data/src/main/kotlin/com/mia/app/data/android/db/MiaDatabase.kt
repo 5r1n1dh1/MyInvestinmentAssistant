@@ -35,16 +35,17 @@ class MiaConverters {
  * The one database — plan.md §5.2.
  *
  * ### Version and migrations
- * * [DATABASE_VERSION] is `4`. v1 was the plan.md §5.2 table set; v2 adds
+ * * [DATABASE_VERSION] is `5`. v1 was the plan.md §5.2 table set; v2 adds
  *   `statement_rows`, `derived_metrics` and `watchlist`; v3 adds `ratios.industry`, the
  *   screener.in classification that sector resolution needs; v4 adds `index_candles`, the
  *   benchmark series that finally gives `PatternScanOptions.benchmarkCandles` something to be
- *   (see `DatabaseMigrations`).
+ *   (see `DatabaseMigrations`); v5 adds `journal_entry`, the reader's own written record (gap E5).
  * * **`fallbackToDestructiveMigration()` is never called, anywhere.** The `candles` table is
  *   write-once: its 500 daily bars per symbol cost a Yahoo round-trip per symbol to rebuild
- *   (plan.md §3.2, §13), and `outcomes` is the app's published track record (plan.md §6.1),
- *   which must not evaporate on an app update. A missing migration must fail loudly in
- *   development rather than quietly delete a user's data in production.
+ *   (plan.md §3.2, §13), `outcomes` is the app's published track record (plan.md §6.1) which must
+ *   not evaporate on an app update, and `journal_entry` holds the one thing in this schema that
+ *   nothing can reconstruct — what a reader believed before they knew the answer. A missing
+ *   migration must fail loudly in development rather than quietly delete a user's data.
  *
  * ### Foreign keys
  * The [CALLBACK] turns `PRAGMA foreign_keys = ON` explicitly. Room enables foreign-key
@@ -68,6 +69,7 @@ class MiaConverters {
         WatchlistEntity::class,
         WorkStateEntity::class,
         IndexCandleEntity::class,
+        JournalEntryEntity::class,
     ],
     version = MiaDatabase.DATABASE_VERSION,
     exportSchema = true,
@@ -91,12 +93,22 @@ abstract class MiaDatabase : RoomDatabase() {
 
     abstract fun indexDao(): IndexDao
 
+    /**
+     * The reader's own journal — gap E5.
+     *
+     * Its own DAO rather than a method on `PatternDao`, because the two tables share no foreign key
+     * and no read that spans both exists: an entry is read whole, and `PatternDao`'s reads are all
+     * "one detection with its pivots". Keeping them apart also keeps the journal's monotone
+     * resolution query away from the track record's writes, so neither can block the other.
+     */
+    abstract fun journalDao(): JournalDao
+
     companion object {
         /** File name of the on-device database. */
         const val DATABASE_NAME: String = "mia.db"
 
-        /** plan.md §5.2 + the four extension tables documented on the entities. */
-        const val DATABASE_VERSION: Int = 4
+        /** plan.md §5.2 + the five extension tables documented on the entities. */
+        const val DATABASE_VERSION: Int = 5
 
         /** Applied at open time; see the class KDoc. */
         val CALLBACK: Callback = object : Callback() {
