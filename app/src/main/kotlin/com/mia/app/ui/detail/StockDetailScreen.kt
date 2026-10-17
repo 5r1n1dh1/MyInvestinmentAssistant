@@ -31,6 +31,8 @@ import com.mia.app.ui.fundamentals.FundamentalsScreen
 import com.mia.app.ui.patterns.PatternsScreen
 import com.mia.app.ui.technicals.TechnicalsScreen
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassScreenBackdrop
+import com.mia.app.ui.theme.glass.GlassTopBar
 
 /**
  * The tab host for one symbol. Route: `stockdetail/{symbol}/{timeframe}`.
@@ -60,6 +62,21 @@ import com.mia.app.ui.theme.MiaSpacing
  * the reader changes one of them. That is a documented trade, not an accident: removing it means giving
  * `TechnicalsScreen` an optional `timeframe` parameter, which is a file this agent does not own.
  *
+ * ### Glass (planv2 W7)
+ * ```
+ *  GlassScreenBackdrop  the frame's one blurred background — and the marker that tells the tab in
+ *                       the slot it does not need one of its own
+ *  GlassTopBar          the header: fill, gloss and a bottom hairline, over that background
+ *  GlassCard            the panes, drawn by the tab in the slot
+ * ```
+ * Two entry points lead here, and that is why the *frame* owns the backdrop instead of passing one
+ * down: the three analysis screens are each a standalone destination **and** the content of this
+ * slot. A backdrop inside the tab would be a second full-screen blur when the tab is hosted, and the
+ * only one when it is standalone, and this screen cannot tell which it is composing. So
+ * [GlassScreenBackdrop] draws one layer here and hands the answer down; `backdrop = {}` on the top
+ * bar says the same about the header — the fill and the hairline are worth having, the second blur
+ * kernel is not.
+ *
  * @param viewModel obtained with `hiltViewModel()`. The ticker and the initial timeframe come from the
  *   route's `SavedStateHandle`, and the selected tab is written back into it, so the whole screen is
  *   restorable after process death without a single ViewModel field holding navigation state.
@@ -72,46 +89,51 @@ fun StockDetailScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
 
-    Column(
+    GlassScreenBackdrop(
         modifier = modifier
             .fillMaxSize()
             .testTag(DETAIL_TAG),
     ) {
-        DetailHeader(
-            state = state,
-            onTimeframeSelected = viewModel::onTimeframeSelected,
-            onRetry = viewModel::onRetry,
-        )
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        TabRow(
-            selectedTabIndex = selectedTab,
-            modifier = Modifier.testTag(TAB_ROW_TAG),
-        ) {
-            TAB_LABELS.forEachIndexed { index, label ->
-                Tab(
-                    selected = index == selectedTab,
-                    onClick = { viewModel.onTabSelected(index) },
-                    text = {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.testTag("mia_stock_detail_tab_" + label),
-                        )
-                    },
+        Column(modifier = Modifier.fillMaxSize()) {
+            GlassTopBar(backdrop = {}) {
+                DetailHeader(
+                    state = state,
+                    onTimeframeSelected = viewModel::onTimeframeSelected,
+                    onRetry = viewModel::onRetry,
+                    modifier = Modifier.weight(1f),
                 )
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            TabRow(
+                selectedTabIndex = selectedTab,
+                modifier = Modifier.testTag(TAB_ROW_TAG),
+            ) {
+                TAB_LABELS.forEachIndexed { index, label ->
+                    Tab(
+                        selected = index == selectedTab,
+                        onClick = { viewModel.onTabSelected(index) },
+                        text = {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.testTag("mia_stock_detail_tab_" + label),
+                            )
+                        },
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            DetailSlot(
+                tab = selectedTab,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(DETAIL_SLOT_TAG),
+            )
         }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        DetailSlot(
-            tab = selectedTab,
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag(DETAIL_SLOT_TAG),
-        )
     }
 }
 
@@ -127,6 +149,13 @@ fun StockDetailScreen(
  * A symbol added to the watchlist seconds ago has no bar yet. The header says so with the reason
  * rather than printing a dash in a price slot, because an unexplained dash is indistinguishable from a
  * bug (plan.md §12).
+ *
+ * ### Why it is not a card
+ * It is a full-bleed header, not a floating pane: a rounded panel sitting directly above the Material
+ * tab strip would read as one more box in a column of boxes, and the header's own content — a title, a
+ * close, a toggle and two chips — already separates itself with its spacing. The [GlassTopBar] it
+ * lives in supplies the tint, the top-edge gloss and the bottom hairline, which is what tells the
+ * reader the header ends where the tabs begin.
  */
 @Composable
 private fun DetailHeader(

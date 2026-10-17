@@ -1,7 +1,9 @@
 package com.mia.app.ui.patterns
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,8 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -73,6 +73,11 @@ import com.mia.app.ui.common.formatFixed
 import com.mia.app.ui.common.formatPrice
 import com.mia.app.ui.common.shortLabel
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.GlassScreenBackdrop
+import com.mia.app.ui.theme.glass.GlassTheme
+import com.mia.app.ui.theme.glass.glassEntrance
+import com.mia.app.ui.theme.glass.glassPressScale
 import java.time.LocalDate
 
 /**
@@ -111,6 +116,23 @@ import java.time.LocalDate
  * 5. **Say "no patterns found" without saying what was looked for.** The empty state names the
  *    render threshold.
  *
+ * ### Glass (planv2 W7)
+ * ```
+ *  GlassScreenBackdrop  one blurred background for this screen, unless a frame already drew one
+ *  GlassCard            the pattern rows, the geometry, path, blocked-projection, breakout and
+ *                       census panels, and the overlay legend: a pane and a hairline, and NO blur
+ *  glassPressScale     the dip on a pattern row, sharing one interaction source with its ripple
+ * ```
+ * [GlassScreenBackdrop] rather than a bare backdrop because this screen has two entry points: the
+ * standalone `Screen.Patterns` destination *and* the Patterns tab inside
+ * [com.mia.app.ui.detail.StockDetailScreen], which draws the frame's single blurred layer. One call
+ * is correct in both, and the tab can never end up with two full-screen blurs.
+ *
+ * Two things are deliberately left alone. The chart keeps its own canvas (`PriceChart` is
+ * `ui/chart`'s and paints its own surface), and the match list is a column of [PatternCard]s rather
+ * than a pane containing panes — the rows are the cards, and wrapping them in a fourth one would be
+ * a box inside a box inside a box.
+ *
  * @param viewModel obtained with `hiltViewModel()`, so `symbol` and `timeframe` come from the
  *   `patterns/{symbol}/{timeframe}` route rather than from a hand-passed argument that could disagree
  *   with the back stack.
@@ -136,140 +158,177 @@ fun PatternsScreen(
         )
     }
 
-    Column(
+    GlassScreenBackdrop(
         modifier = modifier
             .fillMaxSize()
             .testTag(PATTERNS_TAG),
     ) {
-        // plan.md §8.3: pinned at the top of the tab, not buried in a section.
-        RedFlagAccess(
-            flags = state.redFlags,
-            skippedRules = state.skippedRules,
-            ruleFailures = state.ruleFailures,
-            onFlagClick = { evidenceFlag = it },
-            modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
-        )
-
-        state.notPublishedNote?.let { note ->
-            Text(
-                text = note,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = MiaSpacing.lg),
+        Column(modifier = Modifier.fillMaxSize()) {
+            // plan.md §8.3: pinned at the top of the tab, not buried in a section.
+            RedFlagAccess(
+                flags = state.redFlags,
+                skippedRules = state.skippedRules,
+                ruleFailures = state.ruleFailures,
+                onFlagClick = { evidenceFlag = it },
+                modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
             )
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = MiaSpacing.lg,
-                end = MiaSpacing.lg,
-                top = MiaSpacing.sm,
-                bottom = MiaSpacing.xxl,
-            ),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
-        ) {
-            item(key = HEADER_KEY) { PatternsHeader(state) }
-
-            item(key = TIMEFRAME_KEY) {
-                TimeframeToggle(
-                    selected = state.timeframe,
-                    onSelect = viewModel::onTimeframeSelected,
+            state.notPublishedNote?.let { note ->
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = MiaSpacing.lg),
                 )
             }
 
-            // The Explorer sits directly under the timeframe toggle, before the chart, because it is
-            // what the reader came for: the gate's verdict on every pattern, named. The chart and the
-            // existing match list follow as the detail.
-            state.evaluation?.let { evaluation ->
-                item(key = WINDOW_KEY) {
-                    WindowSelector(
+            // The stagger index for [glassEntrance], one per section as it is emitted. A plain local
+            // counter rather than a number per item, so a section added or removed re-staggers itself.
+            var entrance = 0
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = MiaSpacing.lg,
+                    end = MiaSpacing.lg,
+                    top = MiaSpacing.sm,
+                    bottom = MiaSpacing.xxl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.lg),
+            ) {
+                item(key = HEADER_KEY) {
+                    PatternsHeader(state, Modifier.glassEntrance(index = entrance++))
+                }
+
+                item(key = TIMEFRAME_KEY) {
+                    TimeframeToggle(
+                        selected = state.timeframe,
+                        onSelect = viewModel::onTimeframeSelected,
+                        modifier = Modifier.glassEntrance(index = entrance++),
+                    )
+                }
+
+                // The Explorer sits directly under the timeframe toggle, before the chart, because it is
+                // what the reader came for: the gate's verdict on every pattern, named. The chart and the
+                // existing match list follow as the detail.
+                state.evaluation?.let { evaluation ->
+                    item(key = WINDOW_KEY) {
+                        WindowSelector(
+                            state = state,
+                            onSelect = viewModel::onWindowSelected,
+                        )
+                    }
+                    item(key = EXPLORER_KEY) {
+                        PatternExplorerSection(
+                            state = state,
+                            evaluation = evaluation,
+                            onGlossaryClick = viewModel::onGlossaryToggled,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                if (state.isLoading && state.barCount == 0) {
+                    item(key = LOADING_KEY) { LoadingState() }
+                }
+
+                state.errorReason?.let { reason ->
+                    item(key = ERROR_KEY) { ErrorState(reason = reason, onRetry = viewModel::onRetry) }
+                }
+
+                // The manual fetch, placed **above** the chart. It was below it at first, which was
+                // wrong twice over: a reader with no history saw an empty chart first, and a reader
+                // with history had to scroll past a full chart to reach a control that is most useful
+                // to them. Placed here it is visible in the same glance as the gate state it acts on.
+                item(key = FETCH_KEY) {
+                    ForceScanSection(
                         state = state,
-                        onSelect = viewModel::onWindowSelected,
+                        onFetch = viewModel::onForceScan,
                     )
                 }
-                item(key = EXPLORER_KEY) {
-                    PatternExplorerSection(
-                        state = state,
-                        evaluation = evaluation,
-                        onGlossaryClick = viewModel::onGlossaryToggled,
+
+                item(key = CHART_KEY) { ChartSection(state) }
+
+                item(key = GATE_KEY) { GateSection(state) }
+
+                item(key = MATCHES_KEY) {
+                    MatchListSection(state, viewModel::onMatchSelected)
+                }
+
+                val selected = state.selectedMatch
+                selected?.measuredMove?.let { move ->
+                    item(key = GEOMETRY_KEY) {
+                        GeometrySection(
+                            match = selected,
+                            move = move,
+                            asOf = state.asOf,
+                            source = Source.NSE_BHAVCOPY,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                val projectedPath = state.projection.path
+                val gateBlocker = state.projection.blocker
+                if (projectedPath != null) {
+                    item(key = PATH_KEY) {
+                        ProjectedPathSection(
+                            path = projectedPath,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                } else if (gateBlocker != null) {
+                    // The same slot as the path, so the screen never shows a gap where a section would
+                    // have been: the reader gets either the projection or the app's own reason for not
+                    // drawing it, never neither.
+                    item(key = PATH_KEY) {
+                        ProjectionBlockedSection(
+                            state = state,
+                            blocker = gateBlocker,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                state.projection.trigger?.let { trigger ->
+                    item(key = TRIGGER_KEY) {
+                        BreakoutSection(
+                            trigger = trigger,
+                            timeframe = state.timeframe,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                if (state.suppressed.isNotEmpty()) {
+                    item(key = SUPPRESSED_KEY) {
+                        SuppressedSection(state, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+
+                if (state.scanNotes.isNotEmpty()) {
+                    item(key = NOTES_KEY) {
+                        NotesSection(state, Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+
+                item(key = CENSUS_KEY) {
+                    DetectorCensusSection(state, Modifier.glassEntrance(index = entrance++))
+                }
+
+                if (state.flagCoverageIncomplete) {
+                    item(key = FLAG_COVERAGE_KEY) {
+                        RedFlagCoverageSection(state.skippedRules, state.ruleFailures)
+                    }
+                }
+
+                item(key = FOOTER_KEY) {
+                    DisclaimerFooter(
+                        text = Disclosure.DATA_SOURCE,
+                        modifier = Modifier.glassEntrance(index = entrance++),
                     )
                 }
             }
-
-            if (state.isLoading && state.barCount == 0) {
-                item(key = LOADING_KEY) { LoadingState() }
-            }
-
-            state.errorReason?.let { reason ->
-                item(key = ERROR_KEY) { ErrorState(reason = reason, onRetry = viewModel::onRetry) }
-            }
-
-            // The manual fetch, placed **above** the chart. It was below it at first, which was
-            // wrong twice over: a reader with no history saw an empty chart first, and a reader
-            // with history had to scroll past a full chart to reach a control that is most useful
-            // to them. Placed here it is visible in the same glance as the gate state it acts on.
-            item(key = FETCH_KEY) {
-                ForceScanSection(
-                    state = state,
-                    onFetch = viewModel::onForceScan,
-                )
-            }
-
-            item(key = CHART_KEY) { ChartSection(state) }
-
-            item(key = GATE_KEY) { GateSection(state) }
-
-            item(key = MATCHES_KEY) { MatchListSection(state, viewModel::onMatchSelected) }
-
-            val selected = state.selectedMatch
-            selected?.measuredMove?.let { move ->
-                item(key = GEOMETRY_KEY) {
-                    GeometrySection(
-                        match = selected,
-                        move = move,
-                        asOf = state.asOf,
-                        source = Source.NSE_BHAVCOPY,
-                    )
-                }
-            }
-
-            val projectedPath = state.projection.path
-            val gateBlocker = state.projection.blocker
-            if (projectedPath != null) {
-                item(key = PATH_KEY) { ProjectedPathSection(path = projectedPath) }
-            } else if (gateBlocker != null) {
-                // The same slot as the path, so the screen never shows a gap where a section would
-                // have been: the reader gets either the projection or the app's own reason for not
-                // drawing it, never neither.
-                item(key = PATH_KEY) {
-                    ProjectionBlockedSection(state = state, blocker = gateBlocker)
-                }
-            }
-
-            state.projection.trigger?.let { trigger ->
-                item(key = TRIGGER_KEY) {
-                    BreakoutSection(trigger = trigger, timeframe = state.timeframe)
-                }
-            }
-
-            if (state.suppressed.isNotEmpty()) {
-                item(key = SUPPRESSED_KEY) { SuppressedSection(state) }
-            }
-
-            if (state.scanNotes.isNotEmpty()) {
-                item(key = NOTES_KEY) { NotesSection(state) }
-            }
-
-            item(key = CENSUS_KEY) { DetectorCensusSection(state) }
-
-            if (state.flagCoverageIncomplete) {
-                item(key = FLAG_COVERAGE_KEY) {
-                    RedFlagCoverageSection(state.skippedRules, state.ruleFailures)
-                }
-            }
-
-            item(key = FOOTER_KEY) { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
         }
     }
 }
@@ -285,7 +344,10 @@ fun PatternsScreen(
  */
 @Composable
 private fun PatternsHeader(state: PatternsUiState, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        arrangement = Arrangement.Top,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -416,9 +478,9 @@ private fun OverlayLegend(state: PatternsUiState, modifier: Modifier = Modifier)
     val trigger = state.projection.trigger
     if (move == null && path == null && trigger == null) return
 
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         if (move != null) {
             DashLegendRow(
@@ -675,7 +737,16 @@ private fun MatchListSection(
  * plan.md §6.1 exists to prevent — so the subtitle travels with the chip.
  *
  * Selection is carried by a border **and** by the container colour, because a border alone at one
- * pixel is easy to miss on a washed-out screen.
+ * pixel is easy to miss on a washed-out screen. On glass that is still two channels: the border
+ * colour is passed through as the card's `border`, and the pane's fill steps from the palette's soft
+ * tint to its medium one when the row is selected — a difference a reader can see in the panel
+ * itself, not only at its edge.
+ *
+ * ### The press dip
+ * [glassPressScale] and the ripple read the **same** [MutableInteractionSource], so they cannot
+ * drift apart, and the scale is a `graphicsLayer` transform: a press never remeasures or relayouts
+ * the row. The indicator is passed explicitly because the `interactionSource` overload of `clickable`
+ * has no default for it, and a dip with no ripple reads as a dropped frame on a slow device.
  */
 @Composable
 private fun PatternCard(
@@ -689,57 +760,56 @@ private fun PatternCard(
     } else {
         MaterialTheme.colorScheme.outlineVariant
     }
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+    GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, border, MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
+            .glassPressScale(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            ),
+        border = BorderStroke(1.dp, border),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        tint = if (isSelected) {
+            GlassTheme.palette.tintMedium
+        } else {
+            GlassTheme.palette.tintSoft
+        },
+        // What the `CardDefaults.cardColors(contentColor = onSurface)` call set, for both states.
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+                .semantics {
+                    contentDescription = "${match.name}. Match score ${match.score} of 100. " +
+                        MatchScoreLabels.SUBTITLE + ". " + if (isSelected) {
+                        "Showing its four factors, geometry and track record."
+                    } else {
+                        "Tap to show its four factors, geometry and track record."
+                    }
+                },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription = "${match.name}. Match score ${match.score} of 100. " +
-                            MatchScoreLabels.SUBTITLE + ". " + if (isSelected) {
-                            "Showing its four factors, geometry and track record."
-                        } else {
-                            "Tap to show its four factors, geometry and track record."
-                        }
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = match.name, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = match.category.name.lowercase().replace('_', ' ') +
-                            " · detected ${formatDate(match.detectedOn)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                MatchScoreChip(score = match.score)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = match.name, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = match.category.name.lowercase().replace('_', ' ') +
+                        " · detected ${formatDate(match.detectedOn)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                text = MatchScoreLabels.SUBTITLE,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            MatchScoreChip(score = match.score)
         }
+        Text(
+            text = MatchScoreLabels.SUBTITLE,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -773,43 +843,35 @@ private fun GeometrySection(
             title = MatchScoreLabels.PROJECTION_LABEL,
             subtitle = GEOMETRY_SUBTITLE,
         )
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-            ) {
-                Text(
-                    text = "For ${match.name}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                LabelledNumber("Formation height", formatPrice(move.height))
-                LabelledNumber("Trigger level", formatPrice(move.triggerLevel))
-                LabelledNumber("Derived level", formatPrice(move.projectedLevel))
-                LabelledNumber(
-                    label = "Direction",
-                    value = if (move.isUpward) "Upward from the trigger" else "Downward from the trigger",
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(
-                    text = MatchScoreLabels.NOT_A_TARGET_WARNING,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(text = Disclosure.MEASURED_MOVE, style = MaterialTheme.typography.bodySmall)
-                Text(
-                    text = geometryProvenance(source, asOf),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
+            Text(
+                text = "For ${match.name}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LabelledNumber("Formation height", formatPrice(move.height))
+            LabelledNumber("Trigger level", formatPrice(move.triggerLevel))
+            LabelledNumber("Derived level", formatPrice(move.projectedLevel))
+            LabelledNumber(
+                label = "Direction",
+                value = if (move.isUpward) "Upward from the trigger" else "Downward from the trigger",
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                text = MatchScoreLabels.NOT_A_TARGET_WARNING,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(text = Disclosure.MEASURED_MOVE, style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = geometryProvenance(source, asOf),
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }
@@ -841,36 +903,28 @@ private fun ProjectedPathSection(path: ProjectedPath, modifier: Modifier = Modif
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = UiStrings.PROJECTION, subtitle = PATH_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-            ) {
-                // `ProjectedPath.label` is already "Projected path (directional, not a forecast of
-                // price)". Rendering it verbatim keeps the wording welded to the type that carries it.
-                Text(
-                    text = path.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(text = PATH_CARRIES_NO_LEVEL, style = MaterialTheme.typography.bodySmall)
-                LabelledNumber("Bars projected", path.horizonBars.toString())
-                LabelledNumber(
-                    label = "Drawn",
-                    value = "${path.points.size} ${if (path.points.size == 1) "point" else "points"}",
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(text = PATH_DISTINCT_NOTE, style = MaterialTheme.typography.bodySmall)
-                Text(text = Disclosure.PROJECTION_FOOTER, style = MaterialTheme.typography.bodySmall)
-            }
+            // `ProjectedPath.label` is already "Projected path (directional, not a forecast of
+            // price)". Rendering it verbatim keeps the wording welded to the type that carries it.
+            Text(
+                text = path.label,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(text = PATH_CARRIES_NO_LEVEL, style = MaterialTheme.typography.bodySmall)
+            LabelledNumber("Bars projected", path.horizonBars.toString())
+            LabelledNumber(
+                label = "Drawn",
+                value = "${path.points.size} ${if (path.points.size == 1) "point" else "points"}",
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(text = PATH_DISTINCT_NOTE, style = MaterialTheme.typography.bodySmall)
+            Text(text = Disclosure.PROJECTION_FOOTER, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -904,28 +958,20 @@ private fun ProjectionBlockedSection(
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = PROJECTION_WITHHELD_TITLE, subtitle = PROJECTION_WITHHELD_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-            ) {
-                Text(
-                    text = withheldReason(state, blocker),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(text = PROJECTION_WITHHELD_ALERT, style = MaterialTheme.typography.bodySmall)
-                Text(text = Disclosure.PROJECTION_FOOTER, style = MaterialTheme.typography.bodySmall)
-            }
+            Text(
+                text = withheldReason(state, blocker),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(text = PROJECTION_WITHHELD_ALERT, style = MaterialTheme.typography.bodySmall)
+            Text(text = Disclosure.PROJECTION_FOOTER, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -983,28 +1029,26 @@ private fun BreakoutSection(
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = UiStrings.BREAKOUT_TRIGGER, subtitle = TRIGGER_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.xs),
+            // The accent is kept, as a *tint* over the blurred backdrop rather than an opaque
+            // container, and it is paired with `onTertiaryContainer` here explicitly for the same
+            // reason `ProvenanceBadge` keeps its pair on the Accuracy tab: the colour is saying
+            // "this is an alert", and the type sitting on it has to stay readable in every glass
+            // mode. `GlassMode.OFF` paints the palette's flat surface instead, which both tones
+            // clear by a wide margin.
+            tint = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
-            ) {
-                Text(text = trigger.description, style = MaterialTheme.typography.titleSmall)
-                LabelledNumber("Level", formatPrice(trigger.level))
-                LabelledNumber(
-                    label = "State on stored ${timeframe.shortLabel()} bars",
-                    value = if (trigger.fired) CONDITION_MET else CONDITION_NOT_MET,
-                )
-                Text(text = TRIGGER_CLOSE_BASED, style = MaterialTheme.typography.bodySmall)
-                Text(text = TRIGGER_NOT_A_LEVEL, style = MaterialTheme.typography.bodySmall)
-            }
+            Text(text = trigger.description, style = MaterialTheme.typography.titleSmall)
+            LabelledNumber("Level", formatPrice(trigger.level))
+            LabelledNumber(
+                label = "State on stored ${timeframe.shortLabel()} bars",
+                value = if (trigger.fired) CONDITION_MET else CONDITION_NOT_MET,
+            )
+            Text(text = TRIGGER_CLOSE_BASED, style = MaterialTheme.typography.bodySmall)
+            Text(text = TRIGGER_NOT_A_LEVEL, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1025,9 +1069,9 @@ private fun TrackRecordSection(
     patternName: String,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(
             title = UiStrings.TRACK_RECORD,
@@ -1054,9 +1098,9 @@ private fun TrackRecordSection(
  */
 @Composable
 private fun SuppressedSection(state: PatternsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(
             title = SECTION_SUPPRESSED,
@@ -1111,9 +1155,9 @@ private fun SuppressedSection(state: PatternsUiState, modifier: Modifier = Modif
  */
 @Composable
 private fun NotesSection(state: PatternsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(title = SECTION_NOTES)
         state.scanNotes.forEach { note ->
@@ -1160,52 +1204,44 @@ private fun DetectorCensusSection(state: PatternsUiState, modifier: Modifier = M
         verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
     ) {
         SectionHeader(title = SECTION_CENSUS, subtitle = CENSUS_SUBTITLE)
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+            arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+            // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MiaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
+            Text(
+                text = census.provenance.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = census.headline(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            census.rows.forEach { row ->
                 Text(
-                    text = census.provenance.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = census.headline(),
+                    text = row.label(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                census.rows.forEach { row ->
-                    Text(
-                        text = row.label(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+            }
+            Text(
+                text = CENSUS_STRICTNESS_NOTE,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = census.sourceNote,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            onThisStockCensusLine(state)?.let { line ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
-                    text = CENSUS_STRICTNESS_NOTE,
+                    text = line,
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = census.sourceNote,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                onThisStockCensusLine(state)?.let { line ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
             }
         }
     }

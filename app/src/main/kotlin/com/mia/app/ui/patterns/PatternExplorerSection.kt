@@ -1,25 +1,23 @@
 package com.mia.app.ui.patterns
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,6 +27,9 @@ import com.mia.app.domain.pattern.GlossaryEntry
 import com.mia.app.domain.pattern.PatternCatalog
 import com.mia.app.domain.pattern.PatternEvaluation
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.GlassTheme
+import com.mia.app.ui.theme.glass.glassPressScale
 
 /**
  * The Pattern Explorer: what happened to **every** pattern on this stock, in the chosen window.
@@ -300,6 +301,15 @@ private fun NotEvaluatedRow(outcome: EvaluationOutcome.NotEvaluated, onClick: ()
  *
  * The whole row is the touch target and opens the glossary, so every pattern — including the ones
  * that did not match — is one tap from an explanation.
+ *
+ * A [GlassCard] rather than the Material `Card` this replaced, for the same reason every other row
+ * on the Patterns screen is one: it is a `LazyColumn` item, and `GlassCard` has no blur parameter at
+ * all. Muted and scored rows still differ by *two* channels, so the distinction survives a washed-out
+ * screen: the pane's tint and the tone of the type on it.
+ *
+ * The press dip shares one [MutableInteractionSource] with the ripple, so the two cannot drift apart,
+ * and it is a `graphicsLayer` scale — a press never remeasures or relayouts the row. The corner radius
+ * is unchanged: `MiaShapes.medium` is the 12 dp this row clipped to by hand.
  */
 @Composable
 private fun RowCard(
@@ -310,29 +320,30 @@ private fun RowCard(
     detail: String,
     muted: Boolean = false,
 ) {
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .glassPressScale(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
             .semantics { contentDescription = "$title. $badgeDescription. $detail" },
-        colors = CardDefaults.cardColors(
-            containerColor = if (muted) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                MaterialTheme.colorScheme.secondaryContainer
-            },
-            contentColor = if (muted) {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
-        ),
+        tint = if (muted) {
+            GlassTheme.palette.tintSoft
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (muted) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
         ) {

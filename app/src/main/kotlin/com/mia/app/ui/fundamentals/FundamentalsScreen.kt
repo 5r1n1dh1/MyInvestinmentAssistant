@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,6 +61,9 @@ import com.mia.app.ui.common.displayName
 import com.mia.app.ui.common.formatFixed
 import com.mia.app.ui.common.formatPercent
 import com.mia.app.ui.theme.MiaSpacing
+import com.mia.app.ui.theme.glass.GlassCard
+import com.mia.app.ui.theme.glass.GlassScreenBackdrop
+import com.mia.app.ui.theme.glass.glassEntrance
 import kotlin.math.abs
 
 /**
@@ -103,6 +104,23 @@ import kotlin.math.abs
  * used unchanged, and [SectorPanel] prints the resolver's own reason for not resolving. A wrong
  * sector is not cosmetic — §7.3 lets it decide which ratios are displayed at all.
  *
+ * ### Glass (planv2 W7)
+ * ```
+ *  GlassScreenBackdrop  one blurred background for this screen, unless a frame already drew one
+ *  GlassCard            the sector panel, the overview, every ratio card, the quarterly cards and
+ *                       the coverage panel: a pane and a hairline, and NO blur — they are all
+ *                       `LazyColumn` items, which is the case `GlassCard` refuses to blur for
+ * ```
+ * [GlassScreenBackdrop] rather than a bare backdrop because this screen has two entry points: a
+ * standalone nav destination *and* the Fundamentals tab inside
+ * [com.mia.app.ui.detail.StockDetailScreen], which draws the frame's single layer. One call is
+ * correct in both.
+ *
+ * The two §7.3 absences are the one thing here that deliberately keeps its own containers — a
+ * `tertiary`-bordered box for *not applicable*, and no container at all for *not sourced* — because
+ * the difference between them **is** the container, per the table above. A pane behind them would
+ * collapse two of the four renderings into one.
+ *
  * @param viewModel obtained with `hiltViewModel()`. The symbol arrives through the route's
  *   `SavedStateHandle` (argument name `symbol`, see `Screen.Fundamentals`), so the tab is restorable
  *   after process death without a field on the ViewModel.
@@ -119,76 +137,114 @@ fun FundamentalsScreen(
         EvidenceDialog(flag = flag, onDismissRequest = { evidenceFlag = null })
     }
 
-    Column(
+    GlassScreenBackdrop(
         modifier = modifier
             .fillMaxSize()
             .testTag(FUNDAMENTALS_TAG),
     ) {
-        // plan.md §8.3: at the top of the tab, and outside the scroll so a flag cannot scroll away
-        // before it has been read.
-        RedFlagAccess(
-            flags = state.redFlags,
-            // The Fundamentals tab never rendered a coverage section — `flagCoverageIncomplete`
-            // was computed and then unused — so the gap is stated in the row itself.
-            skippedRules = state.skippedRules,
-            ruleFailures = state.ruleFailures,
-            onFlagClick = { evidenceFlag = it },
-            modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
-        )
-
-        state.notFetchedNote?.let { note ->
-            Text(
-                text = note,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(horizontal = MiaSpacing.lg)
-                    .testTag(NOT_FETCHED_TAG),
+        Column(modifier = Modifier.fillMaxSize()) {
+            // plan.md §8.3: at the top of the tab, and outside the scroll so a flag cannot scroll away
+            // before it has been read.
+            RedFlagAccess(
+                flags = state.redFlags,
+                // The Fundamentals tab never rendered a coverage section — `flagCoverageIncomplete`
+                // was computed and then unused — so the gap is stated in the row itself.
+                skippedRules = state.skippedRules,
+                ruleFailures = state.ruleFailures,
+                onFlagClick = { evidenceFlag = it },
+                modifier = Modifier.padding(horizontal = MiaSpacing.lg, vertical = MiaSpacing.sm),
             )
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = MiaSpacing.lg,
-                end = MiaSpacing.lg,
-                top = MiaSpacing.sm,
-                bottom = MiaSpacing.xxl,
-            ),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
-        ) {
-            state.errorReason?.let { reason ->
-                item(key = ERROR_KEY) {
-                    ErrorState(reason = reason, onRetry = viewModel::onRetry)
+            state.notFetchedNote?.let { note ->
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(horizontal = MiaSpacing.lg)
+                        .testTag(NOT_FETCHED_TAG),
+                )
+            }
+
+            // The stagger index for [glassEntrance], one per section as it is emitted. A plain local
+            // counter rather than a number per item, so a section added or removed re-staggers itself.
+            var entrance = 0
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = MiaSpacing.lg,
+                    end = MiaSpacing.lg,
+                    top = MiaSpacing.sm,
+                    bottom = MiaSpacing.xxl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MiaSpacing.md),
+            ) {
+                state.errorReason?.let { reason ->
+                    item(key = ERROR_KEY) {
+                        ErrorState(reason = reason, onRetry = viewModel::onRetry)
+                    }
+                }
+
+                item(key = SECTOR_KEY) {
+                    SectorPanel(state = state, modifier = Modifier.glassEntrance(index = entrance++))
+                }
+
+                if (state.isLoading) {
+                    item(key = LOADING_KEY) { LoadingState(label = LOADING_LABEL) }
+                }
+
+                if (state.cards.isNotEmpty()) {
+                    item(key = OVERVIEW_KEY) {
+                        RatioOverview(state = state, modifier = Modifier.glassEntrance(index = entrance++))
+                    }
+                }
+
+                state.cards.forEach { card ->
+                    item(key = cardKey(card)) {
+                        RatioCardView(
+                            card = card,
+                            state = state,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                if (state.needsQuarterlySection) {
+                    item(key = QUARTERLY_KEY) {
+                        QuarterlySection(
+                            rows = state.quarterly,
+                            state = state,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                    state.quarterly.forEach { row ->
+                        item(key = quarterlyKey(row)) {
+                            QuarterlyCard(
+                                row = row,
+                                state = state,
+                                modifier = Modifier.glassEntrance(index = entrance++),
+                            )
+                        }
+                    }
+                }
+
+                if (state.needsCoverageSection) {
+                    item(key = COVERAGE_KEY) {
+                        CoverageSection(
+                            state = state,
+                            modifier = Modifier.glassEntrance(index = entrance++),
+                        )
+                    }
+                }
+
+                item(key = FOOTER_KEY) {
+                    DisclaimerFooter(
+                        text = Disclosure.DATA_SOURCE,
+                        modifier = Modifier.glassEntrance(index = entrance++),
+                    )
                 }
             }
-
-            item(key = SECTOR_KEY) { SectorPanel(state = state) }
-
-            if (state.isLoading) {
-                item(key = LOADING_KEY) { LoadingState(label = LOADING_LABEL) }
-            }
-
-            if (state.cards.isNotEmpty()) {
-                item(key = OVERVIEW_KEY) { RatioOverview(state = state) }
-            }
-
-            state.cards.forEach { card ->
-                item(key = cardKey(card)) { RatioCardView(card = card, state = state) }
-            }
-
-            if (state.needsQuarterlySection) {
-                item(key = QUARTERLY_KEY) { QuarterlySection(rows = state.quarterly, state = state) }
-                state.quarterly.forEach { row ->
-                    item(key = quarterlyKey(row)) { QuarterlyCard(row = row, state = state) }
-                }
-            }
-
-            if (state.needsCoverageSection) {
-                item(key = COVERAGE_KEY) { CoverageSection(state = state) }
-            }
-
-            item(key = FOOTER_KEY) { DisclaimerFooter(text = Disclosure.DATA_SOURCE) }
         }
     }
 }
@@ -208,12 +264,15 @@ fun FundamentalsScreen(
  * industry word, and `SectorResolver` returns `OTHER` for it deliberately). Saying so, with the
  * resolver's reason, is what keeps the generic list below from reading as the app's opinion about
  * the company.
+ *
+ * A [GlassCard], because it is the first thing on the tab and the one panel a reader has to read
+ * before any ratio means anything.
  */
 @Composable
 private fun SectorPanel(state: FundamentalsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(title = SECTOR_TITLE, subtitle = SECTOR_SUBTITLE)
         Row(
@@ -275,9 +334,9 @@ private fun sectorLabel(state: FundamentalsUiState): String =
 private fun RatioOverview(state: FundamentalsUiState, modifier: Modifier = Modifier) {
     val figures = state.cards.sumOf { card -> card.readings.count { it.hasValue } }
     val total = state.cards.sumOf { card -> card.readings.size }
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(
             title = RATIOS_TITLE,
@@ -314,40 +373,34 @@ private fun RatioCardView(
     modifier: Modifier = Modifier,
 ) {
     val anyStale = card.readings.any { it.availability.state == RatioState.STALE }
-    Card(
+    GlassCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag(CARD_TAG_PREFIX + card.slot.id.name),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set. A pane over a
+        // blurred backdrop needs the secondary tone stated explicitly, because nothing on the tab
+        // inherits it.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
-            CardHeader(card = card)
-            card.readings.forEach { reading ->
-                ReadingRow(reading = reading, state = state)
-            }
-            if (card.wantsTrend) {
-                TrendBlock(
-                    trend = card.trend,
-                    note = card.trendNote,
-                    unit = card.readings.firstOrNull()?.unit ?: RatioUnit.PERCENT,
-                )
-            }
-            if (anyStale) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(
-                    text = CARD_STALE_LINE,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+        CardHeader(card = card)
+        card.readings.forEach { reading ->
+            ReadingRow(reading = reading, state = state)
+        }
+        if (card.wantsTrend) {
+            TrendBlock(
+                trend = card.trend,
+                note = card.trendNote,
+                unit = card.readings.firstOrNull()?.unit ?: RatioUnit.PERCENT,
+            )
+        }
+        if (anyStale) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                text = CARD_STALE_LINE,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }
@@ -877,9 +930,9 @@ private fun QuarterlySection(
     modifier: Modifier = Modifier,
 ) {
     val readable = rows.count { !it.isAbsent }
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(title = QUARTERLY_TITLE, subtitle = QUARTERLY_SUBTITLE)
         Text(
@@ -926,109 +979,103 @@ private fun QuarterlyCard(
     modifier: Modifier = Modifier,
 ) {
     val comparison = row.comparison
-    Card(
+    GlassCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag(QUARTERLY_CARD_TAG_PREFIX + row.metric.name),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        arrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        // What the `CardDefaults.cardColors(contentColor = onSurfaceVariant)` call set.
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MiaSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-        ) {
+        Text(
+            text = row.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            text = row.metric.rationale,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        if (row.isAbsent) {
             Text(
-                text = row.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
-            Text(
-                text = row.metric.rationale,
+                text = comparison.notes.joinToString(SEPARATOR),
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(QUARTERLY_ABSENT_NOTE_TAG),
             )
+            // Labelled for the card's content lambda rather than a `Column`: the pane supplies its own
+            // column, and an absent line has nothing after it to render.
+            return@GlassCard
+        }
 
-            if (row.isAbsent) {
-                Text(
-                    text = comparison.notes.joinToString(SEPARATOR),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(QUARTERLY_ABSENT_NOTE_TAG),
-                )
-                return@Column
-            }
+        val latest = comparison.latest
+        if (latest != null) {
+            Text(
+                text = formatReading(latest.value, row.metric.unit),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics {
+                    contentDescription = "${row.title} ${formatReading(latest.value, row.metric.unit)}" +
+                        " in ${latest.period}, ${unitLabel(row.metric.unit)}"
+                },
+            )
+            Text(
+                text = LATEST_PERIOD_PREFIX + latest.period,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
-            val latest = comparison.latest
-            if (latest != null) {
+        ComparisonRow(
+            label = QUARTERLY_ON_QUARTER_LABEL,
+            change = comparison.quarterOverQuarterPercent,
+            now = comparison.latest,
+            before = comparison.previousQuarter,
+        )
+        ComparisonRow(
+            label = QUARTERLY_YEAR_ON_YEAR_LABEL,
+            change = comparison.yearOnYearPercent,
+            now = comparison.latest,
+            before = comparison.sameQuarterPriorYear,
+        )
+        if (!row.hasAnyComparison) {
+            Text(
+                text = NO_COMPARISON_PREFIX + comparison.notes.joinToString(SEPARATOR),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(QUARTERLY_NO_COMPARISON_TAG),
+            )
+        } else if (comparison.notes.isNotEmpty()) {
+            comparison.notes.forEach { note ->
                 Text(
-                    text = formatReading(latest.value, row.metric.unit),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.semantics {
-                        contentDescription = "${row.title} ${formatReading(latest.value, row.metric.unit)}" +
-                            " in ${latest.period}, ${unitLabel(row.metric.unit)}"
-                    },
-                )
-                Text(
-                    text = LATEST_PERIOD_PREFIX + latest.period,
+                    text = note,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
 
-            ComparisonRow(
-                label = QUARTERLY_ON_QUARTER_LABEL,
-                change = comparison.quarterOverQuarterPercent,
-                now = comparison.latest,
-                before = comparison.previousQuarter,
-            )
-            ComparisonRow(
-                label = QUARTERLY_YEAR_ON_YEAR_LABEL,
-                change = comparison.yearOnYearPercent,
-                now = comparison.latest,
-                before = comparison.sameQuarterPriorYear,
-            )
-            if (!row.hasAnyComparison) {
-                Text(
-                    text = NO_COMPARISON_PREFIX + comparison.notes.joinToString(SEPARATOR),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(QUARTERLY_NO_COMPARISON_TAG),
-                )
-            } else if (comparison.notes.isNotEmpty()) {
-                comparison.notes.forEach { note ->
-                    Text(
-                        text = note,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        QuarterlySparkline(
+            series = comparison.series,
+            unit = row.metric.unit,
+            modifier = Modifier.testTag(QUARTERLY_SPARKLINE_TAG_PREFIX + row.metric.name),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
+        ) {
+            state.freshness?.let { freshness ->
+                AsOfChip(source = row.source, asOf = row.asOf, freshness = freshness)
             }
-
-            QuarterlySparkline(
-                series = comparison.series,
-                unit = row.metric.unit,
-                modifier = Modifier.testTag(QUARTERLY_SPARKLINE_TAG_PREFIX + row.metric.name),
+            Text(
+                text = unitLabel(row.metric.unit),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MiaSpacing.sm),
-            ) {
-                state.freshness?.let { freshness ->
-                    AsOfChip(source = row.source, asOf = row.asOf, freshness = freshness)
-                }
-                Text(
-                    text = unitLabel(row.metric.unit),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }
@@ -1162,12 +1209,15 @@ private fun quarterlySparklineSpoken(series: List<QuarterlyPoint>, unit: RatioUn
  * Without this an absent ratio reads as a gap in the data rather than a gap in our ability to read
  * the data, and an absent red-flag check reads as "no flags" — which plan.md §12 calls the most
  * dangerous possible failure in the product.
+ *
+ * A pane like every other section, because this is a section and not one of the four §7.3 absence
+ * renderings whose whole point is to differ from their neighbours by their container.
  */
 @Composable
 private fun CoverageSection(state: FundamentalsUiState, modifier: Modifier = Modifier) {
-    Column(
+    GlassCard(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        arrangement = Arrangement.spacedBy(MiaSpacing.xs),
     ) {
         SectionHeader(title = COVERAGE_TITLE, subtitle = COVERAGE_SUBTITLE)
         if (state.cards.isEmpty()) {
