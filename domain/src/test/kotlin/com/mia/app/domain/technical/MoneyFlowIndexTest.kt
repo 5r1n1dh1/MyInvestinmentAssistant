@@ -109,26 +109,30 @@ class MoneyFlowIndexTest {
 
     @Test
     fun `volume decides whether a move counts, which is the whole point`() {
-        // The price path rises then falls, so the final 14-bar window is all *falling* bars in both
-        // series. The only difference is where the volume sits.
+        // Bars strictly alternate up and down, so every 14-bar window contains **both** directions.
         //
-        // The contrast has to live INSIDE the measured window. An earlier version of this test put
-        // the volume split in the first 20 bars and the reading in the last 14 — so both series had
-        // the same all-rising window, both read 100, and the assertion only failed because two
-        // equal numbers are not greater than each other. A test can fail by accident and still be
-        // measuring nothing.
-        fun prices(i: Int): Double = if (i < 20) 100.0 + i else 120.0 - (i - 20)
+        // That is the property the previous two attempts of this test missed, and it is the reason
+        // each failed for a different accidental reason:
+        //   - volume split in bars 0–19, reading in the last 14 → both windows all-rising, both 100
+        //   - prices rising then falling, split at 20       → both windows all-falling, both 0
+        // A window containing only one direction pins positive flow (or negative) at exactly zero,
+        // and the ratio then collapses to its bound **regardless of how large the other side is** —
+        // so the magnitude of the volume contrast, the entire subject of the test, never entered
+        // the arithmetic. The two series have to differ inside a window that already carries both
+        // signs, or nothing about weighting is being measured.
+        fun zigZag(i: Int): Double = if (i % 2 == 1) 101.0 else 100.0
 
-        val onTheRise = candles(40, close = ::prices, volume = { i -> if (i < 20) 10_000L else 10L })
-        val onTheFall = candles(40, close = ::prices, volume = { i -> if (i < 20) 10L else 10_000L })
+        val onTheUpBars = candles(40, close = ::zigZag, volume = { i -> if (i % 2 == 1) 10_000L else 10L })
+        val onTheDownBars = candles(40, close = ::zigZag, volume = { i -> if (i % 2 == 0) 10_000L else 10L })
 
-        val riseMfi = MoneyFlowIndex.compute(onTheRise).last()!!
-        val fallMfi = MoneyFlowIndex.compute(onTheFall).last()!!
+        val upMfi = MoneyFlowIndex.compute(onTheUpBars).last()!!
+        val downMfi = MoneyFlowIndex.compute(onTheDownBars).last()!!
 
+        assertTrue(upMfi > 50.0, "volume concentrated on rising bars must read above the midpoint ($upMfi)")
+        assertTrue(downMfi < 50.0, "volume concentrated on falling bars must read below it ($downMfi)")
         assertTrue(
-            fallMfi < riseMfi,
-            "identical prices, but volume on the way down should read lower ($fallMfi) than " +
-                "volume on the way up ($riseMfi)",
+            upMfi > downMfi,
+            "identical prices, so the only difference is where the volume sits: $upMfi vs $downMfi",
         )
     }
 
