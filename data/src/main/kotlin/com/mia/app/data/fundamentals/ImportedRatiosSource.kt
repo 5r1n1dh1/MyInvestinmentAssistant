@@ -136,9 +136,8 @@ class ImportedRatiosSource : ManualFundamentalsSource {
         require(lines.size >= 2) {
             "the file needs a header row and one data row; found ${lines.size} non-empty line(s)"
         }
-        val header = lines.first().split(',').map { it.trim().lowercase() }
-        val cells = lines[1].split(',').map { it.trim() }
-        val byColumn = header.zip(cells).toMap()
+        val header = splitTopLevel(lines.first()).map { it.trim().trim('"').lowercase() }
+        val cells = splitTopLevel(lines[1]).map { it.trim().trim('"') }
         val errors = mutableListOf<String>()
         val values = LinkedHashMap<String, Any>()
 
@@ -147,8 +146,8 @@ class ImportedRatiosSource : ManualFundamentalsSource {
         symbol?.let { values["symbol"] = it.uppercase() }
         asOf?.let { values["asOf"] = it }
         for ((column, setter) in NUMERIC_COLUMNS) {
-            val raw = byColumn[column.lowercase()] ?: continue
-            if (raw.isEmpty() || raw in PLACEHOLDERS) continue
+            val raw = byColumn.cell(column) ?: continue
+            if (raw.isEmpty() || raw.lowercase() in PLACEHOLDERS) continue
             val value = raw.replace(",", "").toDoubleOrNull()
             if (value == null) errors += "column '$column' reads \"$raw\", which is not a number"
             else setter(values, value)
@@ -189,8 +188,8 @@ class ImportedRatiosSource : ManualFundamentalsSource {
         symbol?.let { values["symbol"] = it.uppercase() }
         asOf?.let { values["asOf"] = it }
         for ((column, setter) in NUMERIC_COLUMNS) {
-            val raw = flat[column.lowercase()] ?: continue
-            if (raw.isEmpty() || raw in PLACEHOLDERS || raw == "null") continue
+            val raw = flat[column.lowercase()]?.trim() ?: continue
+            if (raw.isEmpty() || raw.lowercase() in PLACEHOLDERS) continue
             val value = raw.replace(",", "").toDoubleOrNull()
             if (value == null) errors += "field \"$column\" reads \"$raw\", which is not a number"
             else setter(values, value)
@@ -201,8 +200,10 @@ class ImportedRatiosSource : ManualFundamentalsSource {
     /**
      * Splits on commas that are not inside a quoted string.
      *
-     * A quoted value may itself contain a comma (`"Reliance Industries, Ltd"`), and splitting on
-     * every comma would turn one field into two and report the second as an unrecognised column.
+     * This is not a JSON-only concern. An Indian-format number in a spreadsheet is quoted —
+     * `"15,80,194"` — and splitting on every comma turns one field into three and reports the
+     * last two as unrecognised columns. Since a spreadsheet export is the overwhelmingly likely
+     * origin of a file like this, the CSV path needs the same quote handling as the JSON one.
      */
     private fun splitTopLevel(body: String): List<String> {
         val parts = mutableListOf<String>()
@@ -274,14 +275,24 @@ class ImportedRatiosSource : ManualFundamentalsSource {
             confidence = Confidence.SINGLE,
         )
 
+    /**
+     * Case-insensitive column/field lookup.
+     *
+     * Headers and JSON keys are lower-cased once on the way in — a spreadsheet writes `asOf`,
+     * `ASOF` or `As Of` for the same column — so the lookup lower-cases too. Normalising here
+     * rather than at each call site is what stops a file that is otherwise perfect from failing on
+     * the capital O.
+     */
+    private fun Map<String, String>.cell(key: String): String? = this[key.lowercase()]?.trim()
+
     private fun Map<String, String>.required(key: String, errors: MutableList<String>): String? {
-        val value = this[key]?.trim()
+        val value = cell(key)
         if (value.isNullOrBlank()) errors += "no \"$key\" column"
         return value
     }
 
     private fun Map<String, String>.date(key: String, errors: MutableList<String>): LocalDate? {
-        val value = this[key]?.trim()
+        val value = cell(key)
         if (value.isNullOrBlank()) {
             errors += "no \"$key\" column"
             return null
@@ -299,6 +310,7 @@ class ImportedRatiosSource : ManualFundamentalsSource {
 
     private companion object {
         /** Cells that mean "no value", never zero. Mirrors `ScreenerHtml.PLACEHOLDERS`. */
+        /** Lower-case: every call site compares `raw.lowercase()` against this. */
         val PLACEHOLDERS = setOf("", "-", "--", "na", "n/a", "null", "nil", "none")
 
         /**
