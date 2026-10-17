@@ -250,17 +250,28 @@ class PublishedInsightTest {
         )
         assertEquals(InsightProvenance.DEVICE_STORED, table.provenance)
         assertEquals(DistanceBucket.entries.size, table.rows.size)
-        // Cumulative buckets, so every sample lands in exactly one and the widest holds them all.
-        val widest = assertNotNull(table.row(DistanceBucket.BEYOND_12))
-        assertEquals(simulation.resolved.size, widest.samples)
-        table.rows.forEach { row ->
-            val narrow = assertNotNull(table.row(requireNotNull(row.bucket))).samples
+        // `DistanceBucket.of` is exclusive — each sample lands in the tightest band that contains
+        // it — so the bands partition the sample and a tighter band can never hold more than a
+        // wider one. There is deliberately no "all levels" band: `BEYOND_12` is the open-ended
+        // remainder, not a superset.
+        assertEquals(
+            simulation.resolved.size,
+            table.rows.sumOf { it.samples },
+            "every settled outcome must land in exactly one distance band",
+        )
+        table.rows.zipWithNext().forEach { (tighter, wider) ->
             assertTrue(
-                narrow <= widest.samples,
-                "${row.label} holds $narrow samples, more than the open-ended band's ${widest.samples}",
+                tighter.samples <= wider.samples,
+                "${tighter.label} holds ${tighter.samples} samples, more than the wider " +
+                    "${wider.label}'s ${wider.samples}",
             )
         }
-        assertTrue(table.hasReportableCell, "930 settled outcomes must clear the reporting gate")
+        // The stand-in detector's levels sit 4-5 % from price, so the band the app's own record
+        // actually populates is the one inside the gate, and it is reportable.
+        val populated = assertNotNull(table.row(DistanceBucket.WITHIN_5))
+        assertTrue(populated.samples > 0, "no settled outcome fell within 5 % of the close")
+        assertTrue(populated.isReportable, "${populated.samples} samples in one band is reportable")
+        assertTrue(table.hasReportableCell)
         assertNull(table.withheldReason)
     }
 
@@ -321,14 +332,28 @@ class PublishedInsightTest {
     // ------------------------------------------------------------------- census
 
     @Test
-    fun `every pattern the census names still produces a candidate on the fixture`() {
+    fun `a single scan is a different measurement from the census, and the panel says windows`() {
+        // Measured over the same 20 large caps the census walked. A detector pass emits matches; the
+        // census counts windows per gate stage. They are not the same number and never were — so the
+        // published column is worded "windows", and this test exists to stop a future edit from
+        // relabelling it as matches.
         val counts = candidateCountsByPattern()
+        assertEquals(
+            SCAN_MATCHES_ON_FIXTURE,
+            counts.values.sum(),
+            "the detectors now emit ${counts.values.sum()} matches over the census's own symbols, " +
+                "so the census's window counts need re-measuring before this panel is trusted",
+        )
         PublishedCensus.CENSUS.rows.forEach { row ->
-            val live = counts[row.patternName]
             assertTrue(
-                live != null && live > 0,
-                "${row.patternName} produces no candidate on the fixture any more (counts=$counts), " +
-                    "so the census is claiming a pattern that does not fire",
+                row.label().contains("windows"),
+                "the census row must be worded in windows, was \"${row.label()}\"",
+            )
+            val emitted = counts[row.patternName] ?: 0
+            assertTrue(
+                emitted <= row.survivingWindows,
+                "${row.patternName} emitted $emitted matches from ${row.survivingWindows} surviving " +
+                    "windows, which cannot be right",
             )
         }
     }
@@ -345,7 +370,7 @@ class PublishedInsightTest {
             )
         }
         rows.forEach { row ->
-            assertTrue(row.candidates > 0, "${row.patternName} kept nothing, so it has no row")
+            assertTrue(row.survivingWindows > 0, "${row.patternName} kept nothing, so it has no row")
             assertTrue(row.lost >= 0, row.label())
             assertTrue(row.bindingGate.isNotBlank(), "${row.patternName} must name its binding gate")
             AdviceLanguage.requireClean(row.label())
@@ -507,5 +532,15 @@ class PublishedInsightTest {
 
         /** `DetectorStrictnessCensus`: five-pivot head-and-shoulders-shaped windows. */
         const val HEAD_AND_SHOULDERS_WINDOWS = 257
+
+        /**
+         * Matches the thirteen evaluated detectors emit over the census's own 20 symbols in one
+         * pass, measured on the fixture: Double Top 34, Double Bottom 29, Ascending Triangle 2,
+         * Head & Shoulders 1, Bullish Engulfing 1, Hammer 4, Rising Wedge 9.
+         *
+         * Recorded because the census's window counts are a *different* measurement and a reader of
+         * this file will otherwise assume they are the same one.
+         */
+        const val SCAN_MATCHES_ON_FIXTURE = 80
     }
 }

@@ -1137,7 +1137,10 @@ private fun NotesSection(state: PatternsUiState, modifier: Modifier = Modifier) 
  * them is **correctly strict**, with each threshold traced to a line in the textbook the app is
  * built from. That is a measurement, and until now it lived in a test file where no reader could
  * reach it. So it is shown here: per pattern, how many windows reached that pattern's own shape gate,
- * how many candidates survived every later gate, and which gate took the rest.
+ * how many of those went on to form a candidate, and which gate took the rest.
+ *
+ * The counts are **windows**, not matches: the census walks candidate windows and counts how many
+ * survive each gate, which is not the number of matches one scan emits.
  *
  * ### Provenance, stated on the panel itself
  * The census's provenance is `PUBLISHED_FIXTURE` and the badge says so in the first line. This is

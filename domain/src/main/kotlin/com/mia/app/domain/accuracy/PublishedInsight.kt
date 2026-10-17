@@ -145,8 +145,8 @@ object PublishedInsight {
  * daily data. That is **correct strictness**, measured gate by gate — every one of those thresholds
  * is traced to a line in the book — but a reader who searches a large cap and sees an empty list has
  * no way to tell "strict by design" from "broken", and concludes the latter. So the census is shown:
- * how many windows reached each pattern's own shape gate, how many candidates survived every gate
- * afterwards, and which gate removed the rest.
+ * how many windows reached each pattern's own shape gate, how many of those went on to form a
+ * candidate, and which gate removed the rest.
  *
  * ### Why the numbers live in production and are pinned by a test
  * The census was measured in `DetectorStrictnessCensus` on the committed fixture. Evidence that only
@@ -161,7 +161,7 @@ object PublishedInsight {
  * the engine to one fixture — which is what the score-discrimination gate exists to prevent.
  *
  * @property symbolsScanned stocks the census walked.
- * @property rows one per pattern that produced a candidate in that measurement, widest funnel first.
+ * @property rows one per pattern the census measured, widest funnel first.
  */
 data class PatternCensus(
     val provenance: InsightProvenance,
@@ -171,11 +171,10 @@ data class PatternCensus(
 ) {
     /** The one-line summary the panel leads with, provenance first. */
     fun headline(): String {
-        val fired = rows.size
-        val text = "${provenance.label}. In that measurement $fired of the app's evaluated " +
-            "patterns produced at least one candidate across $symbolsScanned large caps, and each " +
-            "row below says how many windows reached the pattern's shape gate, how many candidates " +
-            "survived, and which gate took the rest."
+        val measured = rows.size
+        val text = "${provenance.label}. Each row below is one pattern's funnel over those " +
+            "$symbolsScanned large caps: how many windows reached the pattern's own shape gate, " +
+            "how many of them went on to form a candidate, and which gate took the rest."
         AdviceLanguage.requireClean(text)
         HonestyContract.requireNotProbabilityClaim(text)
         return text
@@ -183,32 +182,45 @@ data class PatternCensus(
 }
 
 /**
- * One pattern's census row: the funnel, from the detector's own shape gate to the candidate it
- * kept.
+ * One pattern's census row: the funnel, from the pattern's own shape gate to the windows that went
+ * on to form a candidate.
+ *
+ * ### Both columns are **window counts**, and that is the whole point
+ * `DetectorStrictnessCensus` walks candidate windows and counts how many survive each of a
+ * pattern's gates in order, so [reachedFirstGate] is "windows that satisfied the shape gate" and
+ * [survivingWindows] is "windows that survived every later gate". Neither is the number of matches
+ * a single scan would emit.
+ *
+ * That distinction was measured rather than assumed, and it is why the column is not called
+ * "matches": re-running the detectors over the same 20 symbols and counting what they emit gives a
+ * third set of numbers — Ascending Triangle emits 2 matches where the census counts 4 surviving
+ * windows, and Descending Triangle and Bull Flag emit none on a single full-series pass where the
+ * census counts 23 and 150 windows. All three sets are true about different things, and a panel that
+ * quoted one under another's label would be the mislabelling this app keeps refusing to make.
  *
  * @property reachedFirstGate windows that satisfied the pattern's shape gate — the first, widest
  *   stage. This is where a detector's own geometry rules apply, so a large number here and a small
- *   [candidates] is the detector being strict, not a reader being unlucky.
- * @property candidates candidates that survived **every** later gate: structure, prior-trend, the
- *   bar-count gate, the score, and the projection-distance gate.
+ *   [survivingWindows] is the detector being strict, not a reader being unlucky.
+ * @property survivingWindows windows that passed **every** later gate: the structure rules, the
+ *   prior-trend rule and the bar-span caps.
  * @property bindingGate which of those later gates removed most of the rest, in the detector's own
  *   terms.
  */
 data class PatternCensusRow(
     val patternName: String,
     val reachedFirstGate: Int,
-    val candidates: Int,
+    val survivingWindows: Int,
     val bindingGate: String,
 ) {
     init {
-        require(candidates <= reachedFirstGate) {
-            "$patternName kept $candidates candidates out of $reachedFirstGate shape-qualifying " +
+        require(survivingWindows <= reachedFirstGate) {
+            "$patternName kept $survivingWindows windows out of $reachedFirstGate shape-qualifying " +
                 "windows, which is not a funnel"
         }
     }
 
     /** Windows removed after the first gate. Never negative — the `init` block forbids it. */
-    val lost: Int get() = reachedFirstGate - candidates
+    val lost: Int get() = reachedFirstGate - survivingWindows
 
     /**
      * The row as one line, with both counts.
@@ -217,9 +229,8 @@ data class PatternCensusRow(
      * would put a percentage on screen with no sample size beside it.
      */
     fun label(): String {
-        val text = "$patternName: $candidates ${if (candidates == 1) "candidate" else "candidates"} " +
-            "from $reachedFirstGate ${if (reachedFirstGate == 1) "window" else "windows"} that " +
-            "reached its shape gate. Binding gate: $bindingGate."
+        val text = "$patternName: $survivingWindows of $reachedFirstGate windows that reached its " +
+            "shape gate went on to form a candidate. Binding gate: $bindingGate."
         AdviceLanguage.requireClean(text)
         return text
     }
@@ -228,9 +239,10 @@ data class PatternCensusRow(
 /**
  * The published detector-strictness census, measured on the committed fixture.
  *
- * Every row is a real measurement from `DetectorStrictnessCensus`'s walk over 20 NSE large caps:
- * the first-gate column is that census's own stage count, and the candidate column is pinned by a
- * test that re-runs the detectors over the same symbols.
+ * Every row is a real measurement from `DetectorStrictnessCensus`'s walk over 20 NSE large caps, and
+ * both columns are that census's own stage counts. `PublishedInsightTest` pins the two stages whose
+ * arithmetic is published by reproducing them from the fixture; see [PatternCensusRow] for why
+ * re-running the detectors is a different measurement and not a check on these numbers.
  */
 object PublishedCensus {
 
@@ -255,31 +267,31 @@ object PublishedCensus {
             PatternCensusRow(
                 patternName = "Descending Triangle",
                 reachedFirstGate = 588,
-                candidates = 23,
+                survivingWindows = 23,
                 bindingGate = "the 1.5% flat-side tolerance",
             ),
             PatternCensusRow(
                 patternName = "Bull Flag",
                 reachedFirstGate = 297,
-                candidates = 150,
+                survivingWindows = 150,
                 bindingGate = "the 20-bar cap on the flag leg",
             ),
             PatternCensusRow(
                 patternName = "Head & Shoulders",
                 reachedFirstGate = 257,
-                candidates = 4,
+                survivingWindows = 4,
                 bindingGate = "leg spacing, total span and time symmetry",
             ),
             PatternCensusRow(
                 patternName = "Ascending Triangle",
                 reachedFirstGate = 246,
-                candidates = 4,
+                survivingWindows = 4,
                 bindingGate = "the 1.5% flat-side tolerance",
             ),
             PatternCensusRow(
                 patternName = "Bearish Engulfing",
                 reachedFirstGate = 15,
-                candidates = 3,
+                survivingWindows = 3,
                 bindingGate = "the prior-trend rule, after strict engulfing geometry",
             ),
         ),
