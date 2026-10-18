@@ -5,6 +5,8 @@ import com.mia.app.ui.compare.CompareDataSource
 import com.mia.app.ui.compare.RealCompareDataSource
 import com.mia.app.ui.journal.JournalDataSource
 import com.mia.app.ui.journal.RealJournalDataSource
+import com.mia.app.ui.sectors.RealSectorDataSource
+import com.mia.app.ui.sectors.SectorDataSource
 import com.mia.app.ui.stocklist.MarketPulseDataSource
 import com.mia.app.ui.detail.StockDetailDataSource
 import com.mia.app.ui.fundamentals.FundamentalsDataSource
@@ -80,6 +82,17 @@ abstract class UiDataSourceModule {
     @Binds
     @Singleton
     abstract fun bindCompareDataSource(impl: RealCompareDataSource): CompareDataSource
+
+    /**
+     * planv2 W3: the sector median view.
+     *
+     * Thin by design — it fetches nothing, resolves no sector and computes no median, because
+     * `SectorComparisonBuilder` in `:domain` is the single place the sample floor and the §7.3
+     * suppression rules are enforced.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindSectorDataSource(impl: RealSectorDataSource): SectorDataSource
 
     @Binds
     @Singleton

@@ -18,6 +18,7 @@ import com.mia.app.ui.education.EducationScreen
 import com.mia.app.ui.fundamentals.FundamentalsScreen
 import com.mia.app.ui.journal.JournalScreen
 import com.mia.app.ui.patterns.PatternsScreen
+import com.mia.app.ui.sectors.SectorScreen
 import com.mia.app.ui.settings.SettingsScreen
 import com.mia.app.ui.stocklist.StockListScreen
 import com.mia.app.ui.technicals.TechnicalsScreen
@@ -50,6 +51,7 @@ import com.mia.app.ui.technicals.TechnicalsScreen
  * | `Screen.Accuracy` | [AccuracyScreen] | |
  * | `Screen.Journal` | [JournalScreen] | gap E5. Argument-free: the journal spans every symbol written about, and its one callback opens the Accuracy tab so the app's own record can be read in full beside the reader's. |
  * | `Screen.Compare` | [CompareScreen] | gap E6. Argument-free: the compared set is re-chosen on the screen. |
+ * | `Screen.Sector` | [SectorScreen] | the sector median beside the subject's ratios. Argument-free; the peer set is derived from what this device holds. |
  * | `Screen.Settings` | [SettingsScreen] | |
  *
  * `Screen.Fundamentals` and `Screen.Technicals` therefore have two entry points each — their own
@@ -156,6 +158,7 @@ fun MiaNavHost(
                 onOpenEducation = { navController.navigate(Screen.Education.route) },
                 onOpenJournal = { navController.navigate(Screen.Journal.route) },
                 onOpenCompare = { navController.navigate(Screen.Compare.route) },
+                onOpenSector = { navController.navigate(Screen.Sector.route) },
             )
         }
 
@@ -167,6 +170,10 @@ fun MiaNavHost(
                     navController.navigate(Screen.Accuracy.route) { launchSingleTop = true }
                 },
             )
+        }
+
+        composable(route = Screen.Sector.route) {
+            SectorScreen()
         }
 
         composable(route = Screen.Compare.route) {

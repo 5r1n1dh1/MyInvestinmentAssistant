@@ -22,11 +22,13 @@ import com.mia.app.data.android.repo.DefaultJournalRepository
 import com.mia.app.data.android.repo.DefaultIndexRepository
 import com.mia.app.data.android.repo.DefaultPatternRepository
 import com.mia.app.data.android.repo.DefaultRedFlagRepository
+import com.mia.app.data.android.repo.DefaultSectorRepository
 import com.mia.app.data.android.repo.DefaultSymbolRepository
 import com.mia.app.data.android.repo.FundamentalsRepository
 import com.mia.app.data.android.repo.IndexRepository
 import com.mia.app.data.android.repo.PatternRepository
 import com.mia.app.data.android.repo.RedFlagRepository
+import com.mia.app.data.android.repo.SectorRepository
 import com.mia.app.data.android.repo.SymbolRepository
 import com.mia.app.data.android.repo.DecisionCounterRepository
 import dagger.Binds
@@ -102,6 +104,17 @@ abstract class RepositoryModule {
     abstract fun bindDecisionCounterRepository(
         impl: DefaultDecisionCounterRepository,
     ): DecisionCounterRepository
+
+    /**
+     * planv2 W3: the peer group the sector median is computed over.
+     *
+     * Reads the `ratios` and `symbols` tables and nothing else — no fetch path, no schema change.
+     * The peer group is what this device has already stored, and that constraint is the feature's
+     * central honesty property rather than a limitation to route around later.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindSectorRepository(impl: DefaultSectorRepository): SectorRepository
 
     // -------------------------------------------------------------------------- interfaces
 

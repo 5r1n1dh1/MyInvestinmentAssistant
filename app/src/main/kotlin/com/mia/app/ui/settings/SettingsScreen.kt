@@ -98,6 +98,7 @@ fun SettingsScreen(
     onOpenEducation: () -> Unit = {},
     onOpenJournal: () -> Unit = {},
     onOpenCompare: () -> Unit = {},
+    onOpenSector: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -158,6 +159,7 @@ fun SettingsScreen(
                 onOpenEducation = onOpenEducation,
                 onOpenJournal = onOpenJournal,
                 onOpenCompare = onOpenCompare,
+                onOpenSector = onOpenSector,
             )
         }
 
@@ -234,6 +236,7 @@ private fun MeaningSection(
     onOpenEducation: () -> Unit,
     onOpenJournal: () -> Unit,
     onOpenCompare: () -> Unit,
+    onOpenSector: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -258,6 +261,7 @@ private fun MeaningSection(
         // comparison shows figures side by side without ranking, scoring or combining them.
         JournalEntryCard(onOpen = onOpenJournal)
         CompareEntryCard(onOpen = onOpenCompare)
+        SectorEntryCard(onOpen = onOpenSector)
     }
 }
 
@@ -348,6 +352,55 @@ private fun CompareEntryCard(onOpen: () -> Unit) {
  * tell "Education" from a glossary of six terms, and "19 modules · 108 lessons" is the difference
  * between a link they click and a link they skip.
  */
+/**
+ * The way into the sector comparison.
+ *
+ * ### Why the subtitle leads with the population
+ * A sector median is only as good as the peers behind it, and this app's peers are the companies it
+ * happens to hold a page for — which on a fresh device is almost none of them. A card reading
+ * simply "Compare against your sector" would promise an industry benchmark the screen may not be
+ * able to produce, so the copy states the set it actually compares against before the reader taps.
+ */
+private fun SectorEntryCard(onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .testTag(SECTOR_ENTRY_TAG)
+            .semantics {
+                contentDescription = "Sector comparison, this stock against companies in its own " +
+                    "sector that this device holds pages for"
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(MiaSpacing.xs),
+        ) {
+            Text(
+                text = SECTOR_HEADING,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(text = SECTOR_SUBTITLE, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * The way into the three-level curriculum.
+ *
+ * States its size rather than just its name. A reader deciding whether this is worth opening cannot
+ * tell "Education" from a glossary of six terms, and "19 modules · 108 lessons" is the difference
+ * between a link they click and a link they skip.
+ */
+
 @Composable
 private fun EducationEntryCard(onOpen: () -> Unit) {
     Card(
@@ -990,6 +1043,19 @@ private const val EDUCATION_SUBTITLE =
 
 /** Test tag for the curriculum link, so its presence is assertable rather than assumed. */
 private const val EDUCATION_ENTRY_TAG = "education-entry"
+
+private const val SECTOR_HEADING: String = "Sector comparison"
+
+/**
+ * Leads with the population, deliberately. "Compare against your sector" would promise an
+ * industry benchmark this device may not hold; the peers are the companies it has a page for.
+ */
+private const val SECTOR_SUBTITLE: String =
+    "Your stock beside the companies in its own sector that this device holds a page for. "
+        + "Every median says how many it used."
+
+/** Test tag for the sector-comparison link. */
+private const val SECTOR_ENTRY_TAG: String = "sector-entry"
 
 /** Test tags for gap E5 and gap E6 entry points. */
 private const val JOURNAL_ENTRY_TAG = "journal-entry"
