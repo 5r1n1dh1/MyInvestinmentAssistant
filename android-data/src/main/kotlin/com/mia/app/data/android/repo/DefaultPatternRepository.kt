@@ -16,6 +16,7 @@ import com.mia.app.domain.pattern.ProjectionBuilder
 import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.domain.technical.TrendRegime
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -215,12 +216,25 @@ class DefaultPatternRepository @Inject constructor(
      * asked*, which are different bugs and look identical as one number.
      *
      * ### Why a failure here does not fail the scan
-     * `runCatching` with a note rather than a throw. The counter is observability, not the product:
-     * a scan is a reader's request for an analysis of a stock, and failing it because a diagnostic
-     * table could not be written would trade a working feature for a working dashboard. The failure
-     * is reported *in the scan's own notes*, which is exactly where a reader debugging a missing
-     * projection will look — and it is also where a silent failure would otherwise have been
-     * invisible, which is the bug this whole workstream exists to remove.
+     * The write is attempted, and a failure is turned into a **note** rather than an exception —
+     * with one exception of its own. The counter is observability, not the product: a scan is a
+     * reader's request for an analysis of a stock, and failing it because a diagnostic table could
+     * not be written would trade a working feature for a working dashboard. The failure is reported
+     * *in the scan's own notes*, which is where a reader debugging a missing projection will look —
+     * and it is also where a silent failure would otherwise have stayed invisible, which is the bug
+     * this whole workstream exists to remove.
+     *
+     * Two details in that are load-bearing:
+     *
+     * * **The note carries no exception message.** Everywhere else in this layer the rule is that
+     *   a user-facing sentence comes from a typed failure, never from `Throwable.message` — which
+     *   three times in four is `SQLiteConstraintException: ... (code 1555)`. The note says what
+     *   happened and that nothing else is affected; the exception text goes nowhere, because there
+     *   is nowhere here to put it.
+     * * **`CancellationException` is re-thrown.** `runCatching` catches `Throwable`, so the obvious
+     *   spelling would swallow the cancellation of a scan the reader navigated away from — and
+     *   report the very failure this workstream exists to make visible. A cancellation is not a
+     *   database problem and must propagate.
      */
     private suspend fun recordGateDecisions(
         matches: List<Match>,
@@ -228,7 +242,7 @@ class DefaultPatternRepository @Inject constructor(
         lastClose: Double,
         barCount: Int,
         regime: TrendRegime,
-    ): List<String> = runCatching {
+    ): List<String> = try {
         val today = todayInMarket()
         decisionCounterRepository.recordScan(today)
         matches.forEach { match ->
@@ -250,16 +264,16 @@ class DefaultPatternRepository @Inject constructor(
                 today = today,
             )
         }
-    }.fold(
-        onSuccess = { emptyList() },
-        onFailure = { failure ->
-            listOf(
-                "The on-device decision counter could not be updated for this scan, so the counts " +
-                    "in Settings are behind what has actually happened: ${failure.message ?: "the " +
-                        "write failed"}. Nothing about the analysis itself is affected.",
-            )
-        },
-    )
+        emptyList()
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Exception) {
+        listOf(
+            "The on-device decision counter could not be updated for this scan, so the counts " +
+                "under Settings are behind what actually happened. Nothing about the analysis " +
+                "itself is affected, and the next scan will try again.",
+        )
+    }
 
     override suspend fun storedMatches(
         symbol: String,
