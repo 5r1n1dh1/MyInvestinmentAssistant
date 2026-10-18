@@ -42,6 +42,7 @@ class DefaultPatternRepository @Inject constructor(
     private val symbolDao: SymbolDao,
     private val detectors: DetectorRegistry,
     private val indexRepository: IndexRepository,
+    private val decisionCounterRepository: DecisionCounterRepository,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : PatternRepository {
 
@@ -164,6 +165,14 @@ class DefaultPatternRepository @Inject constructor(
             regime = snapshot.trendRegime,
         )
 
+        val counterNotes = recordGateDecisions(
+            matches = result.matches,
+            timeframe = timeframe,
+            lastClose = candles.last().close,
+            barCount = result.barCount,
+            regime = snapshot.trendRegime,
+        )
+
         DataResult.ok(
             value = PatternScan(
                 symbol = symbol,
@@ -175,14 +184,82 @@ class DefaultPatternRepository @Inject constructor(
                 minBarsRequired = result.minBarsRequired,
                 insufficientHistory = result.insufficientHistory,
                 pivots = result.pivots.pivots,
-                notes = result.notes + persisted.notes,
+                notes = result.notes + persisted.notes + counterNotes,
             ),
             source = candles.last().source,
             fetchedOn = todayInMarket(),
             asOf = candles.last().date,
-            notes = result.notes + persisted.notes,
+            notes = result.notes + persisted.notes + counterNotes,
         )
     }
+
+    /**
+     * Tells the on-device decision counter what the gate decided for this scan — gap F3.
+     *
+     * ### Why this is the recording point and nowhere else
+     * [projectionOf]'s own KDoc already states that a scan is the only place the
+     * four things `ProjectionGate` needs still exist at once — the breakout close, the bar count,
+     * the match's own measured move and the regime the scan resolved. A counter hooked anywhere else
+     * would either re-derive the rule (a second copy of it, which is exactly how the score gate and
+     * the distance gate drifted apart in the first place) or record a decision that was never made.
+     *
+     * ### What is counted, and why it is not everything
+     * One evaluation per **kept** match, which is one per candidate the engine had a verdict about.
+     * Candidates the engine suppressed below the render threshold are deliberately not counted:
+     * they never became a projection decision, and counting them would put geometry the reader was
+     * never shown into the denominator of a rate the reader is being asked to trust. The screen
+     * states this population in words rather than leaving the sample quietly undefined.
+     *
+     * The scan itself is recorded once as well, and that is what makes "0 fired" legible: with a
+     * scan counter, zero admissions can mean *the gate refused everything* or *the gate was never
+     * asked*, which are different bugs and look identical as one number.
+     *
+     * ### Why a failure here does not fail the scan
+     * `runCatching` with a note rather than a throw. The counter is observability, not the product:
+     * a scan is a reader's request for an analysis of a stock, and failing it because a diagnostic
+     * table could not be written would trade a working feature for a working dashboard. The failure
+     * is reported *in the scan's own notes*, which is exactly where a reader debugging a missing
+     * projection will look — and it is also where a silent failure would otherwise have been
+     * invisible, which is the bug this whole workstream exists to remove.
+     */
+    private suspend fun recordGateDecisions(
+        matches: List<Match>,
+        timeframe: Timeframe,
+        lastClose: Double,
+        barCount: Int,
+        regime: TrendRegime,
+    ): List<String> = runCatching {
+        val today = todayInMarket()
+        decisionCounterRepository.recordScan(today)
+        matches.forEach { match ->
+            // The same alignment resolution the engine applied inside `verdictFor`, so the tally
+            // records the decision that was actually taken rather than a re-derivation of it.
+            val aligned = PatternEngine.regimeAligned(
+                regime = regime,
+                direction = PatternEngine.resolveDirection(match),
+                category = match.category,
+            )
+            decisionCounterRepository.record(
+                blocker = ProjectionGate.blocker(
+                    match = match,
+                    lastClose = lastClose,
+                    timeframe = timeframe,
+                    barCount = barCount,
+                    regimeAligned = aligned,
+                ),
+                today = today,
+            )
+        }
+    }.fold(
+        onSuccess = { emptyList() },
+        onFailure = { failure ->
+            listOf(
+                "The on-device decision counter could not be updated for this scan, so the counts " +
+                    "in Settings are behind what has actually happened: ${failure.message ?: "the " +
+                        "write failed"}. Nothing about the analysis itself is affected.",
+            )
+        },
+    )
 
     override suspend fun storedMatches(
         symbol: String,

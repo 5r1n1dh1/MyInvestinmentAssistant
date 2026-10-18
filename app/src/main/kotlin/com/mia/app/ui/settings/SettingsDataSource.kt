@@ -51,6 +51,37 @@ interface SettingsDataSource {
     suspend fun clearCache(): CacheClearResult
 
     /**
+     * The on-device decision counter — gap F3.
+     *
+     * Its own read rather than a field on [coverage] because it answers a different question and
+     * fails differently: coverage is "what does this device know about the market", the counter is
+     * "what has this device decided about its own feature". Keeping them apart means a database
+     * hiccup on the market tables cannot blank the one figure that says whether the app's headline
+     * feature is alive, and the reset below cannot be confused with a cache clear — the two clear
+     * very different things and the screen says so before either is pressed.
+     *
+     * [DecisionCounterReport.EMPTY] is a real answer, not a failure: it is what a device that has
+     * never scanned reports, and the screen renders it as "not measured yet" rather than as a
+     * zero-length failure.
+     */
+    suspend fun decisionCounter(): DecisionCounterReport
+
+    /**
+     * Clears the decision counter and returns what the screen should say about it.
+     *
+     * ### Why this is not folded into [clearCache]
+     * Because they remove opposite things. "Clear cached data" is about *not holding* market data,
+     * and this build says plainly that it cannot remove any. The counter is about *holding a
+     * record*, and a reader who wants that record gone is exercising a control this app owes them:
+     * a tally a reader cannot clear is a permanent claim about a session they cannot remember.
+     *
+     * The return value is a sentence rather than a count because the interesting cases are not the
+     * counts — they are "there was nothing to clear" and "that was cleared", which the caller
+     * should render as itself rather than deriving from an integer.
+     */
+    suspend fun resetDecisionCounter(): DecisionCounterReset
+
+    /**
      * Whether the device can recognise speech at all, and whether the microphone is granted.
      *
      * A plain two-value answer rather than a `Context` query in the composable, so the same check
@@ -249,6 +280,25 @@ class SettingsUnavailableException(
     val reason: String,
     val isTransient: Boolean = true,
 ) : RuntimeException(reason)
+
+/**
+ * What happened when the reader cleared the decision counter.
+ *
+ * A type rather than an `Int`, because the two interesting outcomes are "nothing was there" and
+ * "that was cleared", and neither is well served by a number the screen has to interpret — an
+ * integer invites a caller to render "0 cleared", which reads as a failure when it is the opposite.
+ *
+ * @property rowsRemoved how many counter rows went. `0` means the counter was already at zero.
+ * @property message the sentence to show, written once so the confirmation and the post-reset
+ *   summary cannot disagree.
+ */
+data class DecisionCounterReset(
+    val rowsRemoved: Int = 0,
+    val message: String,
+) {
+    /** `true` when there was nothing to clear. Still a success: the reader asked, and it is now zero. */
+    val wasAlreadyEmpty: Boolean get() = rowsRemoved == 0
+}
 
 /** Test tag on the settings root. */
 const val SETTINGS_TAG: String = "mia_settings"

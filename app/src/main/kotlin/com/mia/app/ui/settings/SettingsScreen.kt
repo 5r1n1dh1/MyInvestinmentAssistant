@@ -163,6 +163,19 @@ fun SettingsScreen(
 
         item(key = COVERAGE_KEY) { CoverageSection(state, viewModel::onRetry) }
 
+        // gap F3, planv2 §W10. Placed inside Data coverage rather than beside it, because it *is* a
+        // coverage statement — not of the market, but of this device's own feature — and splitting
+        // it across two sections would bury the only thing on this screen a reader cannot get
+        // anywhere else.
+        item(key = DECISION_COUNTER_KEY) {
+            DecisionCounterSection(
+                report = state.decisionCounter,
+                errorReason = state.decisionCounterErrorReason,
+                isResetting = state.isResettingCounter,
+                onReset = viewModel::onResetDecisionCounter,
+            )
+        }
+
         item(key = NOTIFICATIONS_KEY) { NotificationsSection() }
 
         item(key = GLASS_KEY) { GlassSection() }
@@ -1103,6 +1116,7 @@ private const val ABOUT_KEY = "settings.about"
 private const val DISCLAIMER_KEY = "settings.disclaimer"
 private const val MEANING_KEY = "settings.meaning"
 private const val COVERAGE_KEY = "settings.coverage"
+private const val DECISION_COUNTER_KEY = "settings.decision_counter"
 private const val NOTIFICATIONS_KEY = "settings.notifications"
 private const val GLASS_KEY = "settings.glass"
 private const val SPEECH_KEY = "settings.speech"
