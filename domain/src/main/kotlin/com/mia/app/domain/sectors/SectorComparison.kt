@@ -148,27 +148,6 @@ data class SectorComparison(
 
     /** True when at least one row carries a published median, so the two-column layout has a use. */
     val hasAnyBenchmark: Boolean get() = rows.any { row -> row.benchmarks.any { it.isPublished } }
-
-    companion object {
-        val EMPTY = SectorComparison(
-            subject = SectorCompany(
-                symbol = "",
-                name = "",
-                resolution = com.mia.app.domain.ratios.SectorResolution.unresolved("no company"),
-                asOf = null,
-                isStale = false,
-                readings = emptyMap(),
-            ),
-            population = SectorPopulation(
-                sector = Sector.OTHER,
-                subjectSymbol = "",
-                subjectHoldingCount = 0,
-                members = emptyList(),
-                notComparableReason = SectorPopulation.NO_PEERS_REASON,
-            ),
-            rows = emptyList(),
-        )
-    }
 }
 
 /**
@@ -255,13 +234,17 @@ object SectorComparisonBuilder {
      * nothing marked as better?" — arrives after the reader has looked for a winner and not found
      * one. Every clause is a refusal this package enforces in code; the sentence exists so the
      * reader learns that the absence is deliberate rather than unfinished.
+     *
+     * The wording is constrained by `SectorComplianceTest`: the screen must not *name* a ranking
+     * even to deny it, so this sentence describes the refusal in the first person rather than by
+     * listing the words it refuses to use.
      */
     const val NO_VERDICT_NOTE: String =
-        "Two numbers, no verdict. This screen does not say whether a figure is good, above " +
-            "average or better than peers, because that is a conclusion and this app draws " +
-            "conclusions about what a number *is*, not about what to do about it. A median " +
-            "describes the companies whose pages this device happens to hold — not the sector — " +
-            "and its count is printed under every figure so you can weigh it."
+        "Two numbers, no verdict. This screen does not tell you whether a figure is good, where it " +
+            "sits against its peers, or what to do about either — those are conclusions, and this " +
+            "app draws conclusions about what a number is, not about what to do next. A median " +
+            "here describes the companies whose pages this device happens to hold, not the " +
+            "sector, and its count is printed under every figure so you can weigh it for yourself."
 
     /**
      * What the comparison is drawn from, said before the reader sees any number.
