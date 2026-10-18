@@ -141,7 +141,7 @@ class SectorBenchmarkTest {
         assertEquals(3.0, SectorBenchmark.medianOf(listOf(1.0, 3.0, 5.0)))
         // An even sample takes the mean of the two middle values — the conventional definition, and
         // the only one continuous in the data as the peer count changes.
-        assertEquals(2.5, SectorBenchmark.medianOf(listOf(1.0, 2.0, 4.0, 4.0)))
+        assertEquals(2.5, SectorBenchmark.medianOf(listOf(1.0, 2.0, 3.0, 10.0)))
         assertEquals(7.0, SectorBenchmark.medianOf(listOf(7.0)))
     }
 

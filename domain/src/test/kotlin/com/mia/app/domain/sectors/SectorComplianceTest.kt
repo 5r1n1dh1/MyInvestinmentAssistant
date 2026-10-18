@@ -50,8 +50,8 @@ class SectorComplianceTest {
 
         // An energy sector and a bank: §7.3's suppression and not-sourced notes are user-facing
         // sentences too, and they are the ones most likely to be reworded carelessly.
-        texts += renderableNotes(Sector.OIL_GAS, oilGasPopulation())
-        texts += renderableNotes(Sector.BANKING, bankingPopulation())
+        texts += renderableNotes(Sector.OIL_GAS, oilGasCached())
+        texts += renderableNotes(Sector.BANKING, bankingCached())
 
         assertTrue(texts.size >= 10, "the fixtures must produce sentences to check: ${texts.size}")
 
@@ -63,12 +63,20 @@ class SectorComplianceTest {
         }
     }
 
-    /** Every sentence the screen could put on a median cell, for one sector. */
-    private fun renderableNotes(sector: Sector, population: SectorPopulation): List<String> =
-        RatioPriority.order(sector).flatMap { id ->
-            val median = SectorBenchmark.median(sector, id, population)
+    /**
+     * Every sentence the screen could put on a median cell, for one sector.
+     *
+     * Walks the sector's **composed** slot list rather than the plan's raw twelve, because §7.3
+     * adds slots and suppresses others: a check that read `RatioPriority.PLAN_ORDER` would never see
+     * the bank suppression notes, which are exactly the sentences most worth policing.
+     */
+    private fun renderableNotes(sector: Sector, cached: List<SectorCompany>): List<String> {
+        val population = SectorPopulation.select(subject = cached.first(), cached = cached)
+        return RatioPriority.order(sector).flatMap { slot ->
+            val median = SectorBenchmark.median(sector, slot.id, population)
             listOfNotNull(median.populationNote, median.note())
         } + population.populationSummary()
+    }
 
     // ------------------------------------------------------------------------- no verdict
 
@@ -96,7 +104,7 @@ class SectorComplianceTest {
     @Test
     fun `the subject column is the subject's own stored figure, verbatim`() {
         val subject = company("RELIANCE", Sector.OIL_GAS, roce = 18.4)
-        val comparison = SectorComparisonBuilder.build(subject, oilGasPopulation())
+        val comparison = SectorComparisonBuilder.build(subject, oilGasCached())
 
         val roce = comparison.rows.first { it.slot.id == RatioId.ROCE }
         val stockValue = requireNotNull(roce.stock.first().availability.value)
@@ -110,7 +118,9 @@ class SectorComplianceTest {
             stockValue != medianValue,
             "the fixture must produce two different numbers for this to mean anything",
         )
-        assertEquals(7, roce.benchmarks.first().sampleSize)
+        // Seven stored pages, one of which is the subject — so six peers, and the subject's own
+        // 18.4 is not one of the six numbers behind the median.
+        assertEquals(6, roce.benchmarks.first().sampleSize)
     }
 
     @Test
@@ -118,7 +128,7 @@ class SectorComplianceTest {
         // A bank leads with ROE and its §7.3 bank slots and has no debt/equity row at all, so the
         // sector view and the Fundamentals tab cannot disagree about which ratios a sector has.
         val bankRows = SectorComparisonBuilder
-            .build(company("HDFCBANK", Sector.BANKING, roce = 10.0), bankingPopulation())
+            .build(company("HDFCBANK", Sector.BANKING, roce = 10.0), bankingCached())
             .rows
             .map { it.slot.id }
 
@@ -137,9 +147,10 @@ class SectorComplianceTest {
 
     @Test
     fun `every published median states its sample size`() {
-        val population = oilGasPopulation()
+        val cached = oilGasCached()
+        val population = SectorPopulation.select(subject = cached.first(), cached = cached)
         val published = RatioPriority.order(Sector.OIL_GAS)
-            .map { SectorBenchmark.median(Sector.OIL_GAS, it, population) }
+            .map { slot -> SectorBenchmark.median(Sector.OIL_GAS, slot.id, population) }
             .filter { it.isPublished }
 
         assertTrue(published.isNotEmpty(), "the fixture must publish at least one median")
@@ -186,10 +197,8 @@ class SectorComplianceTest {
 
     @Test
     fun `every absence on the screen is a state that explains itself`() {
-        val comparison = SectorComparisonBuilder.build(
-            company("RELIANCE", Sector.OIL_GAS, roce = 18.4),
-            oilGasPopulation(),
-        )
+        val cached = oilGasCached()
+        val comparison = SectorComparisonBuilder.build(subject = cached.first(), cached = cached)
 
         comparison.rows.forEach { row ->
             row.stock.forEach { value ->
@@ -207,11 +216,11 @@ class SectorComplianceTest {
     // ------------------------------------------------------------------------- fixtures
 
     /** Seven oil & gas pages: the subject plus six peers, so ROCE clears the floor. */
-    private fun oilGasPopulation(): List<SectorCompany> = listOf(
+    private fun oilGasCached(): List<SectorCompany> = listOf(
         company("RELIANCE", Sector.OIL_GAS, roce = 18.4),
     ) + (1..6).map { company("PEER$it", Sector.OIL_GAS, roce = 10.0 * it) }
 
-    private fun bankingPopulation(): List<SectorCompany> = listOf(
+    private fun bankingCached(): List<SectorCompany> = listOf(
         company("HDFCBANK", Sector.BANKING, roce = 10.0),
     ) + (1..6).map { company("BANK$it", Sector.BANKING, roce = 10.0 * it) }
 

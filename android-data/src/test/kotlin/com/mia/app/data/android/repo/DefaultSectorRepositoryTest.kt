@@ -11,7 +11,6 @@ import com.mia.app.domain.model.Sector
 import com.mia.app.domain.ratios.RatioId
 import com.mia.app.domain.sectors.SectorPopulation
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import java.time.LocalDate
 import kotlin.test.Test
@@ -42,7 +41,6 @@ import kotlin.test.assertTrue
  * plan.md §12's distinction, and the one that lets the screen say "open a Fundamentals tab first"
  * rather than showing a blank table.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultSectorRepositoryTest {
 
     private val today = LocalDate.of(2026, 10, 16)

@@ -2,7 +2,6 @@ package com.mia.app.ui.sectors
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mia.app.data.android.repo.DataFailureReason
 import com.mia.app.domain.compliance.AdviceLanguage
 import com.mia.app.domain.ratios.FreshnessPolicy
 import com.mia.app.domain.sectors.SectorComparison
@@ -160,14 +159,3 @@ class SectorViewModel @Inject constructor(
         const val UNEXPECTED_FAILURE = "the sector comparison could not be built"
     }
 }
-
-/**
- * Whether [reason] is one this screen renders as an explanation rather than an error.
- *
- * Exposed for the screen's own styling decision, and separated from the ViewModel so the
- * distinction is a property of the *reason* and not of one caller's handling of it.
- */
-fun isExplainedAbsence(reason: DataFailureReason): Boolean =
-    reason == DataFailureReason.NOT_ATTEMPTED ||
-        reason == DataFailureReason.NO_ROWS_FOR_SYMBOL ||
-        reason == DataFailureReason.NOTHING_TO_DO
