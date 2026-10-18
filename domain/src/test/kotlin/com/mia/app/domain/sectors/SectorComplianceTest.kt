@@ -57,7 +57,7 @@ class SectorComplianceTest {
 
         texts.forEach { text ->
             val hits = AdviceLanguage.findForbiddenPhrases(text)
-            assertTrue(hits.isEmpty()) { "advice-like phrasing in \"${text.take(140)}\": $hits" }
+            assertTrue(hits.isEmpty(), "advice-like phrasing in \"${text.take(140)}\": $hits")
             HonestyContract.requireNotProbabilityClaim(text)
             assertTrue(text.isNotBlank(), "a blank is the misleading blank of plan.md §13")
         }
@@ -98,7 +98,7 @@ class SectorComplianceTest {
         )
         val found = verdictWords.filter { copy.contains(it) }
 
-        assertTrue(found.isEmpty()) { "ranking vocabulary in the screen's copy: $found" }
+        assertTrue(found.isEmpty(), "ranking vocabulary in the screen's copy: $found")
     }
 
     @Test
@@ -132,7 +132,10 @@ class SectorComplianceTest {
             .rows
             .map { it.slot.id }
 
-        assertEquals(RatioPriority.order(Sector.BANKING).map { it.name }, bankRows.map { it.name })
+        assertEquals(
+            RatioPriority.order(Sector.BANKING).map { it.id.name },
+            bankRows.map { it.name },
+        )
         assertTrue(
             bankRows.none { it == RatioId.DEBT_TO_EQUITY },
             "§7.3 removes a bank's debt/equity; the row must not exist at all",
