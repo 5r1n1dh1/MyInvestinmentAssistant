@@ -451,21 +451,56 @@ run URL in your final report. If CI is red, fix and re-push.
 
 ## 7. Definition of done
 
-- [ ] `ci.yml` green on `main`: JVM suites, Android compile, lint, APK artifact
-- [ ] `verify-live.yml` run manually at least once; report attached to the release PR
-- [ ] Projection gate fires ≥ 1× on the fixture (satisfiability test in CI)
-- [ ] Target-distance calibration table rendered with `n`s; score no longer gates projection
-- [ ] Market pulse card (breadth from bhavcopy) on the watchlist; RS active when an index loads
-- [ ] FII/DII + quarterly cards on all five golden fixtures
-- [ ] Every abstaining flag carries "where to verify"
-- [ ] Education hub: 3 levels, all lessons compliance-scanned, quizzes local
-- [ ] Journaling persists; personal hit rate withholds below n=30
-- [ ] Peer compare aligns by RatioSlot across sectors
-- [ ] Glassmorphism on every screen; toggle works; frame-time check green
-- [ ] minSdk 31 in manifest, gradle, README, ENVIRONMENT.md
-- [ ] README/VERIFICATION.md/DetectorRegistry docs match reality
-- [ ] Emulator smoke suite green; TalkBack checklist done
-- [ ] `gh api rate_limit` healthy at close; no job timed out in the final run
+**Status as at 2026-10-18. 17 PRs merged, zero open.** Each line says what was measured, not what was
+intended — the distinction has cost this plan three times (see `docs/VERIFICATION.md`, "Three features
+had been merged and were reachable by nobody").
+
+- [x] `build.yml` green on `main`: JVM suites, `:android-data` tests, Android compile, APK artifact.
+      Also found and fixed: `:android-data`'s eight test files had **never been executed** — the `jvm`
+      job excludes the module and `assembleDebug` compiles without running tests.
+- [x] `verify-live.yml` run on demand (run 38949742442); conclusions in
+      [`docs/LIVE-PROBE.md`](docs/LIVE-PROBE.md). It **rejected** the bank-ratio promotion the plan had
+      left pending, and closed the P3 gate.
+- [x] Projection gate fires on **156 of 976** walk-forward candidates, through the real engine path
+      (`ProjectionGateSatisfiabilityTest`). Downstream call sites routed through the gate (PR #9) —
+      including two that were drawing a projected path for *nothing*, at every score.
+- [x] Calibration table rendered with `n`s and base rates; score no longer gates projection. The
+      screen labels fixture-derived vs device-derived, and that label is a required field so no render
+      path can omit it.
+- [x] Market pulse card on the watchlist, computed from the bhavcopy rows already on disk — no
+      network, so it keeps working offline. Index series via Yahoo `^NSEI`; the three dead NSE CSV
+      shapes stay in the candidate list with their 404s pinned.
+- [x] FII/DII + trend **AVAILABLE** on all five golden fixtures; quarterly card with QoQ/YoY and
+      sparkline. Left §7.2's twelve rows untouched and unranked, because the plan assigns no rank.
+- [x] "Where to verify" covers **all 20** abstaining ratios and **all 10** flag ids. This replaced the
+      bank-ratio work the probe proved impossible.
+- [x] Education hub: 3 levels, 19 modules, 108 lessons, every one compliance-scanned, screen and route
+      built. 45 of them were declared but unregistered until `CurriculumReachabilityTest` was added.
+- [x] Journaling persists; falsification is required at two levels; personal rate withholds below n=30
+      with the gate read as a `const val =` reference so it cannot drift from the enforced one.
+- [x] Peer compare aligns by `RatioSlot.id` across sectors, with every absence explained per cell.
+      Sector medians use **three refusals** rather than one threshold — the subject is never its own
+      peer, a floor of 4 peers, and `n` printed on every figure.
+- [x] Glassmorphism on every screen; one blurred layer per screen, enforced by a composition marker
+      because three tabs are both standalone routes and slots inside the detail screen. Toggle works.
+- [x] minSdk 31 in `libs.versions.toml`, manifest comments, `docs/ENVIRONMENT.md` — with the reach cost
+      stated rather than buried.
+- [x] README / `VERIFICATION.md` / `DetectorRegistry` / `gaps.md` match reality: 13 detectors, 14
+      evaluated rows, 9 trackable; "8 of 14 never fire" distinguished from the census's window counts.
+- [x] On-device decision counter under Settings → Data coverage, with every figure's surprising state
+      derived from a measurement. `docs/ACCESSIBILITY.md` written.
+- [x] `gh api rate_limit` healthy at close.
+
+### Cannot be closed here — and is not claimed
+
+- **The P12 low-RAM (2 GB) device test.** A GitHub runner is not 2GB-RAM hardware. Cold offline
+  launch, watchlist, rotation, dark/light and glass-toggle on real hardware remain an **owner task**,
+  stated as such in `docs/VERIFICATION.md`, `docs/ENVIRONMENT.md` and `docs/ACCESSIBILITY.md`.
+- **The TalkBack sweep, the 200 % font-scale walk, touch-target measurement and the greyscale check.**
+  `docs/ACCESSIBILITY.md` §3 lists them as manual. No checklist item is marked passed on the basis of
+  anything other than a CI run.
+- **Emulator smoke suite** — the code-level half of the accessibility pass is done; the device half is
+  the owner's.
 
 ---
 
