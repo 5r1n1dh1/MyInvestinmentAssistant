@@ -50,16 +50,26 @@ def _read(path):
 
 
 def rows(path):
-    """`<n rows> <first close or -> <message or ok>`, for one time_series file."""
+    """`<n rows> <first close or -> <message or ok>` for one time_series file.
+
+    The three fields are separated by a literal ``\\x1f`` (unit separator),
+    not by spaces, because the caller reads them back with shell word
+    splitting. Provider messages contain spaces — "This symbol is not
+    found" — and the first attempt collapsed every one of them to its
+    first word, so the report claimed the provider said "This".
+    """
     data = _read(path)
     values = data.get("values") or []
+    sep = "\x1f"
     if values:
-        first = values[0].get("close", "-")
-        print("%d %s ok" % (len(values), first))
+        print(sep.join([str(len(values)), values[0].get("close", "-"), "ok"]))
         return
     # Twelve Data reports failures as `code`/`message` in a 200 body,
     # which is why an HTTP 200 alone proves nothing about this provider.
-    print("0 - %s" % str(data.get("message") or data.get("Information") or "no rows")[:90])
+    message = str(data.get("message") or data.get("Information") or "no rows")
+    # Tabs and newlines would break the table this is rendered into.
+    message = message.replace("\t", " ").replace("\n", " ").replace("|", "/")[:120]
+    print(sep.join(["0", "-", message]))
     sys.exit(0)
 
 

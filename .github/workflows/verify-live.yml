@@ -149,20 +149,37 @@ jobs:
             echo >> "$REPORT"
             echo "Costs 1 credit per call, so this is the first thing to get right." >> "$REPORT"
             echo >> "$REPORT"
+            echo "\`AAPL\` and \`INR=X\` are **controls**: they are on every Twelve Data" >> "$REPORT"
+            echo "tier including free. If they answer and the NSE shapes do not, the" >> "$REPORT"
+            echo "key is valid and the finding is *no NSE coverage on this tier* — which" >> "$REPORT"
+            echo "is a different conclusion from a bad key, and the two must not be" >> "$REPORT"
+            echo "confused." >> "$REPORT"
+            echo >> "$REPORT"
             echo "| Symbol | HTTP | Rows | First close | Provider message |" >> "$REPORT"
             echo "|---|---|---|---|---|"
             TD_WORKING=""
-            for TD_SYM in "RELIANCE:NSE" "NSE:RELIANCE" "RELIANCE" "RELIANCE:NS" "NIFTYBEES:NSE"; do
+            for TD_SYM in "AAPL" "RELIANCE:NSE" "NSE:RELIANCE" "RELIANCE" "RELIANCE:NS" "NIFTYBEES:NSE" "INR=X"; do
               TD_SAFE="$(echo "$TD_SYM" | tr ':/' '__')"
               TD_OUT="$RUNNER_TEMP/td_${TD_SAFE}.json"
               TD_CODE="$(curl -sS -o "$TD_OUT" -w '%{http_code}' --max-time 40 \
                 -H "Authorization: apikey ${TD_KEY}" \
                 "https://api.twelvedata.com/time_series?symbol=${TD_SYM}&interval=1day&outputsize=5" 2>/dev/null)" || TD_CODE="failed"
-              set -- $(python3 "$TD_HELPER" rows "$TD_OUT" 2>/dev/null) || true
-              TD_ROWS="${1:-0}"; TD_FIRST="${2:--}"; TD_MSG="${3:-ok}"
+              IFS=$'\x1f' read -r TD_ROWS TD_FIRST TD_MSG \
+                < <(python3 "$TD_HELPER" rows "$TD_OUT" 2>/dev/null) || true
+              TD_ROWS="${TD_ROWS:-0}"; TD_FIRST="${TD_FIRST:--}"; TD_MSG="${TD_MSG:-ok}"
               echo "| \`${TD_SYM}\` | ${TD_CODE} | ${TD_ROWS} | ${TD_FIRST} | ${TD_MSG} |" >> "$REPORT"
+              # Only an NSE-shaped symbol may become the working namespace.
+              # AAPL answering would otherwise be recorded as "Indian equities work".
               if [ "$TD_ROWS" -gt 0 ] 2>/dev/null && [ -z "$TD_WORKING" ]; then
-                TD_WORKING="$TD_SYM"
+                case "$TD_SYM" in
+                  *:NSE|*:NS) TD_WORKING="$TD_SYM" ;;
+                esac
+              fi
+              if [ "$TD_ROWS" -gt 0 ] 2>/dev/null; then
+                case "$TD_SYM" in
+                  *:NSE|*:NS) ;;
+                  *) TD_CONTROL_OK="${TD_CONTROL_OK:-}${TD_SYM} " ;;
+                esac
               fi
             done
             echo >> "$REPORT"
@@ -183,8 +200,9 @@ jobs:
                 TD_HCODE="$(curl -sS -o "$TD_H" -w '%{http_code}' --max-time 60 \
                   -H "Authorization: apikey ${TD_KEY}" \
                   "https://api.twelvedata.com/time_series?symbol=${TD_WORKING}&interval=1day&outputsize=${TD_SIZE}" 2>/dev/null)" || TD_HCODE="failed"
-                set -- $(python3 "$TD_HELPER" rows "$TD_H" 2>/dev/null) || true
-                TD_HROWS="${1:-0}"; TD_HFIRST="${2:--}"; TD_HMSG="${3:-ok}"
+                IFS=$'\x1f' read -r TD_HROWS TD_HFIRST TD_HMSG \
+                  < <(python3 "$TD_HELPER" rows "$TD_H" 2>/dev/null) || true
+                TD_HROWS="${TD_HROWS:-0}"; TD_HFIRST="${TD_HFIRST:--}"; TD_HMSG="${TD_HMSG:-ok}"
                 TD_EARLIEST="$(python3 -c "import json;v=(json.load(open('${TD_H}')).get('values') or []);print(v[-1]['datetime'][:10] if v else '-')" 2>/dev/null || echo "-")"
                 echo "| ${TD_SIZE} | ${TD_HCODE} | ${TD_HROWS} | ${TD_EARLIEST} | ${TD_HMSG} |" >> "$REPORT"
               done
@@ -255,8 +273,23 @@ jobs:
                 echo "was not located. Absence of a 429 here is not evidence of headroom." >> "$REPORT"
               fi
             else
-              echo "No symbol shape returned rows, so the history, agreement and rate" >> "$REPORT"
-              echo "sections were skipped rather than reported as failures." >> "$REPORT"
+              echo "**No NSE symbol shape returned rows.**" >> "$REPORT"
+              echo >> "$REPORT"
+              if [ -n "${TD_CONTROL_OK:-}" ]; then
+                echo "The control(s) \`${TD_CONTROL_OK}\` *did* answer, so the API key is" >> "$REPORT"
+                echo "valid and authenticated. The finding is therefore **this Twelve Data" >> "$REPORT"
+                echo "tier carries no NSE coverage** — not a bad key and not a wrong symbol" >> "$REPORT"
+                echo "shape. Twelve Data documents non-US equity coverage as plan-dependent," >> "$REPORT"
+                echo "so NSE is very likely a paid add-on." >> "$REPORT"
+              else
+                echo "The control symbols did not answer either, so **no conclusion about" >> "$REPORT"
+                echo "NSE coverage can be drawn from this run** — the key, the tier or the" >> "$REPORT"
+                echo "network could all be responsible. This is reported as untested rather" >> "$REPORT"
+                echo "than as a negative result." >> "$REPORT"
+              fi
+              echo >> "$REPORT"
+              echo "The history, agreement and rate sections are skipped rather than" >> "$REPORT"
+              echo "reported as failures, because there is no NSE symbol to run them on." >> "$REPORT"
             fi
           else
             echo "\`TWELVE_DATA_API_KEY\` is not set on this repository." >> "$REPORT"
