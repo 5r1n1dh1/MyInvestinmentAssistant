@@ -250,6 +250,49 @@ What survives from the original reasoning, and it is the more important half:
 **On the app's chart path, none of this was ever needed:** 126 daily bars comes from bhavcopy, free
 and unlimited. These feeds only ever mattered for training data.
 
+### 4.0b Intraday data — **MEASURED, and ruled out for the pattern work**
+
+Intraday for Indian equities is free from Yahoo. Measured on `RELIANCE.NS`, 2026-10-18:
+
+| Interval | Rows returned | Actual span | Bars/day |
+|---|---|---|---|
+| `1m` | 2,625 | **8 days** | 375 |
+| `5m` | 4,500 | **60 trading days** | 75 |
+| `15m` | 1,500 | **60 trading days** | 25 |
+| `60m` | 420 | 60 days | 7 |
+| `90m` | 300 | 60 days | 5 |
+| `1h` | 5,108 | **~3 years** | 7 |
+| `4h` | 120 | 60 days | 2 |
+
+**`2h` and `3h` are rejected by the API** — *"Invalid input - interval=3h is not supported."* The
+supported set is `1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 4h, 1d, 5d, 1wk, 1mo, 3mo`. A 3-hour bar is
+therefore **resampled from 60m or 90m**; `90m` is the nearest native interval and is the honest
+answer to "3hr-ish".
+
+**Why it is ruled out for patterns, not for display:**
+
+1. **A cup and handle needs 42–105 bars of its own timeframe.** At daily that is 2–5 months and the
+   app has it free. At `5m`, 42 bars is about **3.5 hours** — a different object entirely, and not
+   what the pattern library encodes.
+2. **Every detector constant is timeframe-specific.** `D1_MIN_BARS_BETWEEN = 3` vs `W1 = 2`;
+   `contextLookback` 20 vs 13. Intraday needs a third calibration set plus its own geometry
+   tolerances, which are scale-dependent.
+3. **Retention is shorter than the work.** `5m` and `15m` are gone after **60 trading days**. Any
+   detector calibrated on them has a three-month shelf life, and a walk-forward validation set
+   cannot be built from a single pull.
+4. **It inherits every bias in daily and adds noise.** The repository has already measured the match
+   score as *anti-correlated* with outcomes on daily bars. Feeding it noisier bars widens the
+   interval but does not add signal.
+
+**A Vercel backend does not change any of this.** It cannot extend Yahoo's retention — `5m` is 60
+trading days *at the source*, so a server can only slowly accumulate what the source still serves,
+and only by running continuously for months. It does not touch survivorship bias, which is a
+property of the source rather than of the transport. And it costs `plan.md G1` ("no keys, no cost",
+cited by `build.yml`) plus the offline-first property that lets every screen work with no backend
+at all. `Kaggle` is already the server for the one batch job in this plan, and its token is already
+present. **Intraday is therefore out**, and the recorded reason is the retention window and the
+missing calibration, not the absence of a server.
+
 ### 4.1 Data (owner decision 4)
 
 - **Source:** yfinance — the same Yahoo endpoints the app already speaks, so both fetchers agree.
@@ -386,12 +429,63 @@ gh secret list | grep KAGGLE_API_TOKEN
 
 ---
 
-## 10. Still open
+## 10. Capability answers — asked 2026-10-18
 
-1. **Cup & Handle geometry constants** — the depth/duration/retracement figures in §3.1 are the
-   textbook defaults and should be argued against `docs/spec/patterns-spec.md` during Phase 2, not
-   adopted unexamined.
-2. **How often the Kaggle job runs.** Nightly costs quota and will hit 429s; weekly with a manual
-   dispatch may be better. Cheap to decide at Phase 3.
-3. **Whether the quality score ships at all if the model passes** — it is useful for *ordering* even
-   when it does not predict. Worth revisiting once phase 3 produces per-fold numbers.
+Two direct questions, answered honestly rather than optimistically.
+
+### Q1 — *"Symbol + time range (1w/2w/1m) + interval (1hr/3hr) → chart with a selectable pattern over it?"*
+
+**No, and it is not a small change.** Four measured blockers:
+
+| Blocker | Evidence |
+|---|---|
+| `Timeframe` has only `D1` and `W1` | **30 exhaustive `when (timeframe)` sites** across `Pattern.kt`, `TechnicalPolicy`, `ZigzagPivots`, `Geometry`, `Projection`, `CandlestickPolicy`, `ChartPatternSupport`, `YahooHistorySource`, plus **7 `barsPerYear` sites.** Every one must learn the new members. |
+| Storage is keyed on **date, not timestamp** | `primaryKeys = ["symbol","timeframe","date"]`. Two 3-hour bars on one day are indistinguishable, so this needs a schema migration and every date-keyed query. |
+| **`3h` is not a feed interval** | `2h` and `3h` are **rejected by the API**. Nearest native is `90m` (measured, 300 rows/60d); anything else is resampled. |
+| Detectors are calibrated per timeframe | `D1_MIN_BARS_BETWEEN=3` vs `W1=2`; `contextLookback` 20 vs 13. Intraday needs a full third calibration plus scale-dependent geometry tolerances. |
+
+**What already works today:** symbol + `D1`/`W1` + range, with the idealised pattern overlay drawn
+over the series. That mechanism exists — `ChartState.idealPattern` — and Phase 1 makes the range
+selectable. So the *daily* answer to Q1 is already within reach.
+
+### Q2 — *"Symbol + range + interval → ML predicts which pattern is most probable to continue for the next 1 day?"*
+
+**Blocked on two independent things, one technical and one policy.**
+
+1. **The model would be trained on daily geometry.** Applying daily features to intraday bars is a
+   domain mismatch — the distributions differ. Doing it properly means a *second* training pipeline
+   with intraday labels, not a reuse of the first model.
+2. **"most probable to continue" is a directional forecast**, which is what
+   `HonestyContract.PROBABILITY_CLAIMS` blocks and what the owner **declined in the 2026-10-18
+   interview** by choosing the frequency-with-`n`-and-CI form.
+
+**But the question has an honest form, and it is the one already chosen.** What can be built:
+
+- **A ranking.** "Of the four formations on this stock, this one has the cleanest geometry." No
+  forecast — an ordering, which is what `Match.score` failed to be because it was anti-correlated
+  rather than unranked.
+- **A measured continuation frequency for the top-ranked formation**, with the control beside it:
+
+  > *Of 340 formations with this geometry on daily bars, **46 %** resolved in the direction the
+  > formation implies within 5 bars. **n=340.** 95 % CI 41–51 %. **Base rate 34 %** — and the 34 %
+  > is measured from this engine's own detectors on the committed fixture.*
+
+  That *is* "which pattern is most probable to continue", answered with its sample and the thing it
+  has to beat. It is more useful than a bare percentage, and it is the only form that survives the
+  contract. Note the base rate is close to the figure: **a formation implying "up" resolving up 46 %
+  of the time is a 12-point edge, not a signal** — and displaying it honestly is the whole point.
+- **The ranking uses the conditional frequency as the sort key**, so the UI can say *"highest
+  historical continuation rate of the four"* without ever asserting one will continue.
+
+### The order that makes this work
+
+| # | Step | Gate |
+|---|---|---|
+| 1 | Phase 1 range selector (daily) | ships alone, no ML needed |
+| 2 | Phase 2 Cup & Handle | fires on fixture |
+| 3 | Phase 3 model | **clears the distance baseline, or the null is published** |
+| 4 | Ranking + frequency UI | every figure carries `n`, CI and base rate |
+
+**Intraday, if it is ever wanted, is a separate project** with its own calibration, its own
+retention problem and its own training data — and on the evidence in §4.0b it would be a project
+whose data disappears after 60 trading days.
