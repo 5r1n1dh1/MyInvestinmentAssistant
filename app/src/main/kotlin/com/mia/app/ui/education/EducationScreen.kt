@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -154,6 +155,13 @@ private fun ModuleCard(module: Module, onOpenLesson: (String) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
+                // gap F4: the 48 dp minimum, stated rather than inherited. `titleMedium` (24 sp
+                // line) over `bodySmall` (18 sp line) is 42 dp, so this header was six dp short of
+                // the accessibility floor before anything was added — the two lines that make it
+                // look generous are exactly what makes the arithmetic come out wrong. Six dp is not
+                // a visible difference to a sighted finger and it is the difference between a tap
+                // landing and missing on a budget phone held one-handed.
+                .heightIn(min = MIN_TOUCH_TARGET)
                 .semantics {
                     contentDescription = buildString {
                         append(module.title)
@@ -208,6 +216,11 @@ private fun LessonRow(lesson: Lesson, onOpen: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen)
+            // Same floor as the module header, and for the same reason: `bodyLarge` (24 sp) over
+            // `bodySmall` (18 sp) plus 4 dp of padding is 50 dp at 100 %, but a lesson whose title
+            // wraps to one line at a *smaller* system font would drop under the target without the
+            // guarantee written down.
+            .heightIn(min = MIN_TOUCH_TARGET)
             .testTag(educationLessonTag(lesson.id))
             .padding(vertical = MiaSpacing.xs),
     ) {
@@ -266,6 +279,17 @@ private fun LevelTabs(
         }
     }
 }
+
+/**
+ * The accessibility floor for anything tappable — gap F4.
+ *
+ * `48.dp` is the Material minimum touch target and the number Android's own accessibility settings
+ * ask for. It is written down here rather than trusted to the Material defaults because the rows
+ * that need it are content-sized: two `Text` lines that happen to add up to 42 dp today will stop
+ * adding up to it the first time a lesson title wraps or the type scale changes, and nothing about
+ * that change would look like a regression.
+ */
+private val MIN_TOUCH_TARGET = 48.dp
 
 /** Test tag for the hub, so a UI test can assert the curriculum is reachable at all. */
 const val EDUCATION_TAG: String = "education-hub"
