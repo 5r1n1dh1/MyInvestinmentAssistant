@@ -30,7 +30,7 @@ import com.mia.app.domain.pattern.ProjectionGate
  * to zero or gone implausibly high, not an individual decision that a reader can already see in
  * the app.
  *
- * `bucket` is stored as a `name()` string rather than an ordinal, for the reason `Entities.kt`
+ * `bucket` is stored as the enum's `name` rather than an ordinal, for the reason `Entities.kt`
  * rule 3 gives for every other enum here: an ordinal is silently renumbered by a reorder, and this
  * table has to survive an app update with its history intact — it is the only record of whether the
  * feature ever ran.
@@ -118,8 +118,8 @@ object DecisionBucket {
     /** A canonical scan reached the stage where the gate would have been asked. */
     const val SCAN_COMPLETED: String = "SCAN_COMPLETED"
 
-    /** Every blocker [ProjectionGate] can report, as its `name()`. */
-    val BLOCKERS: List<String> = ProjectionGate.Blocker.entries.map { it.name() }
+    /** Every blocker [ProjectionGate] can report, as its `name`. */
+    val BLOCKERS: List<String> = ProjectionGate.Blocker.entries.map { it.name }
 
     /** Every bucket a scan may fall into, so an absent row can be told from an impossible one. */
     val SCAN_BUCKETS: List<String> = listOf(SCAN_COMPLETED)

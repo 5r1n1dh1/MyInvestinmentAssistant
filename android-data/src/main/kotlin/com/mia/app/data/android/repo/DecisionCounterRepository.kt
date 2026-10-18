@@ -66,7 +66,7 @@ data class ProjectionGateTally(
 
     /** The condition that has declined most often, or `null` when nothing has been declined. */
     fun dominantBlocker(): Pair<ProjectionGate.Blocker, Long>? =
-        blockerCounts.entries.maxByOrNull { it.value }
+        blockerCounts.entries.maxByOrNull { it.value }?.let { it.key to it.value }
 
     companion object {
         /** A device on which nothing has been evaluated. A real state, not a failure. */
@@ -193,7 +193,7 @@ class DefaultDecisionCounterRepository @Inject constructor(
             val fired = counts[DecisionBucket.FIRED] ?: 0L
             val blockers = rows.mapNotNull { row ->
                 ProjectionGate.Blocker.entries
-                    .firstOrNull { it.name() == row.bucket }
+                    .firstOrNull { it.name == row.bucket }
                     ?.let { it to row.count }
             }.toMap()
             val scans = counts[DecisionBucket.SCAN_COMPLETED] ?: 0L

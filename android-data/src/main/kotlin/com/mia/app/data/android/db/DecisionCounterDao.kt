@@ -68,7 +68,7 @@ abstract class DecisionCounterDao {
      */
     @Transaction
     open suspend fun record(scope: String, blocker: ProjectionGate.Blocker?, today: String) {
-        val bucket = blocker?.name() ?: DecisionBucket.FIRED
+        val bucket = blocker?.name ?: DecisionBucket.FIRED
         bump(scope, bucket, today)
     }
 
