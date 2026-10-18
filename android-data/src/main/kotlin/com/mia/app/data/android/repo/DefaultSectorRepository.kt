@@ -60,10 +60,11 @@ class DefaultSectorRepository @Inject constructor(
             val rows = fundamentalsDao.allRatios()
             if (rows.isEmpty()) {
                 return@withContext DataResult.unavailable(
-                    DataFailure(
+                    failure = DataFailure(
                         reason = DataFailureReason.NOT_ATTEMPTED,
                         message = NOTHING_CACHED,
                     ),
+                    fetchedOn = today,
                 )
             }
 
