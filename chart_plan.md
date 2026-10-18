@@ -187,6 +187,55 @@ one line of code, so beating it is the minimum bar for a thousand lines of pipel
 
 ## 4. Phase 3 — the Kaggle pipeline
 
+### 4.0 Data sources — assessed 2026-10-18
+
+Owner added `TWELVE_DATA_API_KEY` and `ALPHA_VANTAGE_API_KEY` as GitHub secrets and asked whether
+extra feeds would remove yfinance as a bottleneck. Assessed from provider documentation; empirical
+limits still to be measured.
+
+**Short answer: not where it matters, and Alpha Vantage is likely unusable on a free tier.**
+
+| | yfinance | Twelve Data | Alpha Vantage |
+|---|---|---|---|
+| NSE coverage | ✅ verified, `.NS` | likely — `exchange`/`country` filters exist, **unverified** | ❌ **documented as BSE only** (`RELIANCE.BSE`); no NSE example |
+| Max bars per call (free) | ✅ **2,473** verified over 10y | `outputsize` up to **5,000** | ❌ **`outputsize=full` is Premium**; free returns **100 bars** |
+| Split/dividend adjustment | implicit | ✅ explicit `adjust=all\|splits\|dividends\|none` | ⚠️ `TIME_SERIES_DAILY_ADJUSTED` is **Premium** |
+| Batch multi-symbol | no | ✅ `/advanced/batch-requests` | no |
+| Cost | free, unofficial | 1 credit/symbol | per plan |
+
+**Alpha Vantage is out on three independent grounds.** Its India coverage is documented as BSE, and
+this app is NSE-based throughout (`.NS` on Yahoo, NSE bhavcopy, NSE index). Its free tier returns
+**100 daily bars** — about five months — and the ML needs ~2,473. And the endpoint carrying
+`adjusted close` plus split/dividend events is Premium. Those are documentation facts, not
+pessimism; a live key is worth spending only to confirm them.
+
+That adjustment endpoint matters more than it looks: the app's committed fixture contains **four
+real unadjusted corporate actions** (HDFCBANK −50.4 %, BAJFINANCE −89.9 %, KOTAKBANK −80.3 %,
+TATAMOTORS −40.2 %), which `CorporateActionDetector` flags rather than silently corrects. A
+training set built on unadjusted prices would teach the model that a −89.9 % day is a pattern.
+
+**Where Twelve Data would genuinely help** — and it is not rate limits:
+
+1. **`outputsize=5000` in one call per symbol.** 451 symbols = 451 calls instead of a long series
+   of ranged fetches. Fewer requests means materially less 429 exposure.
+2. **A second opinion on the data itself.** This is the real win. §6 flags Python/Kotlin pivot
+   divergence as the most dangerous risk in the project; a comparable risk is that *Yahoo* returns
+   wrong or adjusted-silently data for some symbols and nobody notices. A cross-source agreement
+   check — Twelve Data vs Yahoo, same symbols, same dates — turns an invisible data fault into a
+   CI failure. **This is the strongest argument for adding it, and it has nothing to do with
+   throughput.**
+3. **Explicit `adjust` control** instead of Yahoo's implicit behaviour, so the adjustment policy is
+   a stated parameter rather than an assumption.
+
+**What extra feeds cannot fix.** Survivorship bias — §4.2 — is not a rate-limit problem. Yahoo,
+Twelve Data and Alpha Vantage all serve only currently-listed symbols, so a second feed adds
+redundancy against outages while leaving the single largest threat to the model's validity exactly
+where it is. No free provider has delisted history.
+
+**On the app's own chart path: none of this is needed.** With the 6-month cap (§2.1) the chart reads
+126 daily bars from bhavcopy — free, unlimited, already the primary source. Twelve Data would only
+ever serve the `^NSEI` benchmark and the Kaggle fetch.
+
 ### 4.1 Data (owner decision 4)
 
 - **Source:** yfinance — the same Yahoo endpoints the app already speaks, so both fetchers agree.
