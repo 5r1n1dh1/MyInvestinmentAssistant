@@ -35,11 +35,13 @@ class MiaConverters {
  * The one database — plan.md §5.2.
  *
  * ### Version and migrations
- * * [DATABASE_VERSION] is `5`. v1 was the plan.md §5.2 table set; v2 adds
+ * * [DATABASE_VERSION] is `6`. v1 was the plan.md §5.2 table set; v2 adds
  *   `statement_rows`, `derived_metrics` and `watchlist`; v3 adds `ratios.industry`, the
  *   screener.in classification that sector resolution needs; v4 adds `index_candles`, the
  *   benchmark series that finally gives `PatternScanOptions.benchmarkCandles` something to be
- *   (see `DatabaseMigrations`); v5 adds `journal_entry`, the reader's own written record (gap E5).
+ *   (see `DatabaseMigrations`); v5 adds `journal_entry`, the reader's own written record (gap E5);
+ *   v6 adds `decision_counter`, the on-device tally of gate decisions that makes a silent failure
+ *   like A1 visible without a crash SDK (gap F3).
  * * **`fallbackToDestructiveMigration()` is never called, anywhere.** The `candles` table is
  *   write-once: its 500 daily bars per symbol cost a Yahoo round-trip per symbol to rebuild
  *   (plan.md §3.2, §13), `outcomes` is the app's published track record (plan.md §6.1) which must
@@ -70,6 +72,7 @@ class MiaConverters {
         WorkStateEntity::class,
         IndexCandleEntity::class,
         JournalEntryEntity::class,
+        DecisionCounterEntity::class,
     ],
     version = MiaDatabase.DATABASE_VERSION,
     exportSchema = true,
@@ -103,12 +106,25 @@ abstract class MiaDatabase : RoomDatabase() {
      */
     abstract fun journalDao(): JournalDao
 
+    /**
+     * The on-device decision counter — gap F3.
+     *
+     * Its own DAO rather than a method on [PatternDao], for the same reason the journal has one:
+     * the table is the **app's own record of its own behaviour**, shares no foreign key with the
+     * detection tables, and is written on a completely different cadence — once per gate
+     * evaluation, which is many times per scan — than `PatternDao`'s write-once detections. Keeping
+     * them apart also means the counter's increment can never be rolled back with a symbol's rows,
+     * which would be a far more confusing way for the tally to lose history than a reader pressing
+     * reset.
+     */
+    abstract fun decisionCounterDao(): DecisionCounterDao
+
     companion object {
         /** File name of the on-device database. */
         const val DATABASE_NAME: String = "mia.db"
 
-        /** plan.md §5.2 + the five extension tables documented on the entities. */
-        const val DATABASE_VERSION: Int = 5
+        /** plan.md §5.2 + the six extension tables documented on the entities. */
+        const val DATABASE_VERSION: Int = 6
 
         /** Applied at open time; see the class KDoc. */
         val CALLBACK: Callback = object : Callback() {
