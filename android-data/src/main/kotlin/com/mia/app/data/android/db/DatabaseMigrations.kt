@@ -24,6 +24,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * `fallbackToDestructiveMigration()` is therefore never called: a missing migration must be a
  * loud failure at development time, not a silent data loss in the field.
  *
+ * ### The 5 → 6 migration
+ * v6 adds `decision_counter` — the on-device tally of gate decisions (gap F3). Additive like every
+ * version so far, and the cheapest one to lose: it holds no market data and nothing else in this
+ * schema can reconstruct it, because it is a record of what *this install of the app* did, not of
+ * anything about a stock. A reader who clears it has asked for that, and a reader who has not must
+ * not lose it to an app update. See [MIGRATION_5_6].
+ *
  * ### The 4 → 5 migration
  * v5 adds `journal_entry` — what the reader themselves wrote down about a stock before the outcome
  * was known (gap E5). Purely additive like every version so far: no existing table is touched, so
@@ -225,6 +232,50 @@ object DatabaseMigrations {
     }
 
     /**
+     * 5 → 6.
+     *
+     * Adds `decision_counter(scope, bucket, count, firstRecordedOn, lastRecordedOn)` — the
+     * projection gate's on-device tally (gap F3).
+     *
+     * ### Why this table is additive and, unlike most in this schema, disposable
+     * `candles`, `outcomes` and `journal_entry` are all protected by refusing any destructive
+     * fallback, because they cost a network round-trip, or a published record, or the reader's own
+     * words to rebuild. This table costs **nothing** to rebuild — it starts empty and refills from
+     * the next scan — so the only thing an update must not do is delete it *silently*, and an
+     * explicit migration is what prevents that: without this step the app would refuse to open at
+     * all, which is louder and better than opening with the counter quietly at zero.
+     *
+     * ### Why there is no index
+     * The table is a fixed handful of rows — `DecisionScope.ALL.size × DecisionBucket.ALL.size`, at
+     * most nine — and every read is `SELECT *` or `SELECT * WHERE scope = ?`. A full scan of nine
+     * rows is not a performance problem, and an index on a nine-row table would be a
+     * `CREATE INDEX` on every device's open for no measurable gain. Room will not require one here,
+     * and if the table ever grows a partition key, the index belongs in the same migration as the
+     * column that needs it.
+     *
+     * The column types match `DecisionCounterEntity` exactly, including `firstRecordedOn` and
+     * `lastRecordedOn` being nullable: a row inserted by a build that predates the window columns
+     * would otherwise fail to read, and a counter that cannot be read is the one failure this
+     * whole feature exists to prevent.
+     */
+    val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `decision_counter` (
+                    `scope` TEXT NOT NULL,
+                    `bucket` TEXT NOT NULL,
+                    `count` INTEGER NOT NULL,
+                    `firstRecordedOn` TEXT,
+                    `lastRecordedOn` TEXT,
+                    PRIMARY KEY(`scope`, `bucket`)
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
+    /**
      * Every migration, in order. `DatabaseModule` passes exactly this list to Room, which is
      * what makes "the migration exists" and "the migration is registered" the same fact.
      */
@@ -233,6 +284,7 @@ object DatabaseMigrations {
         MIGRATION_2_3,
         MIGRATION_3_4,
         MIGRATION_4_5,
+        MIGRATION_5_6,
     )
 
     /**

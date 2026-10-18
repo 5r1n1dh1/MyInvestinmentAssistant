@@ -36,6 +36,22 @@ data class SettingsUiState(
     val speech: SpeechAvailability = SpeechAvailability.UNKNOWN,
 
     /**
+     * The on-device decision counter — gap F3.
+     *
+     * `null` until it has been read, and the failure path sets it back to `null` with a reason,
+     * because a counter that renders as zero after a failed read is the exact silent-empty failure
+     * plan.md §12 calls the most dangerous shape a data layer can have. `DecisionCounterReport.EMPTY`
+     * is reserved for a table that was genuinely read and was genuinely empty.
+     */
+    val decisionCounter: DecisionCounterReport? = null,
+
+    /** Why the counter could not be read, or `null`. Rendered inside the counter card only. */
+    val decisionCounterErrorReason: String? = null,
+
+    /** `true` while a reset is in flight, so the button cannot be pressed twice. */
+    val isResettingCounter: Boolean = false,
+
+    /**
      * The background-job status, keyed by task.
      *
      * Kept out of [coverage] on purpose: it changes every time a worker finishes, while coverage
@@ -167,6 +183,39 @@ class SettingsViewModel @Inject constructor(
         load()
     }
 
+    /**
+     * Clears the decision counter (gap F3).
+     *
+     * Re-reads rather than zeroing the field locally, because the honest value after a reset is
+     * whatever the table now holds — which on a device that scanned between the tap and the write
+     * is not zero, and asserting zero would be a claim this screen cannot support.
+     *
+     * The outcome lands on [SettingsUiState.actionMessage] rather than inside the counter card, so
+     * that a confirmation is visible even if the counter's own re-read then fails: telling a reader
+     * their reset did nothing because the *next* read broke would be its own small lie.
+     */
+    fun onResetDecisionCounter() {
+        if (_uiState.value.isResettingCounter) return
+        _uiState.update { it.copy(isResettingCounter = true) }
+        viewModelScope.launch {
+            try {
+                val result = withContext(backgroundDispatcher) { dataSource.resetDecisionCounter() }
+                _uiState.update { it.copy(isResettingCounter = false, actionMessage = result.message) }
+                load()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isResettingCounter = false,
+                        actionMessage = "The counter could not be cleared: " +
+                            (failure.message ?: UNEXPECTED_FAILURE),
+                    )
+                }
+            }
+        }
+    }
+
     /** Clears the one-off action message. Called when the user dismisses it. */
     fun onDismissActionMessage() {
         refreshStatusHolder.dismissActionMessage()
@@ -197,7 +246,7 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
         loadJob = viewModelScope.launch {
             try {
-                // The two reads are independent, so a failure in one must not lose the other: the
+                // The three reads are independent, so a failure in one must not lose the others: the
                 // disclaimer has to render regardless, which is why coverage's error goes into the
                 // state rather than into `errorReason`.
                 val coverage = runCatching {
@@ -205,6 +254,12 @@ class SettingsViewModel @Inject constructor(
                 }
                 val speech = runCatching {
                     withContext(backgroundDispatcher) { dataSource.speechAvailability() }
+                }
+                // The counter is read on its own so that a database hiccup on the *market* tables
+                // cannot blank the one figure that says whether the projection feature is alive —
+                // they are different tables and only one of them carries the answer to A1.
+                val counter = runCatching {
+                    withContext(backgroundDispatcher) { dataSource.decisionCounter() }
                 }
                 _uiState.update { current ->
                     current.copy(
@@ -214,6 +269,10 @@ class SettingsViewModel @Inject constructor(
                             it.message ?: UNEXPECTED_FAILURE
                         },
                         speech = speech.getOrNull() ?: SpeechAvailability.UNKNOWN,
+                        decisionCounter = counter.getOrNull() ?: current.decisionCounter,
+                        decisionCounterErrorReason = counter.exceptionOrNull()?.let {
+                            it.message ?: UNEXPECTED_FAILURE
+                        },
                     )
                 }
             } catch (cancellation: CancellationException) {

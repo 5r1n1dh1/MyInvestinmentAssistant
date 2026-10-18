@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -567,6 +566,14 @@ private fun UnresolvedHeader(resolution: SymbolResolution, modifier: Modifier = 
  * ### Why the row is not tinted
  * No green/red here. A ticker has no direction; a coloured row would imply one and would fight the
  * `ChangePercentText` colours on the detail screen.
+ *
+ * ### Why the company name is not capped at two lines (gap F4)
+ * It used to carry `maxLines = 2` with an ellipsis, which is the layout that fails exactly when the
+ * reader has asked for help: at the 200 % font scale Android offers for a low-vision user, the name
+ * truncates mid-word and the row — which is also the add-to-tracked target — gets shorter rather
+ * than taller. An Indian company name runs long ("Bank of Baroda", "Tata Motors", "Bajaj Finance"),
+ * so two lines was already tight at 100 %. The `Column` it sits in carries `weight(1f)`, so the text
+ * wraps for as many lines as it needs and the row grows with it.
  */
 @Composable
 private fun SymbolRow(
@@ -597,8 +604,6 @@ private fun SymbolRow(
                 text = summary.name,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
         }
         SeriesBadge(series = summary.series, isPriceable = summary.isPriceable)

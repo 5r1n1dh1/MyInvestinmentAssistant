@@ -16,6 +16,7 @@ import com.mia.app.data.android.repo.CandleRepository
 import com.mia.app.data.android.repo.DefaultAccuracyRepository
 import com.mia.app.data.android.repo.JournalRepository
 import com.mia.app.data.android.repo.DefaultCandleRepository
+import com.mia.app.data.android.repo.DefaultDecisionCounterRepository
 import com.mia.app.data.android.repo.DefaultFundamentalsRepository
 import com.mia.app.data.android.repo.DefaultJournalRepository
 import com.mia.app.data.android.repo.DefaultIndexRepository
@@ -29,6 +30,7 @@ import com.mia.app.data.android.repo.PatternRepository
 import com.mia.app.data.android.repo.RedFlagRepository
 import com.mia.app.data.android.repo.SectorRepository
 import com.mia.app.data.android.repo.SymbolRepository
+import com.mia.app.data.android.repo.DecisionCounterRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -87,6 +89,21 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindIndexRepository(impl: DefaultIndexRepository): IndexRepository
+
+    /**
+     * The on-device decision counter — gap F3.
+     *
+     * A `@Binds` here rather than a `@Provides` in a module of its own, for the reason this file's
+     * KDoc states: the repositories are `:app`'s entire surface, and "is every repository bound?"
+     * must stay a compile-time question answerable by reading one file. `PatternScanWorker` and the
+     * Settings screen both inject this, and a binding that lived beside either of them would be
+     * invisible to that question.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindDecisionCounterRepository(
+        impl: DefaultDecisionCounterRepository,
+    ): DecisionCounterRepository
 
     /**
      * planv2 W3: the peer group the sector median is computed over.

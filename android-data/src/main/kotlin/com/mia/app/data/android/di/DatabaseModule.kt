@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.hilt.work.HiltWorkerFactory
 import com.mia.app.data.android.db.CandleDao
 import com.mia.app.data.android.db.DatabaseMigrations
+import com.mia.app.data.android.db.DecisionCounterDao
 import com.mia.app.data.android.db.FundamentalsDao
 import com.mia.app.data.android.db.IndexDao
 import com.mia.app.data.android.db.JournalDao
@@ -90,4 +91,14 @@ object DatabaseModule {
      */
     @Provides
     fun provideJournalDao(database: MiaDatabase): JournalDao = database.journalDao()
+
+    /**
+     * The on-device decision counter — gap F3.
+     *
+     * One more line in the same list for the same reason as every line above: "is every DAO
+     * provided?" is a question this file answers by being read end to end, and a DAO bound in a
+     * feature-local module would opt out of it.
+     */
+    @Provides
+    fun provideDecisionCounterDao(database: MiaDatabase): DecisionCounterDao = database.decisionCounterDao()
 }

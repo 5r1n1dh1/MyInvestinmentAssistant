@@ -16,6 +16,7 @@ import com.mia.app.domain.pattern.ProjectionBuilder
 import com.mia.app.domain.pattern.ProjectionGate
 import com.mia.app.domain.technical.IndicatorSnapshot
 import com.mia.app.domain.technical.TrendRegime
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -42,6 +43,7 @@ class DefaultPatternRepository @Inject constructor(
     private val symbolDao: SymbolDao,
     private val detectors: DetectorRegistry,
     private val indexRepository: IndexRepository,
+    private val decisionCounterRepository: DecisionCounterRepository,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : PatternRepository {
 
@@ -164,6 +166,14 @@ class DefaultPatternRepository @Inject constructor(
             regime = snapshot.trendRegime,
         )
 
+        val counterNotes = recordGateDecisions(
+            matches = result.matches,
+            timeframe = timeframe,
+            lastClose = candles.last().close,
+            barCount = result.barCount,
+            regime = snapshot.trendRegime,
+        )
+
         DataResult.ok(
             value = PatternScan(
                 symbol = symbol,
@@ -175,12 +185,93 @@ class DefaultPatternRepository @Inject constructor(
                 minBarsRequired = result.minBarsRequired,
                 insufficientHistory = result.insufficientHistory,
                 pivots = result.pivots.pivots,
-                notes = result.notes + persisted.notes,
+                notes = result.notes + persisted.notes + counterNotes,
             ),
             source = candles.last().source,
             fetchedOn = todayInMarket(),
             asOf = candles.last().date,
-            notes = result.notes + persisted.notes,
+            notes = result.notes + persisted.notes + counterNotes,
+        )
+    }
+
+    /**
+     * Tells the on-device decision counter what the gate decided for this scan — gap F3.
+     *
+     * ### Why this is the recording point and nowhere else
+     * [projectionOf]'s own KDoc already states that a scan is the only place the
+     * four things `ProjectionGate` needs still exist at once — the breakout close, the bar count,
+     * the match's own measured move and the regime the scan resolved. A counter hooked anywhere else
+     * would either re-derive the rule (a second copy of it, which is exactly how the score gate and
+     * the distance gate drifted apart in the first place) or record a decision that was never made.
+     *
+     * ### What is counted, and why it is not everything
+     * One evaluation per **kept** match, which is one per candidate the engine had a verdict about.
+     * Candidates the engine suppressed below the render threshold are deliberately not counted:
+     * they never became a projection decision, and counting them would put geometry the reader was
+     * never shown into the denominator of a rate the reader is being asked to trust. The screen
+     * states this population in words rather than leaving the sample quietly undefined.
+     *
+     * The scan itself is recorded once as well, and that is what makes "0 fired" legible: with a
+     * scan counter, zero admissions can mean *the gate refused everything* or *the gate was never
+     * asked*, which are different bugs and look identical as one number.
+     *
+     * ### Why a failure here does not fail the scan
+     * The write is attempted, and a failure is turned into a **note** rather than an exception —
+     * with one exception of its own. The counter is observability, not the product: a scan is a
+     * reader's request for an analysis of a stock, and failing it because a diagnostic table could
+     * not be written would trade a working feature for a working dashboard. The failure is reported
+     * *in the scan's own notes*, which is where a reader debugging a missing projection will look —
+     * and it is also where a silent failure would otherwise have stayed invisible, which is the bug
+     * this whole workstream exists to remove.
+     *
+     * Two details in that are load-bearing:
+     *
+     * * **The note carries no exception message.** Everywhere else in this layer the rule is that
+     *   a user-facing sentence comes from a typed failure, never from `Throwable.message` — which
+     *   three times in four is `SQLiteConstraintException: ... (code 1555)`. The note says what
+     *   happened and that nothing else is affected; the exception text goes nowhere, because there
+     *   is nowhere here to put it.
+     * * **`CancellationException` is re-thrown.** `runCatching` catches `Throwable`, so the obvious
+     *   spelling would swallow the cancellation of a scan the reader navigated away from — and
+     *   report the very failure this workstream exists to make visible. A cancellation is not a
+     *   database problem and must propagate.
+     */
+    private suspend fun recordGateDecisions(
+        matches: List<Match>,
+        timeframe: Timeframe,
+        lastClose: Double,
+        barCount: Int,
+        regime: TrendRegime,
+    ): List<String> = try {
+        val today = todayInMarket()
+        decisionCounterRepository.recordScan(today)
+        matches.forEach { match ->
+            // The same alignment resolution the engine applied inside `verdictFor`, so the tally
+            // records the decision that was actually taken rather than a re-derivation of it.
+            val aligned = PatternEngine.regimeAligned(
+                regime = regime,
+                direction = PatternEngine.resolveDirection(match),
+                category = match.category,
+            )
+            decisionCounterRepository.record(
+                blocker = ProjectionGate.blocker(
+                    match = match,
+                    lastClose = lastClose,
+                    timeframe = timeframe,
+                    barCount = barCount,
+                    regimeAligned = aligned,
+                ),
+                today = today,
+            )
+        }
+        emptyList()
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Exception) {
+        listOf(
+            "The on-device decision counter could not be updated for this scan, so the counts " +
+                "under Settings are behind what actually happened. Nothing about the analysis " +
+                "itself is affected, and the next scan will try again.",
         )
     }
 

@@ -5,6 +5,7 @@ import com.mia.app.data.android.repo.AccuracyRepository
 import com.mia.app.data.android.repo.CandleRepository
 import com.mia.app.data.android.repo.DataFailure
 import com.mia.app.data.android.repo.DataResult
+import com.mia.app.data.android.repo.DecisionCounterRepository
 import com.mia.app.data.android.repo.FundamentalsRepository
 import com.mia.app.data.android.repo.PatternRepository
 import com.mia.app.data.android.repo.RedFlagRepository
@@ -12,6 +13,8 @@ import com.mia.app.data.android.repo.SymbolRepository
 import com.mia.app.domain.model.Timeframe
 import com.mia.app.domain.pattern.BreakoutEvaluator
 import com.mia.app.ui.settings.CoverageGap
+import com.mia.app.ui.settings.DecisionCounterReport
+import com.mia.app.ui.settings.DecisionCounterReset
 import com.mia.app.ui.settings.SettingsCoverage
 import com.mia.app.ui.settings.SettingsDataSource
 import com.mia.app.ui.settings.SettingsUnavailableException
@@ -56,6 +59,7 @@ class RealSettingsDataSource @Inject constructor(
     private val patternRepository: PatternRepository,
     private val redFlagRepository: RedFlagRepository,
     private val accuracyRepository: AccuracyRepository,
+    private val decisionCounterRepository: DecisionCounterRepository,
     @MiaBackgroundDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : SettingsDataSource {
 
@@ -234,6 +238,52 @@ class RealSettingsDataSource @Inject constructor(
             message = "Nothing was removed. This build has no way to delete stored bars, " +
                 "fundamentals or pattern detections, so the cache cannot be cleared from here. " +
                 "Your tracked symbols and their track record are untouched either way.",
+        )
+    }
+
+    /**
+     * The on-device decision counter — gap F3.
+     *
+     * ### Why a failure here is a failure and not a zero
+     * A counter that renders `0 / 0` because the table could not be read is the precise failure
+     * this feature exists to prevent: it would say "the projection gate has never fired" about a
+     * device that may have fired it four hundred times. So a typed failure propagates and the screen
+     * shows its reason *inside the counter card*, leaving the rest of Settings — including the SEBI
+     * disclaimer — untouched.
+     *
+     * [DecisionCounterReport.EMPTY] is returned only on a genuinely empty table, which is a real
+     * state and not an error.
+     */
+    override suspend fun decisionCounter(): DecisionCounterReport = onBackground {
+        val tally = decisionCounterRepository.snapshot().orThrowTyped()
+        DecisionCounterReport(
+            scans = tally.scans.toInt(),
+            evaluated = tally.evaluated.toInt(),
+            fired = tally.fired.toInt(),
+            blockerCounts = tally.blockerCounts.mapValues { (_, value) -> value.toInt() },
+            since = tally.firstRecordedOn,
+            lastSeen = tally.lastRecordedOn,
+        )
+    }
+
+    /**
+     * Clears the decision counter.
+     *
+     * Deliberately separate from [clearCache], and the message says which is which: the cache
+     * clear removes market data the app holds, this removes the app's own record of what it did.
+     * Neither touches the tracked list, and the reader is told so before either is pressed.
+     */
+    override suspend fun resetDecisionCounter(): DecisionCounterReset = onBackground {
+        val removed = decisionCounterRepository.reset().orThrowTyped()
+        DecisionCounterReset(
+            rowsRemoved = removed,
+            message = if (removed == 0) {
+                "There was nothing to clear — the counter was already at zero. Counting starts " +
+                    "again from the next scan."
+            } else {
+                "Cleared $removed counter row(s). Counting starts again from the next scan, and " +
+                    "nothing about your tracked symbols, stored bars or track record was touched."
+            },
         )
     }
 
