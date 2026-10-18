@@ -1,25 +1,32 @@
 package com.mia.app.domain.sectors
 
+import com.mia.app.domain.model.Sector
 import com.mia.app.domain.ratios.RatioAvailability
 import com.mia.app.domain.ratios.RatioId
 import com.mia.app.domain.ratios.RatioPriority
 import com.mia.app.domain.ratios.RatioState
+import com.mia.app.domain.ratios.SectorResolver
 
 /**
  * A sector median for one ratio — or, far more often on a real device, the stated reason there is
  * not one.
  *
  * ### The invariant, and why it is enforced in `init`
- * A median that carries a value must carry a non-zero [sampleSize], and a median that carries no
- * value must say why. `RatioAvailability` already forbids a `SUPPRESSED_FOR_SECTOR`, `NOT_SOURCED`
- * or `MISSING` state from carrying a number, so "median 0.0" cannot be printed for a ratio that
- * does not exist — but it cannot stop a caller from publishing a median over **one** peer. That is
- * the failure this type is here to prevent, and [sampleSize] is the field that makes it visible to
- * a reader and assertable by a test.
+ * `RatioAvailability` already forbids a `SUPPRESSED_FOR_SECTOR`, `NOT_SOURCED` or `MISSING` state
+ * from carrying a number, so "median 0.0" cannot be printed for a ratio that does not exist — but
+ * it cannot stop a caller from publishing a median over **one** peer. That is the failure this type
+ * is here to prevent, and the rule is a single line in `init`: an `AVAILABLE` median must have
+ * cleared [SectorBenchmark.MINIMUM_SAMPLE].
  *
- * @property sampleSize how many peers actually contributed a figure. This is the `n`, and it is
- *   rendered on **every** published median: the honesty contract requires a rate's sample size, and
- *   a median is the same kind of claim about a small number of points.
+ * @property sampleSize how many peers inside the freshness window actually contributed a figure.
+ *   This is the `n`, and on a published median it is rendered beside the figure: the honesty
+ *   contract requires a rate's sample size, and a median is the same kind of claim about a small
+ *   number of points.
+ *
+ *   It is **not** zero for a withheld median. A withheld row knows exactly how many peers it had
+ *   and how many it needed, and that count is the whole message — zeroing it would throw away the
+ *   one fact a reader can act on. What the floor forbids is the *value*, not the count; the
+ *   invariant below is scoped to [RatioState.AVAILABLE] for that reason.
  * @property peersWithFigure peers that published *some* figure for this ratio, before the freshness
  *   cut — so a reader can see the difference between "the peers don't publish it" and "the peers'
  *   pages are too old to count".
@@ -38,12 +45,14 @@ data class SectorMedian(
     val populationNote: String? = null,
 ) {
     init {
-        require(sampleSize == 0 || availability.state == RatioState.AVAILABLE) {
-            "$id: only an AVAILABLE median may carry a sample size (state is ${availability.state})"
-        }
-        require(sampleSize == 0 || sampleSize >= SectorBenchmark.MINIMUM_SAMPLE) {
+        // The floor is a publication rule, not a bookkeeping rule. A caller may hold three peers and
+        // must be able to say so; what it may not do is hand those three figures to the screen as a
+        // sector median. `RatioAvailability` separately forbids a non-available state carrying a
+        // value, so the two together make "a median below the floor" unrepresentable rather than
+        // merely discouraged.
+        require(availability.state != RatioState.AVAILABLE || sampleSize >= SectorBenchmark.MINIMUM_SAMPLE) {
             "$id: a median over $sampleSize peer(s) is not a sector benchmark; the floor is " +
-                "${SectorBenchmark.MINIMUM_SAMPLE}"
+                "${SectorBenchmark.MINIMUM_SAMPLE}. Withhold the value and state the count instead."
         }
     }
 
@@ -120,7 +129,7 @@ object SectorBenchmark {
      * Pure and total: every input produces a result, and no branch of it is allowed to return a
      * value without also returning the count behind it.
      */
-    fun median(sector: com.mia.app.domain.model.Sector, id: RatioId, population: SectorPopulation): SectorMedian {
+    fun median(sector: Sector, id: RatioId, population: SectorPopulation): SectorMedian {
         // Step 1 — §7.3 decides before any data is consulted, exactly as it does for a single
         // company's ratio card. Handing this to RatioPriority rather than reimplementing the table
         // is what stops the sector view and the Fundamentals tab from ever disagreeing about which
@@ -131,7 +140,7 @@ object SectorBenchmark {
                 id = id,
                 availability = RatioAvailability.suppressed(
                     RatioPriority.sectorNoteFor(sector, id)
-                        ?: "not meaningful for ${com.mia.app.domain.ratios.SectorResolver.displayNameOf(sector)}",
+                        ?: "not meaningful for ${SectorResolver.displayNameOf(sector)}",
                 ),
                 sampleSize = 0,
                 peersWithFigure = 0,
@@ -177,7 +186,10 @@ object SectorBenchmark {
             return SectorMedian(
                 id = id,
                 availability = RatioAvailability.missing(tooFewNote(fresh.size, stale)),
-                sampleSize = 0,
+                // The count survives the refusal. It is the whole message — "median withheld, you
+                // have 3 of the 4 needed" — and zeroing it would leave the reader with nothing to
+                // act on. What is refused is the value, and `init` enforces that.
+                sampleSize = fresh.size,
                 peersWithFigure = candidates.size,
                 excludedStale = stale,
                 populationNote = null,

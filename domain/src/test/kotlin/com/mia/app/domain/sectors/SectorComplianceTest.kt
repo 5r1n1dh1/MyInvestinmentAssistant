@@ -186,7 +186,11 @@ class SectorComplianceTest {
             row.benchmarks.forEach { median ->
                 if (median.isPublished) return@forEach
                 refusals++
-                assertEquals(0, median.sampleSize)
+                assertTrue(
+                    median.sampleSize < SectorBenchmark.MINIMUM_SAMPLE,
+                    "${median.id}: a withheld median is always below the floor, got " +
+                        median.sampleSize,
+                )
                 assertTrue(
                     median.availability.value == null,
                     "${median.id}: an unpublished median must carry no value",

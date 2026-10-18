@@ -57,7 +57,11 @@ data class SectorPopulation(
     val notComparableReason: String? = null,
 ) {
     init {
-        require(notComparableReason.isNullOrBlank() || members.isNotEmpty()) {
+        // An empty population must carry its reason. Expressed as "non-empty OR explained" because
+        // the failing case is the empty one — the bug this guards against is `SectorPopulation`
+        // constructed with no members and no sentence, which would reach the screen as a silent
+        // blank the reader has to interpret.
+        require(members.isNotEmpty() || !notComparableReason.isNullOrBlank()) {
             "an empty population must say why; a bare empty list is the misleading blank " +
                 "plan.md §13 warns about"
         }
