@@ -131,6 +131,163 @@ jobs:
           fi
 
           echo >> "$REPORT"
+          echo "## 4b. Alternate price feeds — Twelve Data and Alpha Vantage" >> "$REPORT"
+          echo >> "$REPORT"
+          echo "Assesses whether a second feed removes the Yahoo dependency for the" >> "$REPORT"
+          echo "Kaggle training set (chart_plan.md §4.0). **The interesting question is" >> "$REPORT"
+          echo "not throughput — it is whether two providers agree on the same closes.**" >> "$REPORT"
+          echo "A silently-wrong or differently-adjusted series from one feed is an" >> "$REPORT"
+          echo "invisible fault; a cross-source disagreement is a loud one." >> "$REPORT"
+          echo >> "$REPORT"
+          TD_HELPER=".github/scripts/td_probe.py"
+
+          TD_KEY="${{ secrets.TWELVE_DATA_API_KEY }}"
+          AV_KEY="${{ secrets.ALPHA_VANTAGE_API_KEY }}"
+
+          if [ -n "$TD_KEY" ]; then
+            echo "### Twelve Data — which symbol shape resolves an NSE listing?" >> "$REPORT"
+            echo >> "$REPORT"
+            echo "Costs 1 credit per call, so this is the first thing to get right." >> "$REPORT"
+            echo >> "$REPORT"
+            echo "| Symbol | HTTP | Rows | First close | Provider message |" >> "$REPORT"
+            echo "|---|---|---|---|---|"
+            TD_WORKING=""
+            for TD_SYM in "RELIANCE:NSE" "NSE:RELIANCE" "RELIANCE" "RELIANCE:NS" "NIFTYBEES:NSE"; do
+              TD_SAFE="$(echo "$TD_SYM" | tr ':/' '__')"
+              TD_OUT="$RUNNER_TEMP/td_${TD_SAFE}.json"
+              TD_CODE="$(curl -sS -o "$TD_OUT" -w '%{http_code}' --max-time 40 \
+                -H "Authorization: apikey ${TD_KEY}" \
+                "https://api.twelvedata.com/time_series?symbol=${TD_SYM}&interval=1day&outputsize=5" 2>/dev/null)" || TD_CODE="failed"
+              set -- $(python3 "$TD_HELPER" rows "$TD_OUT" 2>/dev/null) || true
+              TD_ROWS="${1:-0}"; TD_FIRST="${2:--}"; TD_MSG="${3:-ok}"
+              echo "| \`${TD_SYM}\` | ${TD_CODE} | ${TD_ROWS} | ${TD_FIRST} | ${TD_MSG} |" >> "$REPORT"
+              if [ "$TD_ROWS" -gt 0 ] 2>/dev/null && [ -z "$TD_WORKING" ]; then
+                TD_WORKING="$TD_SYM"
+              fi
+            done
+            echo >> "$REPORT"
+
+            if [ -n "$TD_WORKING" ]; then
+              echo "**Working namespace: \`${TD_WORKING}\`**" >> "$REPORT"
+              echo >> "$REPORT"
+              echo "### How much history does a FREE tier actually return?" >> "$REPORT"
+              echo >> "$REPORT"
+              echo "chart_plan.md assumed \`outputsize=5000\` would be available. Testing" >> "$REPORT"
+              echo "rather than trusting the docs, because the training set needs ~2,473" >> "$REPORT"
+              echo "bars per symbol and a capped tier cannot supply them." >> "$REPORT"
+              echo >> "$REPORT"
+              echo "| Outputsize asked | HTTP | Rows | Earliest | Provider message |" >> "$REPORT"
+              echo "|---|---|---|---|---|"
+              for TD_SIZE in 500 5000; do
+                TD_H="$RUNNER_TEMP/td_hist_${TD_SIZE}.json"
+                TD_HCODE="$(curl -sS -o "$TD_H" -w '%{http_code}' --max-time 60 \
+                  -H "Authorization: apikey ${TD_KEY}" \
+                  "https://api.twelvedata.com/time_series?symbol=${TD_WORKING}&interval=1day&outputsize=${TD_SIZE}" 2>/dev/null)" || TD_HCODE="failed"
+                set -- $(python3 "$TD_HELPER" rows "$TD_H" 2>/dev/null) || true
+                TD_HROWS="${1:-0}"; TD_HFIRST="${2:--}"; TD_HMSG="${3:-ok}"
+                TD_EARLIEST="$(python3 -c "import json;v=(json.load(open('${TD_H}')).get('values') or []);print(v[-1]['datetime'][:10] if v else '-')" 2>/dev/null || echo "-")"
+                echo "| ${TD_SIZE} | ${TD_HCODE} | ${TD_HROWS} | ${TD_EARLIEST} | ${TD_HMSG} |" >> "$REPORT"
+              done
+              echo >> "$REPORT"
+
+              echo "### Cross-source agreement — Twelve Data vs Yahoo" >> "$REPORT"
+              echo >> "$REPORT"
+              echo "Same symbol, same dates, two providers. A close differing by more" >> "$REPORT"
+              echo "than a rupee is either a corporate action one feed adjusted and the" >> "$REPORT"
+              echo "other did not, or one of them is wrong — and either should be loud." >> "$REPORT"
+              echo >> "$REPORT"
+              if [ -n "$CRUMB" ] && ! printf '%s' "$CRUMB" | grep -qiE 'too many|error|invalid'; then
+                echo "| Symbol | Date | Yahoo close | Twelve Data close | Difference |" >> "$REPORT"
+                echo "|---|---|---|---|---|"
+                for TD_PAIR in "RELIANCE:NSE" "TCS:NSE" "HDFCBANK:NSE" "INFY:NSE" "BAJFINANCE:NSE"; do
+                  TD_BASE="${TD_PAIR%%:*}"
+                  TD_SAFE="$(echo "$TD_PAIR" | tr ':' '_')"
+                  YJ="$RUNNER_TEMP/y_${TD_SAFE}.json"
+                  TJ="$RUNNER_TEMP/t_${TD_SAFE}.json"
+                  curl -sS --max-time 45 -o "$YJ" -b "$COOKIE_JAR" \
+                    -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+                    "https://query1.finance.yahoo.com/v8/finance/chart/${TD_BASE}.NS?range=1mo&interval=1d&crumb=${CRUMB}" >/dev/null 2>&1 || true
+                  curl -sS --max-time 45 -o "$TJ" -H "Authorization: apikey ${TD_KEY}" \
+                    "https://api.twelvedata.com/time_series?symbol=${TD_PAIR}&interval=1day&outputsize=30" >/dev/null 2>&1 || true
+                  python3 "$TD_HELPER" agree "$YJ" "$TJ" "$TD_PAIR" >> "$REPORT" 2>/dev/null \
+                    || echo "| ${TD_PAIR} | — | — | — | comparison failed |" >> "$REPORT"
+                done
+                echo >> "$REPORT"
+                echo "**BAJFINANCE is in this list deliberately.** It had a ~1:10 split" >> "$REPORT"
+                echo "inside this repository's own fixture, so it is the bar most likely to" >> "$REPORT"
+                echo "expose a difference in \`adjust\` policy. A mismatch there and nowhere" >> "$REPORT"
+                echo "else is the adjustment policy differing — which is still worth knowing" >> "$REPORT"
+                echo "before it is mistaken for a data fault." >> "$REPORT"
+              else
+                echo "The Yahoo handshake did not answer, so no cross-source comparison was" >> "$REPORT"
+                echo "possible from this run. That is a finding about this network, not about" >> "$REPORT"
+                echo "either provider." >> "$REPORT"
+              fi
+              echo >> "$REPORT"
+
+              echo "### Rate limit — bounded probe, deliberately" >> "$REPORT"
+              echo >> "$REPORT"
+              echo "**The daily credit cap is not probed, by design.** Finding it would mean" >> "$REPORT"
+              echo "deliberately exhausting the key's allowance and leaving the owner unable" >> "$REPORT"
+              echo "to use the account until it resets. The per-minute ceiling is found from" >> "$REPORT"
+              echo "a short burst instead." >> "$REPORT"
+              echo >> "$REPORT"
+              BURST_N=12
+              BURST_OK=0
+              BURST_429=0
+              for _ in $(seq 1 "$BURST_N"); do
+                BC="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+                  -H "Authorization: apikey ${TD_KEY}" \
+                  "https://api.twelvedata.com/price?symbol=${TD_WORKING}" 2>/dev/null)" || BC="err"
+                if [ "$BC" = "429" ]; then BURST_429=$((BURST_429+1)); else BURST_OK=$((BURST_OK+1)); fi
+                sleep 0.4
+              done
+              echo "| Burst | Result |" >> "$REPORT"
+              echo "|---|---|" >> "$REPORT"
+              echo "| ${BURST_N} requests in ~${BURST_N}s | ${BURST_OK} answered, ${BURST_429} x HTTP 429 |" >> "$REPORT"
+              echo >> "$REPORT"
+              if [ "$BURST_429" -gt 0 ]; then
+                echo "The per-minute ceiling was reached inside ${BURST_N} requests, so a" >> "$REPORT"
+                echo "training run over 451 symbols must pace itself and cache aggressively." >> "$REPORT"
+              else
+                echo "No 429 inside ${BURST_N} requests. The documented free-tier figure is" >> "$REPORT"
+                echo "8 credits per minute; this burst ran under that, so the real ceiling" >> "$REPORT"
+                echo "was not located. Absence of a 429 here is not evidence of headroom." >> "$REPORT"
+              fi
+            else
+              echo "No symbol shape returned rows, so the history, agreement and rate" >> "$REPORT"
+              echo "sections were skipped rather than reported as failures." >> "$REPORT"
+            fi
+          else
+            echo "\`TWELVE_DATA_API_KEY\` is not set on this repository." >> "$REPORT"
+          fi
+          echo >> "$REPORT"
+
+          if [ -n "$AV_KEY" ]; then
+            echo "### Alpha Vantage — free-tier reality check" >> "$REPORT"
+            echo >> "$REPORT"
+            echo "chart_plan.md §4.0 rules this out on documentation grounds: India" >> "$REPORT"
+            echo "coverage is documented as BSE only, \`outputsize=full\` is Premium, and" >> "$REPORT"
+            echo "the adjusted endpoint is Premium. This measures whether that holds." >> "$REPORT"
+            echo >> "$REPORT"
+            echo "| Query | HTTP | Rows | Note |" >> "$REPORT"
+            echo "|---|---|---|---|"
+            for AV_SYM in "RELIANCE.BSE" "RELIANCE.NS"; do
+              AV_J="$RUNNER_TEMP/av_$(echo "$AV_SYM" | tr '.' '_').json"
+              AV_CODE="$(curl -sS -o "$AV_J" -w '%{http_code}' --max-time 45 \
+                "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${AV_SYM}&apikey=${AV_KEY}" 2>/dev/null)" || AV_CODE="failed"
+              AV_ROWS="$(python3 -c "import json;print(len(json.load(open('${AV_J}')).get('Time Series (Daily)') or {}))" 2>/dev/null || echo "-")"
+              AV_NOTE="$(python3 -c "import json;d=json.load(open('${AV_J}'));print(next((str(d[k])[:70].replace('|','/') for k in ('Note','Information','Error Message') if k in d),'series returned'))" 2>/dev/null || echo "-")"
+              echo "| \`${AV_SYM}\` | ${AV_CODE} | ${AV_ROWS} | ${AV_NOTE} |" >> "$REPORT"
+            done
+            echo >> "$REPORT"
+            echo "A row count near **100** confirms the free tier is capped well below the" >> "$REPORT"
+            echo "~2,473 bars the training set needs, and the verdict in chart_plan.md §4.0" >> "$REPORT"
+            echo "stands on measurement rather than on documentation." >> "$REPORT"
+          else
+            echo "\`ALPHA_VANTAGE_API_KEY\` is not set on this repository." >> "$REPORT"
+          fi
+          echo >> "$REPORT"
           echo "## 5. screener.in — bank-ratio re-check (W4 decision input)" >> "$REPORT"
           echo >> "$REPORT"
           echo "Fetches ONLY the robots-permitted URL shape" >> "$REPORT"
