@@ -221,7 +221,10 @@ and shared across every symbol, since each file contains the whole market.
 ## Repo layout
 
 ```
-plan.md                  the specification this was built from
+design/plan.md           the specification this was built from
+design/planv2.md         the remediation plan, and what it closed / could not close
+design/gaps.md           the expert gap review that started all of it
+chart_plan.md            the chart range / pattern / measured-score plan
 docs/CONTRACTS.md        module boundaries + the rules every contributor follows
 docs/DATA-NOTES.md       measured behaviour of every source, and what is unverifiable here
 docs/VERIFICATION.md     what was proven, defects caught, and the open gaps
