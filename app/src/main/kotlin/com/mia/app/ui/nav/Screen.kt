@@ -25,6 +25,7 @@ private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_EDUCATION = "education"
 private const val ROUTE_JOURNAL = "journal"
 private const val ROUTE_COMPARE = "compare"
+private const val ROUTE_SECTOR = "sector"
 
 /**
  * The app's route table.
@@ -111,6 +112,9 @@ sealed class Screen(val route: String) {
      * wrong behaviour for a comparison whose whole purpose is being re-chosen while reading it.
      */
     data object Compare : Screen(ROUTE_COMPARE)
+
+    /** gap E6 sibling — sector medians beside the subject's own ratios. Argument-free, like [Compare]. */
+    data object Sector : Screen(ROUTE_SECTOR)
 
     /**
      * One lesson, by id.

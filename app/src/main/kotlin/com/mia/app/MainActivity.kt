@@ -255,6 +255,7 @@ private fun titleFor(route: String?): String = when (route) {
     Screen.Patterns.route -> "Patterns"
     Screen.Accuracy.route -> "Accuracy"
     Screen.Settings.route -> "Settings"
+    Screen.Sector.route -> "Sector comparison"
     Screen.Education.route -> "Education"
     Screen.Journal.route -> "Journal"
     Screen.Compare.route -> "Compare"
