@@ -361,6 +361,7 @@ private fun CompareEntryCard(onOpen: () -> Unit) {
  * simply "Compare against your sector" would promise an industry benchmark the screen may not be
  * able to produce, so the copy states the set it actually compares against before the reader taps.
  */
+@Composable
 private fun SectorEntryCard(onOpen: () -> Unit) {
     Card(
         modifier = Modifier
@@ -1051,8 +1052,8 @@ private const val SECTOR_HEADING: String = "Sector comparison"
  * industry benchmark this device may not hold; the peers are the companies it has a page for.
  */
 private const val SECTOR_SUBTITLE: String =
-    "Your stock beside the companies in its own sector that this device holds a page for. "
-        + "Every median says how many it used."
+    "Your stock beside the companies in its own sector that this device holds a page for. " +
+        "Every median says how many it used."
 
 /** Test tag for the sector-comparison link. */
 private const val SECTOR_ENTRY_TAG: String = "sector-entry"
