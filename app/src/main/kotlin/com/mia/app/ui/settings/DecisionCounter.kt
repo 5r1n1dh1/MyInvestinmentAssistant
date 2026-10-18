@@ -187,6 +187,8 @@ data class DecisionCounterReport(
         ),
     ) + ProjectionGate.Blocker.entries.map { blocker ->
         BlockerRow(
+            // The enum's own `name`, which is the string the DAO stored. Not a re-spelling: a
+            // label invented here would be a second vocabulary for the same four conditions.
             name = blocker.name,
             count = blockerCounts[blocker] ?: 0,
             meaning = blockerMeaning(blocker),
@@ -196,7 +198,7 @@ data class DecisionCounterReport(
 
     /** The commonest decline and its count, or `null` when nothing has been declined. */
     fun dominantBlocker(): Pair<ProjectionGate.Blocker, Int>? =
-        blockerCounts.entries.maxByOrNull { it.value }
+        blockerCounts.entries.maxByOrNull { it.value }?.let { it.key to it.value }
 
     /** Percentage of evaluations this condition stopped. `0` when nothing has been evaluated. */
     private fun shareOf(count: Int): Int = if (evaluated <= 0) 0 else count * 100 / evaluated
