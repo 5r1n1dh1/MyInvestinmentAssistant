@@ -95,7 +95,11 @@ data class DecisionCounterReport(
      * the sort of figure that gets quoted later without its denominator.
      */
     val firePercent: Int?
-        get() = if (!canQuoteRate) null else (fired * 100.0 / evaluated.toDouble()).toInt()
+        get() = if (!canQuoteRate) {
+            null
+        } else {
+            ((fired.toLong() * 100L) / evaluated.toLong()).toInt()
+        }
 
     /** The state this device is in. Rendered as a word; the tint beside it is only an accent. */
     val verdict: GateVerdict
@@ -128,8 +132,14 @@ data class DecisionCounterReport(
     /** The window every figure above is stated over. */
     fun windowLine(): String = when {
         since == null -> "No window: nothing has been recorded on this device yet."
-        since == lastSeen -> "Counting since ${formatDate(since)}, all on one day."
-        else -> "Counting since ${formatDate(since)}. Last recorded ${formatDate(requireNotNull(lastSeen))}."
+        // A `since` with no `lastSeen` is not reachable through the repository, which takes the
+        // max over non-null dates — but the branch is written rather than asserted, because a
+        // `requireNotNull` inside a sentence the Settings screen renders is a crash on a malformed
+        // row, and "counting since X" is a true statement about one.
+        lastSeen == null || since == lastSeen ->
+            "Counting since ${formatDate(since)}, all on one day."
+
+        else -> "Counting since ${formatDate(since)}. Last recorded ${formatDate(lastSeen)}."
     }
 
     /**
@@ -201,7 +211,8 @@ data class DecisionCounterReport(
         blockerCounts.entries.maxByOrNull { it.value }?.let { it.key to it.value }
 
     /** Percentage of evaluations this condition stopped. `0` when nothing has been evaluated. */
-    private fun shareOf(count: Int): Int = if (evaluated <= 0) 0 else count * 100 / evaluated
+    private fun shareOf(count: Int): Int =
+        if (evaluated <= 0) 0 else ((count.toLong() * 100L) / evaluated.toLong()).toInt()
 
     private fun firedReading(): String = when (verdict) {
         GateVerdict.NOT_YET_MEASURED ->
